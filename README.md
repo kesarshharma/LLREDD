@@ -1,0 +1,121 @@
+# LEREDD: LLM-Enabled REquirement Dependency Detection System
+
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-green.svg)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.25%2B-red.svg)](https://streamlit.io/)
+
+A production-ready Python framework implementing **LEREDD** based on the research paper *"Automating the Detection of Requirement Dependencies Using Large Language Models"*.
+
+LEREDD automatically detects five dependency types (**Requires**, **Implements**, **Conflicts**, **Details**, **Is similar**) and **No_dependency** between natural language software requirements using Large Language Models, dynamic In-Context Learning (ICL) example retrieval, SBERT vector similarity, and Retrieval-Augmented Generation (RAG).
+
+---
+
+## 🌟 Key Features
+
+1. **Knowledge Retrieval Engine**:
+   - **SBERT Vector Embeddings**: Default `all-MiniLM-L6-v2` with disk caching.
+   - **Euclidean Similarity**: Converts distance to similarity $sim = \frac{1}{1 + \text{dist}}$.
+   - **Average Similarity Aggregation (Eq. 1)**: $Score_{avg} = \frac{sim(R_1, R_a) + sim(R_1, R_b) + sim(R_2, R_a) + sim(R_2, R_b)}{4}$.
+   - **Dynamic In-Context Learning (ICL)**: Retrieves top $k$ (default 6) annotated examples for each dependency class.
+   - **RAG Contextual Chunking**: Fixed-size 1000-character chunks with 200-character overlap for cross-system evaluation.
+
+2. **LLM Abstraction & Prompt Engineering**:
+   - Dynamic prompt builder adhering strictly to Paper Figure 2 & Table I definitions.
+   - Supports OpenAI API (`gpt-4`), local models via Ollama (`llama3`), and a built-in `MockLLMClient` for offline execution.
+   - Threshold-based re-annotation filtering: predictions with Likert confidence score $\le 4$ reclassified to `No_dependency`.
+   - Automatic cost tracking, prompt-hash response caching, and exponential backoff retries.
+
+3. **Baselines & Evaluation Suite**:
+   - **TF-IDF & LSA Baseline**: TruncatedSVD with cosine similarity thresholding.
+   - **Fine-Tuned BERT Baseline**: Supervised multi-class classifier handling severe class imbalance via class weighting and oversampling.
+   - **Statistical Significance Testing**: McNemar's test for paired accuracy and Fisher's exact test for precision/recall.
+
+4. **Multi-Interface Support**:
+   - **Typer CLI (`leredd-cli`)**: Full command suite for extraction, pair generation, interactive annotation, detection, training, and evaluation.
+   - **FastAPI REST API**: High-performance REST API with Swagger documentation (`/docs`).
+   - **Streamlit Web UI**: Glassmorphism web dashboard featuring interactive annotation, single/batch detection, benchmark evaluation, and NetworkX dependency network visualization.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
+
+```bash
+# Clone repository
+git clone https://github.com/leredd/leredd.git
+cd leredd
+
+# Create virtual environment & install dependencies
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+pip install -e .
+```
+
+### 2. Environment Configuration
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+To run offline without API keys, set `LLM_PROVIDER=mock` in `.env`.
+
+---
+
+## 🖥️ Usage
+
+### CLI Commands (`leredd-cli`)
+
+```bash
+# 1. Extract requirements from SRS document
+leredd-cli extract --input data/raw/adb_srs.txt --system ADB --output requirements.json
+
+# 2. Generate all unique requirement pairs
+leredd-cli pairs --input requirements.json --output pairs.json
+
+# 3. Interactive pair annotation
+leredd-cli annotate --input pairs.json --output data/annotated/pairs.json
+
+# 4. Run LEREDD detection
+leredd-cli detect --input pairs.json --examples data/annotated/adb_pairs.json --output predictions.json
+
+# 5. Evaluate results against ground truth
+leredd-cli evaluate --predictions predictions.json --ground-truth data/annotated/adb_pairs.json --system ADB
+
+# 6. Launch REST API Server
+leredd-cli serve --port 8000
+```
+
+### Web UI (Streamlit Dashboard)
+
+```bash
+streamlit run ui/app.py
+```
+Open `http://localhost:8501` in your browser.
+
+---
+
+## 🐳 Docker Setup
+
+```bash
+# Build and run API, Streamlit UI, and Redis using Docker Compose
+docker-compose up --build
+```
+- Streamlit Web UI: `http://localhost:8501`
+- FastAPI REST API: `http://localhost:8000/docs`
+
+---
+
+## 🧪 Testing & Verification
+
+Run the full pytest suite with coverage report:
+```bash
+pytest tests/ -v --cov=leredd --cov-report=term-missing
+```
+
+---
+
+## 📄 License
+This project is licensed under the MIT License - see the LICENSE file for details.

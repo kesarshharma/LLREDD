@@ -1,0 +1,2 @@
+[console_scripts]
+leredd-cli = leredd.cli:app

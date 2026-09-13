@@ -1,0 +1,72 @@
+[
+  {
+    "id": "PAIR-APA-001",
+    "req_a": {
+      "id": "REQ-APA-001",
+      "text": "The system shall always stop the vehicle to prevent collision with objects during the parking maneuver.",
+      "system": "APA"
+    },
+    "req_b": {
+      "id": "REQ-APA-005",
+      "text": "The system shall abort the automatic parking procedure immediately if an unexpected obstacle enters the trajectory boundary within 0.5 meters.",
+      "system": "APA"
+    },
+    "dependency_type": "Details"
+  },
+  {
+    "id": "PAIR-APA-002",
+    "req_a": {
+      "id": "REQ-APA-002",
+      "text": "The system shall start identifying available parking spots upon user confirmation.",
+      "system": "APA"
+    },
+    "req_b": {
+      "id": "REQ-APA-003",
+      "text": "The system shall allow the customer to select an available parking spot displayed through the HMI with a confirm button.",
+      "system": "APA"
+    },
+    "dependency_type": "Requires"
+  },
+  {
+    "id": "PAIR-APA-003",
+    "req_a": {
+      "id": "REQ-APA-007",
+      "text": "The APA system shall limit maximum vehicle speed to 5 km/h during automated steering and maneuvering.",
+      "system": "APA"
+    },
+    "req_b": {
+      "id": "REQ-APA-009",
+      "text": "The system shall request steering control override permission from the primary vehicle domain controller prior to maneuver initiation.",
+      "system": "APA"
+    },
+    "dependency_type": "Implements"
+  },
+  {
+    "id": "PAIR-APA-004",
+    "req_a": {
+      "id": "REQ-APA-004",
+      "text": "The APA system shall utilize 12 ultrasonic sensors and 4 surround view cameras to calculate target trajectory.",
+      "system": "APA"
+    },
+    "req_b": {
+      "id": "REQ-APA-010",
+      "text": "The system shall verify camera lens clarity and ultrasonic transducer health before enabling parking assist.",
+      "system": "APA"
+    },
+    "dependency_type": "Requires"
+  },
+  {
+    "id": "PAIR-APA-005",
+    "req_a": {
+      "id": "REQ-APA-006",
+      "text": "The APA system shall signal completion of the parking maneuver via audio chime and electronic park brake activation.",
+      "system": "APA"
+    },
+    "req_b": {
+      "id": "REQ-APA-008",
+      "text": "The APA system shall support both parallel parking and perpendicular reverse parking modes.",
+      "system": "APA"
+    },
+    "dependency_type": "No_dependency"
+  }
+]

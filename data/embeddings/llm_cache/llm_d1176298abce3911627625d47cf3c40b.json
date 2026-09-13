@@ -1,0 +1,10 @@
+{
+  "response": "**Dependency_Type: No_dependency**\n**Rationale: Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.**\n**Confidence Score: 5**",
+  "usage": {
+    "prompt_tokens": 342,
+    "completion_tokens": 21,
+    "cost_usd": 0.0,
+    "provider": "mock",
+    "model": "gpt-4"
+  }
+}

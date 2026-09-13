@@ -1,0 +1,21 @@
+SOFTWARE REQUIREMENTS SPECIFICATION FOR ADAPTIVE DRIVING BEAM (ADB) SYSTEM
+
+1. System Overview
+The Adaptive Driving Beam (ADB) system automatically adjusts high-beam and low-beam light distributions based on real-time sensor data to maximize visibility without causing glare to oncoming drivers.
+
+2. Functional Requirements
+REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS).
+REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path.
+REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%.
+REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity.
+REQ-ADB-005: The system shall respond to the surroundings around it in less than 2.5 seconds by dimming the light intensity 50%.
+REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update.
+REQ-ADB-007: The system shall authenticate updates before applying firmware changes.
+REQ-ADB-008: The system shall verify the source of the update prior to installation.
+REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety.
+REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack.
+REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system.
+REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds.
+REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux.
+REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights.
+REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory.

@@ -1,0 +1,16 @@
+SOFTWARE REQUIREMENTS SPECIFICATION FOR AUTOMATED PARKING ASSIST (APA) SYSTEM
+
+1. System Overview
+The Automated Parking Assist (APA) system assists drivers in identifying suitable parallel and perpendicular parking spaces and controlling steering, throttle, and braking during parking maneuvers.
+
+2. Functional Requirements
+REQ-APA-001: The system shall always stop the vehicle to prevent collision with objects during the parking maneuver.
+REQ-APA-002: The system shall start identifying available parking spots upon user confirmation.
+REQ-APA-003: The system shall allow the customer to select an available parking spot displayed through the HMI with a confirm button.
+REQ-APA-004: The APA system shall utilize 12 ultrasonic sensors and 4 surround view cameras to calculate target trajectory.
+REQ-APA-005: The system shall abort the automatic parking procedure immediately if an unexpected obstacle enters the trajectory boundary within 0.5 meters.
+REQ-APA-006: The APA system shall signal completion of the parking maneuver via audio chime and electronic park brake activation.
+REQ-APA-007: The APA system shall limit maximum vehicle speed to 5 km/h during automated steering and maneuvering.
+REQ-APA-008: The APA system shall support both parallel parking and perpendicular reverse parking modes.
+REQ-APA-009: The system shall request steering control override permission from the primary vehicle domain controller prior to maneuver initiation.
+REQ-APA-010: The system shall verify camera lens clarity and ultrasonic transducer health before enabling parking assist.

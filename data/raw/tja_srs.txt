@@ -1,0 +1,16 @@
+SOFTWARE REQUIREMENTS SPECIFICATION FOR TRAFFIC JAM ASSIST (TJA) SYSTEM
+
+1. System Overview
+The Traffic Jam Assist (TJA) system combines Adaptive Cruise Control (ACC) and Lane Keeping Assist (LKA) to reduce driver workload during stop-and-go traffic scenarios up to 60 km/h.
+
+2. Functional Requirements
+REQ-TJA-001: The TJA system shall control longitudinal acceleration and deceleration based on front radar target distance.
+REQ-TJA-002: The TJA system shall require active engagement of the driver hand-on-wheel sensor every 15 seconds.
+REQ-TJA-003: The system shall issue a visual and acoustic driver takeover request if lane markings become indistinguishable for more than 2 seconds.
+REQ-TJA-004: The TJA system shall bring the vehicle to a full stop when the preceding vehicle stops.
+REQ-TJA-005: The system shall resume vehicle motion automatically if the preceding vehicle moves within 3 seconds of stopping.
+REQ-TJA-006: If the preceding vehicle remains stopped for longer than 3 seconds, the driver must tap the accelerator pedal to resume TJA.
+REQ-TJA-007: The TJA system shall disengage immediately upon driver brake pedal intervention.
+REQ-TJA-008: The TJA system shall maintain a user-selected headway time gap of 1.0s, 1.5s, or 2.0s to the preceding vehicle.
+REQ-TJA-009: The lateral control subsystem shall keep the vehicle centered within the detected lane boundaries.
+REQ-TJA-010: The system shall verify sensor health status continuously before granting steering torque authorization.

@@ -1,0 +1,142 @@
+[
+  {
+    "id": "PAIR-ADB-001",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "The BCS shall accept camera scenery information provided by the PCS to brake the vehicle if an object is within the vehicle's path.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-001",
+      "text": "The system shall include the Brake Control Subsystem (BCS).",
+      "system": "ADB"
+    },
+    "dependency_type": "Requires"
+  },
+  {
+    "id": "PAIR-ADB-002",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "The system shall verify communication between subsystems.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "The subsystem shall have checks to mitigate the chances of a cybersecurity attack.",
+      "system": "ADB"
+    },
+    "dependency_type": "Implements"
+  },
+  {
+    "id": "PAIR-ADB-003",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds.",
+      "system": "ADB"
+    },
+    "dependency_type": "Conflicts"
+  },
+  {
+    "id": "PAIR-ADB-004",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "The system shall respond to the surroundings around it in less than 2.5 seconds by dimming the light intensity 50%.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update.",
+      "system": "ADB"
+    },
+    "dependency_type": "Details"
+  },
+  {
+    "id": "PAIR-ADB-005",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "The system shall authenticate updates.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "The system shall verify the source of the update.",
+      "system": "ADB"
+    },
+    "dependency_type": "Is similar"
+  },
+  {
+    "id": "PAIR-ADB-006",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity.",
+      "system": "ADB"
+    },
+    "dependency_type": "Requires"
+  },
+  {
+    "id": "PAIR-ADB-007",
+    "req_a": {
+      "id": "REQ-ADB-013",
+      "text": "The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights.",
+      "system": "ADB"
+    },
+    "dependency_type": "Conflicts"
+  },
+  {
+    "id": "PAIR-ADB-008",
+    "req_a": {
+      "id": "REQ-ADB-013",
+      "text": "The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory.",
+      "system": "ADB"
+    },
+    "dependency_type": "No_dependency"
+  },
+  {
+    "id": "PAIR-ADB-009",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "The system shall include the Brake Control Subsystem (BCS).",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory.",
+      "system": "ADB"
+    },
+    "dependency_type": "No_dependency"
+  },
+  {
+    "id": "PAIR-ADB-010",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "The system shall authenticate updates.",
+      "system": "ADB"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds.",
+      "system": "ADB"
+    },
+    "dependency_type": "No_dependency"
+  }
+]

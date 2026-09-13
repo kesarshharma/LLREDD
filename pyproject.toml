@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leredd"
+version = "1.0.0"
+description = "LLM-Enabled REquirement Dependency Detection System"
+readme = "README.md"
+authors = [
+    { name = "LEREDD Team", email = "research@leredd.org" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "typer>=0.9.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "streamlit>=1.25.0",
+    "sentence-transformers>=2.2.2",
+    "scikit-learn>=1.2.0",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scipy>=1.10.0",
+    "statsmodels>=0.14.0",
+    "networkx>=3.0",
+    "plotly>=5.14.0",
+    "httpx>=0.24.0",
+    "tenacity>=8.2.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.3.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.0.270",
+    "black>=23.3.0"
+]
+
+[project.scripts]
+leredd-cli = "leredd.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["leredd*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--strict-markers -v"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"

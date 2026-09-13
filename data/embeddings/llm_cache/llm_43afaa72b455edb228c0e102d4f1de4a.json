@@ -1,0 +1,10 @@
+{
+  "response": "**Dependency_Type: Requires**\n**Rationale: Requirement A explicitly depends on the functionality or system component defined in Requirement B.**\n**Confidence Score: 5**",
+  "usage": {
+    "prompt_tokens": 375,
+    "completion_tokens": 20,
+    "cost_usd": 0.0,
+    "provider": "mock",
+    "model": "gpt-4"
+  }
+}

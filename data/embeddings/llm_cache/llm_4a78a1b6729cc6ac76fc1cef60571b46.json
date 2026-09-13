@@ -1,0 +1,10 @@
+{
+  "response": "**Dependency_Type: Conflicts**\n**Rationale: The fulfillment of Requirement A imposes restrictions or timing conflicts on Requirement B.**\n**Confidence Score: 5**",
+  "usage": {
+    "prompt_tokens": 343,
+    "completion_tokens": 19,
+    "cost_usd": 0.0,
+    "provider": "mock",
+    "model": "gpt-4"
+  }
+}
