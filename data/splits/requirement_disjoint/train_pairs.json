@@ -1,0 +1,155 @@
+[
+  {
+    "id": "PAIR-ADB-002",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "The system shall verify communication between subsystems.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "The subsystem shall have checks to mitigate the chances of a cybersecurity attack.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Implements",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-003",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Conflicts",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-008",
+    "req_a": {
+      "id": "REQ-ADB-013",
+      "text": "The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "No_dependency",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-009",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "The system shall include the Brake Control Subsystem (BCS).",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "No_dependency",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-010",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "The system shall authenticate updates.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "No_dependency",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-APA-001",
+    "req_a": {
+      "id": "REQ-APA-001",
+      "text": "The system shall always stop the vehicle to prevent collision with objects during the parking maneuver.",
+      "system": "APA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-APA-005",
+      "text": "The system shall abort the automatic parking procedure immediately if an unexpected obstacle enters the trajectory boundary within 0.5 meters.",
+      "system": "APA",
+      "source": null
+    },
+    "dependency_type": "Details",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-APA-005",
+    "req_a": {
+      "id": "REQ-APA-006",
+      "text": "The APA system shall signal completion of the parking maneuver via audio chime and electronic park brake activation.",
+      "system": "APA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-APA-008",
+      "text": "The APA system shall support both parallel parking and perpendicular reverse parking modes.",
+      "system": "APA",
+      "source": null
+    },
+    "dependency_type": "No_dependency",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-001",
+    "req_a": {
+      "id": "REQ-TJA-001",
+      "text": "The TJA system shall control longitudinal acceleration and deceleration based on front radar target distance.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-004",
+      "text": "The TJA system shall bring the vehicle to a full stop when the preceding vehicle stops.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Details",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-005",
+    "req_a": {
+      "id": "REQ-TJA-002",
+      "text": "The TJA system shall require active engagement of the driver hand-on-wheel sensor every 15 seconds.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-008",
+      "text": "The TJA system shall maintain a user-selected headway time gap of 1.0s, 1.5s, or 2.0s to the preceding vehicle.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "No_dependency",
+    "provenance": null
+  }
+]

@@ -1,0 +1,87 @@
+[
+  {
+    "id": "PAIR-TJA-001",
+    "req_a": {
+      "id": "REQ-TJA-001",
+      "text": "The TJA system shall control longitudinal acceleration and deceleration based on front radar target distance.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-004",
+      "text": "The TJA system shall bring the vehicle to a full stop when the preceding vehicle stops.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Details",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-002",
+    "req_a": {
+      "id": "REQ-TJA-005",
+      "text": "The system shall resume vehicle motion automatically if the preceding vehicle moves within 3 seconds of stopping.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-006",
+      "text": "If the preceding vehicle remains stopped for longer than 3 seconds, the driver must tap the accelerator pedal to resume TJA.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-003",
+    "req_a": {
+      "id": "REQ-TJA-003",
+      "text": "The system shall issue a visual and acoustic driver takeover request if lane markings become indistinguishable for more than 2 seconds.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-009",
+      "text": "The lateral control subsystem shall keep the vehicle centered within the detected lane boundaries.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-004",
+    "req_a": {
+      "id": "REQ-TJA-007",
+      "text": "The TJA system shall disengage immediately upon driver brake pedal intervention.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-001",
+      "text": "The TJA system shall control longitudinal acceleration and deceleration based on front radar target distance.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Conflicts",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-005",
+    "req_a": {
+      "id": "REQ-TJA-002",
+      "text": "The TJA system shall require active engagement of the driver hand-on-wheel sensor every 15 seconds.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-008",
+      "text": "The TJA system shall maintain a user-selected headway time gap of 1.0s, 1.5s, or 2.0s to the preceding vehicle.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "No_dependency",
+    "provenance": null
+  }
+]

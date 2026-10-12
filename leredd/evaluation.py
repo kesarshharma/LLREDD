@@ -86,7 +86,7 @@ class Evaluator:
         preds_b: List[Prediction]
     ) -> Tuple[float, float]:
         """Perform McNemar's test comparing overall predictive accuracy of two models.
-        
+
         Returns (statistic, p_value).
         """
         map_a = {p.pair_id: p.dependency_type for p in preds_a}
@@ -134,9 +134,96 @@ class Evaluator:
         tp_b: int, fp_b: int
     ) -> Tuple[float, float]:
         """Perform Fisher's Exact test comparing precision/recall contingency tables.
-        
+
         Returns (odds_ratio, p_value).
         """
         table = [[tp_a, fp_a], [tp_b, fp_b]]
         odds_ratio, p_value = fisher_exact(table)
         return float(odds_ratio), float(p_value)
+
+    @staticmethod
+    def compute_wilson_score_interval(
+        k: int, n: int, confidence: float = 0.95
+    ) -> Dict[str, float]:
+        """Compute Wilson score confidence interval for binomial proportion k/n."""
+        if n == 0:
+            return {"point_estimate": 0.0, "lower_bound": 0.0, "upper_bound": 0.0, "margin_pp": 0.0}
+        import scipy.stats as stats
+        p_hat = k / n
+        z = float(stats.norm.ppf(1 - (1 - confidence) / 2))
+        denom = 1 + z**2 / n
+        center = (p_hat + z**2 / (2 * n)) / denom
+        margin = (z / denom) * np.sqrt((p_hat * (1 - p_hat) / n) + (z**2 / (4 * n**2)))
+        lower = max(0.0, float(center - margin))
+        upper = min(1.0, float(center + margin))
+        return {
+            "point_estimate": float(p_hat),
+            "lower_bound": float(lower),
+            "upper_bound": float(upper),
+            "margin_pp": float((upper - lower) / 2 * 100),
+        }
+
+    @staticmethod
+    def analyze_mcnemar(
+        ground_truth: List[RequirementPair],
+        preds_a: List[Prediction],
+        preds_b: List[Prediction]
+    ) -> Dict:
+        """Perform McNemar's test and return complete contingency table & discordant details."""
+        map_a = {p.pair_id: p.dependency_type for p in preds_a}
+        map_b = {p.pair_id: p.dependency_type for p in preds_b}
+
+        n00 = n01 = n10 = n11 = 0
+        discordant_pairs = []
+
+        for pair in ground_truth:
+            gt = pair.dependency_type or DependencyType.NO_DEPENDENCY
+            pa = map_a.get(pair.id, DependencyType.NO_DEPENDENCY)
+            pb = map_b.get(pair.id, DependencyType.NO_DEPENDENCY)
+
+            ca = (pa == gt)
+            cb = (pb == gt)
+
+            if ca and cb:
+                n11 += 1
+            elif ca and not cb:
+                n10 += 1
+                discordant_pairs.append({
+                    "pair_id": pair.id,
+                    "model_a_correct": True,
+                    "model_b_correct": False,
+                    "gt_label": gt.value,
+                    "pred_a": pa.value,
+                    "pred_b": pb.value,
+                })
+            elif not ca and cb:
+                n01 += 1
+                discordant_pairs.append({
+                    "pair_id": pair.id,
+                    "model_a_correct": False,
+                    "model_b_correct": True,
+                    "gt_label": gt.value,
+                    "pred_a": pa.value,
+                    "pred_b": pb.value,
+                })
+            else:
+                n00 += 1
+
+        stat, pval = Evaluator.run_mcnemar_test(ground_truth, preds_a, preds_b)
+
+        return {
+            "contingency_table": {
+                "both_correct_n11": n11,
+                "model_a_only_n10_b": n10,
+                "model_b_only_n01_c": n01,
+                "both_wrong_n00": n00,
+            },
+            "discordant_counts": {
+                "b": n10,
+                "c": n01,
+                "total_discordant": n10 + n01,
+            },
+            "discordant_pairs": discordant_pairs,
+            "statistic": stat,
+            "p_value": pval,
+        }

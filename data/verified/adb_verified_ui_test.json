@@ -1,0 +1,70 @@
+[
+  {
+    "id": "CAND-ADB_SRS-00006",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": {
+      "source": "human",
+      "status": "verified",
+      "annotator_id": "lead_annotator_42",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-09T21:36:21.082186+00:00",
+      "reviewed_at": "2026-10-09T21:36:21.082190+00:00",
+      "reviewer_id": "lead_annotator_42",
+      "predicted_label": "Implements",
+      "accepted_label": "Requires",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Human Reviewer (lead_annotator_42) decision: CORRECTED. Notes: Verified direct requirement dependency after inspecting architectural specifications.",
+      "review_notes": "Verified direct requirement dependency after inspecting architectural specifications.",
+      "dataset_version": "human-verified-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00008",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "human",
+      "status": "verified",
+      "annotator_id": "human_reviewer_1",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-09T21:36:21.082630+00:00",
+      "reviewed_at": "2026-10-09T21:36:21.082632+00:00",
+      "reviewer_id": "human_reviewer_1",
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Human Reviewer (human_reviewer_1) decision: CORRECTED. Notes: UI persistence test on a copied queue. Label selected only to verify decision recording; not an independently verified dependency annotation.",
+      "review_notes": "UI persistence test on a copied queue. Label selected only to verify decision recording; not an independently verified dependency annotation.",
+      "dataset_version": "human-verified-v1.0"
+    }
+  }
+]

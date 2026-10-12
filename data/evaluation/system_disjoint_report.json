@@ -1,0 +1,1667 @@
+{
+  "schema_version": "2.0",
+  "script_version": "2.0.0",
+  "run_timestamp": "2026-10-10T05:17:01.786794+00:00",
+  "configuration": {
+    "split_dir": "data/splits/system_disjoint",
+    "output_path": "data/evaluation/system_disjoint_report.json",
+    "seed": 42,
+    "bert_classifier_backend": "rf",
+    "bert_classifier_description": "RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state=42)",
+    "split_strategy": "system",
+    "leredd_provider": "mock",
+    "leredd_note": "MockLLMClient \u2014 deterministic keyword heuristics. NOT a real LLM evaluation."
+  },
+  "split_inventory": {
+    "train": {
+      "size": 10,
+      "systems": [
+        "ADB"
+      ],
+      "label_distribution": {
+        "Requires": 2,
+        "Implements": 1,
+        "Conflicts": 2,
+        "Details": 1,
+        "Is similar": 1,
+        "No_dependency": 3
+      }
+    },
+    "dev": {
+      "size": 5,
+      "systems": [
+        "APA"
+      ],
+      "label_distribution": {
+        "Details": 1,
+        "Requires": 2,
+        "Implements": 1,
+        "No_dependency": 1
+      }
+    },
+    "test": {
+      "size": 5,
+      "systems": [
+        "TJA"
+      ],
+      "label_distribution": {
+        "Details": 1,
+        "Requires": 2,
+        "Conflicts": 1,
+        "No_dependency": 1
+      }
+    }
+  },
+  "ground_truth_eligibility": {
+    "warnings": [
+      "[TRAIN] Pair PAIR-ADB-001 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-002 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-003 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-004 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-005 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-006 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-007 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-008 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-009 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TRAIN] Pair PAIR-ADB-010 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[DEV] Pair PAIR-APA-001 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[DEV] Pair PAIR-APA-002 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[DEV] Pair PAIR-APA-003 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[DEV] Pair PAIR-APA-004 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[DEV] Pair PAIR-APA-005 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TEST] Pair PAIR-TJA-001 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TEST] Pair PAIR-TJA-002 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TEST] Pair PAIR-TJA-003 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TEST] Pair PAIR-TJA-004 has NO provenance metadata (legacy annotated record). Accepted conditionally.",
+      "[TEST] Pair PAIR-TJA-005 has NO provenance metadata (legacy annotated record). Accepted conditionally."
+    ],
+    "provenance_note": "Original data/annotated/ pairs have no provenance metadata. Annotation process, annotator identity, and IAA are unknown. Pairs accepted conditionally as assumed expert annotations."
+  },
+  "leakage_audit": {
+    "excluded_req_ids": [
+      "REQ-APA-001",
+      "REQ-APA-002",
+      "REQ-APA-003",
+      "REQ-APA-004",
+      "REQ-APA-005",
+      "REQ-APA-006",
+      "REQ-APA-007",
+      "REQ-APA-008",
+      "REQ-APA-009",
+      "REQ-APA-010",
+      "REQ-TJA-001",
+      "REQ-TJA-002",
+      "REQ-TJA-003",
+      "REQ-TJA-004",
+      "REQ-TJA-005",
+      "REQ-TJA-006",
+      "REQ-TJA-007",
+      "REQ-TJA-008",
+      "REQ-TJA-009"
+    ],
+    "excluded_pair_ids": [
+      "PAIR-APA-001",
+      "PAIR-APA-002",
+      "PAIR-APA-003",
+      "PAIR-APA-004",
+      "PAIR-APA-005",
+      "PAIR-TJA-001",
+      "PAIR-TJA-002",
+      "PAIR-TJA-003",
+      "PAIR-TJA-004",
+      "PAIR-TJA-005"
+    ],
+    "train_pool_size": 10,
+    "contaminated_pairs": [],
+    "contaminated_count": 0,
+    "safe_pool_size": 10,
+    "contamination_detected": false
+  },
+  "model_results": {
+    "BERTBaseline": {
+      "model": "BERTBaseline-RF",
+      "note": "SBERT (all-MiniLM-L6-v2) + RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state=42). Supervised cross-system evaluation (trained on ADB n=10, tested on TJA n=5). Not a zero-shot model.",
+      "overall_accuracy": 0.2,
+      "macro_f1": 0.125,
+      "weighted_f1": 0.2,
+      "confidence_interval_95": {
+        "method": "Wilson score interval",
+        "point_estimate": 0.2,
+        "lower_bound": 0.036224108632430085,
+        "upper_bound": 0.6244653702374747,
+        "margin_pp": 29.41206308025223,
+        "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.0362, 0.6245] (~+-29.4pp margin)."
+      },
+      "predictions": {
+        "PAIR-TJA-001": "Conflicts",
+        "PAIR-TJA-002": "Conflicts",
+        "PAIR-TJA-003": "Requires",
+        "PAIR-TJA-004": "Requires",
+        "PAIR-TJA-005": "Conflicts"
+      },
+      "per_class_metrics": {
+        "Requires": {
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1_score": 0.5,
+          "support": 2
+        },
+        "Implements": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "Conflicts": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Details": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Is similar": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "No_dependency": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        }
+      },
+      "confusion_matrix": {
+        "Requires": {
+          "Requires": 1,
+          "Implements": 0,
+          "Conflicts": 1,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Implements": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Conflicts": {
+          "Requires": 1,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Details": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 1,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Is similar": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "No_dependency": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 1,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        }
+      }
+    },
+    "TFIDF_LSA": {
+      "model": "TFIDF_LSA",
+      "note": "TF-IDF + LSA cosine similarity thresholding. Fitted vocabulary and SVD on ADB training set, tested on TJA. Unsupervised / fitted cross-system baseline.",
+      "overall_accuracy": 0.4,
+      "macro_f1": 0.25,
+      "weighted_f1": 0.3,
+      "confidence_interval_95": {
+        "method": "Wilson score interval",
+        "point_estimate": 0.4,
+        "lower_bound": 0.11762077423264783,
+        "upper_bound": 0.769275718723987,
+        "margin_pp": 32.58274722456696,
+        "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+      },
+      "predictions": {
+        "PAIR-TJA-001": "No_dependency",
+        "PAIR-TJA-002": "Requires",
+        "PAIR-TJA-003": "No_dependency",
+        "PAIR-TJA-004": "Requires",
+        "PAIR-TJA-005": "No_dependency"
+      },
+      "per_class_metrics": {
+        "Requires": {
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1_score": 0.5,
+          "support": 2
+        },
+        "Implements": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "Conflicts": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Details": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Is similar": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "No_dependency": {
+          "precision": 0.3333333333333333,
+          "recall": 1.0,
+          "f1_score": 0.5,
+          "support": 1
+        }
+      },
+      "confusion_matrix": {
+        "Requires": {
+          "Requires": 1,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        },
+        "Implements": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Conflicts": {
+          "Requires": 1,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Details": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        },
+        "Is similar": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "No_dependency": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        }
+      }
+    },
+    "HeuristicLabeler": {
+      "model": "HeuristicLabeler",
+      "note": "Rule-based deterministic baseline checking explicit citations, structural keywords, and Jaccard lexical overlap.",
+      "overall_accuracy": 0.2,
+      "macro_f1": 0.08333333333333333,
+      "weighted_f1": 0.06666666666666667,
+      "confidence_interval_95": {
+        "method": "Wilson score interval",
+        "point_estimate": 0.2,
+        "lower_bound": 0.036224108632430085,
+        "upper_bound": 0.6244653702374747,
+        "margin_pp": 29.41206308025223,
+        "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.0362, 0.6245] (~+-29.4pp margin)."
+      },
+      "predictions": {
+        "PAIR-TJA-001": "No_dependency",
+        "PAIR-TJA-002": "No_dependency",
+        "PAIR-TJA-003": "No_dependency",
+        "PAIR-TJA-004": "No_dependency",
+        "PAIR-TJA-005": "No_dependency"
+      },
+      "per_class_metrics": {
+        "Requires": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 2
+        },
+        "Implements": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "Conflicts": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Details": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Is similar": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "No_dependency": {
+          "precision": 0.2,
+          "recall": 1.0,
+          "f1_score": 0.3333333333333333,
+          "support": 1
+        }
+      },
+      "confusion_matrix": {
+        "Requires": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 2
+        },
+        "Implements": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Conflicts": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        },
+        "Details": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        },
+        "Is similar": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "No_dependency": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        }
+      }
+    },
+    "LEREDD_ZeroShot": {
+      "model": "LEREDD-ZeroShot",
+      "note": "Zero-shot LLM inference without in-context dynamic examples (k=0).",
+      "overall_accuracy": 0.4,
+      "macro_f1": 0.3,
+      "weighted_f1": 0.4,
+      "confidence_interval_95": {
+        "method": "Wilson score interval",
+        "point_estimate": 0.4,
+        "lower_bound": 0.11762077423264783,
+        "upper_bound": 0.769275718723987,
+        "margin_pp": 32.58274722456696,
+        "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+      },
+      "predictions": {
+        "PAIR-TJA-001": "No_dependency",
+        "PAIR-TJA-002": "Requires",
+        "PAIR-TJA-003": "Implements",
+        "PAIR-TJA-004": "Conflicts",
+        "PAIR-TJA-005": "Requires"
+      },
+      "per_class_metrics": {
+        "Requires": {
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1_score": 0.5,
+          "support": 2
+        },
+        "Implements": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "Conflicts": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1_score": 1.0,
+          "support": 1
+        },
+        "Details": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Is similar": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "No_dependency": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        }
+      },
+      "confusion_matrix": {
+        "Requires": {
+          "Requires": 1,
+          "Implements": 1,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Implements": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Conflicts": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 1,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Details": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        },
+        "Is similar": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "No_dependency": {
+          "Requires": 1,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        }
+      }
+    },
+    "LEREDD_Hybrid": {
+      "model": "LEREDD-Hybrid (Proposed System)",
+      "note": "Proposed LEREDD system using Hybrid RRF retrieval (SBERT + BM25, rrf_k=60), k=6 dynamic example pairs, and confidence thresholding <= 4 -> No_dependency.",
+      "overall_accuracy": 0.4,
+      "macro_f1": 0.3,
+      "weighted_f1": 0.4,
+      "confidence_interval_95": {
+        "method": "Wilson score interval",
+        "point_estimate": 0.4,
+        "lower_bound": 0.11762077423264783,
+        "upper_bound": 0.769275718723987,
+        "margin_pp": 32.58274722456696,
+        "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+      },
+      "predictions": {
+        "PAIR-TJA-001": "No_dependency",
+        "PAIR-TJA-002": "Requires",
+        "PAIR-TJA-003": "Implements",
+        "PAIR-TJA-004": "Conflicts",
+        "PAIR-TJA-005": "Requires"
+      },
+      "per_class_metrics": {
+        "Requires": {
+          "precision": 0.5,
+          "recall": 0.5,
+          "f1_score": 0.5,
+          "support": 2
+        },
+        "Implements": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "Conflicts": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1_score": 1.0,
+          "support": 1
+        },
+        "Details": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        },
+        "Is similar": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 0
+        },
+        "No_dependency": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1_score": 0.0,
+          "support": 1
+        }
+      },
+      "confusion_matrix": {
+        "Requires": {
+          "Requires": 1,
+          "Implements": 1,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Implements": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Conflicts": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 1,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "Details": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 1
+        },
+        "Is similar": {
+          "Requires": 0,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        },
+        "No_dependency": {
+          "Requires": 1,
+          "Implements": 0,
+          "Conflicts": 0,
+          "Details": 0,
+          "Is similar": 0,
+          "No_dependency": 0
+        }
+      }
+    }
+  },
+  "ablation_results": {
+    "retrieval_strategy": {
+      "LEREDD_Dense": {
+        "model": "LEREDD-Dense (SBERT Only)",
+        "note": "Dense vector retrieval only via SBERT embeddings.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      },
+      "LEREDD_BM25": {
+        "model": "LEREDD-BM25 (Lexical Only)",
+        "note": "Lexical BM25Plus retrieval only.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      },
+      "LEREDD_Hybrid": {
+        "model": "LEREDD-Hybrid (RRF Dense+Lexical)",
+        "note": "Hybrid RRF fusion combining SBERT and BM25Plus.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      }
+    },
+    "in_context_examples": {
+      "ZeroShot": {
+        "model": "Zero-Shot (k=0)",
+        "note": "Prompt without retrieved in-context examples.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      },
+      "Hybrid_k6": {
+        "model": "Hybrid Dynamic Examples (k=6)",
+        "note": "Prompt augmented with 6 dynamic examples per dependency type.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      }
+    },
+    "confidence_thresholding": {
+      "Threshold_Off": {
+        "model": "Thresholding Disabled (Off)",
+        "note": "Raw LLM prediction used without confidence re-annotation.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      },
+      "Threshold_On": {
+        "model": "Thresholding Enabled (On, <= 4 -> No_dependency)",
+        "note": "Predictions with confidence <= 4 automatically set to No_dependency.",
+        "overall_accuracy": 0.4,
+        "macro_f1": 0.3,
+        "weighted_f1": 0.4,
+        "confidence_interval_95": {
+          "method": "Wilson score interval",
+          "point_estimate": 0.4,
+          "lower_bound": 0.11762077423264783,
+          "upper_bound": 0.769275718723987,
+          "margin_pp": 32.58274722456696,
+          "interpretation_note": "For sample size n=5, 95% Wilson CI is [0.1176, 0.7693] (~+-32.6pp margin)."
+        },
+        "predictions": {
+          "PAIR-TJA-001": "No_dependency",
+          "PAIR-TJA-002": "Requires",
+          "PAIR-TJA-003": "Implements",
+          "PAIR-TJA-004": "Conflicts",
+          "PAIR-TJA-005": "Requires"
+        },
+        "per_class_metrics": {
+          "Requires": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1_score": 0.5,
+            "support": 2
+          },
+          "Implements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "Conflicts": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "support": 1
+          },
+          "Details": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          },
+          "Is similar": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 0
+          },
+          "No_dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "support": 1
+          }
+        },
+        "confusion_matrix": {
+          "Requires": {
+            "Requires": 1,
+            "Implements": 1,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Implements": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Conflicts": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 1,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "Details": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 1
+          },
+          "Is similar": {
+            "Requires": 0,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          },
+          "No_dependency": {
+            "Requires": 1,
+            "Implements": 0,
+            "Conflicts": 0,
+            "Details": 0,
+            "Is similar": 0,
+            "No_dependency": 0
+          }
+        }
+      }
+    }
+  },
+  "statistical_tests": {
+    "mcnemar": {
+      "status": "exploratory",
+      "exploratory_notice": "McNemar test applied to n_test=5 examples. With n=5, discordant cell frequencies (b+c) are very low, resulting in low statistical power and asymptotic approximation limits. p-values are exploratory and demonstrative only.",
+      "proposed_hybrid_vs_bert": {
+        "contingency_table": {
+          "both_correct_n11": 0,
+          "model_a_only_n10_b": 2,
+          "model_b_only_n01_c": 1,
+          "both_wrong_n00": 2
+        },
+        "discordant_counts": {
+          "b": 2,
+          "c": 1,
+          "total_discordant": 3
+        },
+        "discordant_pairs": [
+          {
+            "pair_id": "PAIR-TJA-002",
+            "model_a_correct": true,
+            "model_b_correct": false,
+            "gt_label": "Requires",
+            "pred_a": "Requires",
+            "pred_b": "Conflicts"
+          },
+          {
+            "pair_id": "PAIR-TJA-003",
+            "model_a_correct": false,
+            "model_b_correct": true,
+            "gt_label": "Requires",
+            "pred_a": "Implements",
+            "pred_b": "Requires"
+          },
+          {
+            "pair_id": "PAIR-TJA-004",
+            "model_a_correct": true,
+            "model_b_correct": false,
+            "gt_label": "Conflicts",
+            "pred_a": "Conflicts",
+            "pred_b": "Requires"
+          }
+        ],
+        "statistic": 1.0,
+        "p_value": 1.0
+      },
+      "proposed_hybrid_vs_tfidf": {
+        "contingency_table": {
+          "both_correct_n11": 1,
+          "model_a_only_n10_b": 1,
+          "model_b_only_n01_c": 1,
+          "both_wrong_n00": 2
+        },
+        "discordant_counts": {
+          "b": 1,
+          "c": 1,
+          "total_discordant": 2
+        },
+        "discordant_pairs": [
+          {
+            "pair_id": "PAIR-TJA-004",
+            "model_a_correct": true,
+            "model_b_correct": false,
+            "gt_label": "Conflicts",
+            "pred_a": "Conflicts",
+            "pred_b": "Requires"
+          },
+          {
+            "pair_id": "PAIR-TJA-005",
+            "model_a_correct": false,
+            "model_b_correct": true,
+            "gt_label": "No_dependency",
+            "pred_a": "Requires",
+            "pred_b": "No_dependency"
+          }
+        ],
+        "statistic": 1.0,
+        "p_value": 1.0
+      },
+      "proposed_hybrid_vs_heuristic": {
+        "contingency_table": {
+          "both_correct_n11": 0,
+          "model_a_only_n10_b": 2,
+          "model_b_only_n01_c": 1,
+          "both_wrong_n00": 2
+        },
+        "discordant_counts": {
+          "b": 2,
+          "c": 1,
+          "total_discordant": 3
+        },
+        "discordant_pairs": [
+          {
+            "pair_id": "PAIR-TJA-002",
+            "model_a_correct": true,
+            "model_b_correct": false,
+            "gt_label": "Requires",
+            "pred_a": "Requires",
+            "pred_b": "No_dependency"
+          },
+          {
+            "pair_id": "PAIR-TJA-004",
+            "model_a_correct": true,
+            "model_b_correct": false,
+            "gt_label": "Conflicts",
+            "pred_a": "Conflicts",
+            "pred_b": "No_dependency"
+          },
+          {
+            "pair_id": "PAIR-TJA-005",
+            "model_a_correct": false,
+            "model_b_correct": true,
+            "gt_label": "No_dependency",
+            "pred_a": "Requires",
+            "pred_b": "No_dependency"
+          }
+        ],
+        "statistic": 1.0,
+        "p_value": 1.0
+      },
+      "proposed_hybrid_vs_zeroshot": {
+        "contingency_table": {
+          "both_correct_n11": 2,
+          "model_a_only_n10_b": 0,
+          "model_b_only_n01_c": 0,
+          "both_wrong_n00": 3
+        },
+        "discordant_counts": {
+          "b": 0,
+          "c": 0,
+          "total_discordant": 0
+        },
+        "discordant_pairs": [],
+        "statistic": 0.0,
+        "p_value": 1.0
+      },
+      "proposed_hybrid_vs_dense": {
+        "contingency_table": {
+          "both_correct_n11": 2,
+          "model_a_only_n10_b": 0,
+          "model_b_only_n01_c": 0,
+          "both_wrong_n00": 3
+        },
+        "discordant_counts": {
+          "b": 0,
+          "c": 0,
+          "total_discordant": 0
+        },
+        "discordant_pairs": [],
+        "statistic": 0.0,
+        "p_value": 1.0
+      },
+      "proposed_hybrid_vs_bm25": {
+        "contingency_table": {
+          "both_correct_n11": 2,
+          "model_a_only_n10_b": 0,
+          "model_b_only_n01_c": 0,
+          "both_wrong_n00": 3
+        },
+        "discordant_counts": {
+          "b": 0,
+          "c": 0,
+          "total_discordant": 0
+        },
+        "discordant_pairs": [],
+        "statistic": 0.0,
+        "p_value": 1.0
+      }
+    }
+  },
+  "evaluation_limitations": [
+    "n_test=5 (TJA system only). ~+-40pp 95% CI. Results are DEMONSTRATIVE ONLY.",
+    "BERTBaseline and TFIDF_LSABaseline perform supervised/fitted cross-system evaluation (trained on ADB, tested on TJA). They are NOT zero-shot models.",
+    "LEREDD evaluated with MockLLMClient \u2014 NOT a real LLM evaluation.",
+    "Ground truth has no provenance metadata \u2014 annotator identity and IAA unknown.",
+    "Test labels cover 4 of 6 dependency classes.",
+    "Requirement-disjoint split not evaluated \u2014 dev and test partitions are empty with n=20 pairs.",
+    "McNemar's test results are exploratory: with n_test=5, discordant cell counts (b+c) are low, resulting in low statistical power."
+  ],
+  "split_metadata": {
+    "summary": {
+      "strategy": "system",
+      "seed": 42,
+      "counts": {
+        "train": {
+          "pairs": 10,
+          "requirements": 15
+        },
+        "dev": {
+          "pairs": 5,
+          "requirements": 10
+        },
+        "test": {
+          "pairs": 5,
+          "requirements": 9
+        },
+        "retrieval": {
+          "pairs": 0,
+          "requirements": 0
+        },
+        "cross_partition": {
+          "pairs": 0
+        }
+      },
+      "total_pairs": 20
+    },
+    "leakage_report": {
+      "has_leakage": false,
+      "req_overlap_train_test": [],
+      "req_overlap_train_dev": [],
+      "req_overlap_dev_test": [],
+      "req_overlap_retrieval_test": [],
+      "system_overlap_train_test": [],
+      "total_unique_requirements": 34,
+      "total_pairs": 20,
+      "leakage_rate": 0.0
+    }
+  }
+}

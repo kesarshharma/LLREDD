@@ -43,9 +43,13 @@ class ResponseParser:
                     break
 
         # 2. Parse Rationale
-        rat_match = re.search(r"Rationale:\s*\[?(.*?)\]?\*?$", raw_text, re.MULTILINE | re.IGNORECASE)
+        rat_match = re.search(
+            r"Rationale:\s*(?:\*\*)?\s*\[?(.*?)(?=(?:\n\s*|\s+(?=\*\*))\s*(?:\*\*)?\s*(?:Confidence\s*Score|Dependency_Type)\b|\Z)",
+            raw_text,
+            re.DOTALL | re.IGNORECASE,
+        )
         if rat_match:
-            rationale = rat_match.group(1).strip().strip("*").strip("[]")
+            rationale = rat_match.group(1).strip().strip("*").strip("[]").strip()
         else:
             rationale = raw_text.strip()
 
@@ -63,7 +67,7 @@ class ResponseParser:
         # 4. Apply paper Threshold-Based Re-annotation (RQ2 optimal setting)
         # Requirement pairs assigned a confidence score of threshold or lower are automatically reclassified as No_dependency
         final_type = parsed_type
-        if confidence <= confidence_threshold and final_type != DependencyType.NO_DEPENDENCY:
+        if confidence_threshold >= 0 and confidence <= confidence_threshold and final_type != DependencyType.NO_DEPENDENCY:
             logger.info(
                 f"Re-annotating pair {pair_id} from {final_type.value} to No_dependency "
                 f"(confidence {confidence} <= threshold {confidence_threshold})"
@@ -94,16 +98,37 @@ class LEREDDDetector:
         self.config = config or get_config()
         self.embedder = embedder or EmbeddingModel(self.config.embedding_model)
         self.example_retriever = ExampleRetriever(self.embedder, self.config)
+        self._bm25_retriever = None
+        self._hybrid_retriever = None
         self.rag_retriever = RAGRetriever(self.embedder, self.config) if self.config.use_rag else None
         self.prompt_builder = PromptBuilder(self.config)
         self.llm = llm or LLMClientFactory.create(self.config)
+
+    @property
+    def bm25_retriever(self):
+        if self._bm25_retriever is None:
+            from leredd.bm25_retrieval import BM25Retriever
+            self._bm25_retriever = BM25Retriever(config=self.config)
+        return self._bm25_retriever
+
+    @property
+    def hybrid_retriever(self):
+        if self._hybrid_retriever is None:
+            from leredd.hybrid_retrieval import HybridRetriever
+            self._hybrid_retriever = HybridRetriever(
+                dense_retriever=self.example_retriever,
+                config=self.config
+            )
+        return self._hybrid_retriever
 
     def detect_pair(
         self,
         target_pair: RequirementPair,
         annotated_pool: List[RequirementPair] | None = None,
         srs_text: str | None = None,
-        domain: str = "automotive software engineering"
+        domain: str = "automotive software engineering",
+        retrieval_mode: str | None = None,
+        confidence_threshold: int | None = None,
     ) -> Prediction:
         """Execute LEREDD detection pipeline on a single requirement pair."""
         pool = annotated_pool or []
@@ -111,12 +136,20 @@ class LEREDDDetector:
         # Phase 1: Knowledge Retrieval
         # 1. Dynamic Examples Retrieval (In-Context Learning)
         retrieved_examples = None
-        if pool:
-            retrieved_examples = self.example_retriever.retrieve(
-                target_pair=target_pair,
-                annotated_pool=pool,
-                k=self.config.k_examples
-            )
+        mode = retrieval_mode or self.config.retrieval_mode
+        if pool and self.config.k_examples > 0:
+            if mode == "bm25":
+                retrieved_examples = self.bm25_retriever.retrieve_example_pairs(
+                    target_pair=target_pair, candidate_pool=pool, k=self.config.k_examples
+                )
+            elif mode == "hybrid":
+                retrieved_examples = self.hybrid_retriever.retrieve_example_pairs(
+                    target_pair=target_pair, annotated_pool=pool, k=self.config.k_examples
+                )
+            else:
+                retrieved_examples = self.example_retriever.retrieve(
+                    target_pair=target_pair, annotated_pool=pool, k=self.config.k_examples
+                )
 
         # 2. Contextual Retrieval (RAG) - used for cross-system / inter-dataset setting
         context_chunks = None
@@ -138,10 +171,16 @@ class LEREDDDetector:
 
         response_text, usage = self.llm.generate(prompt, temperature=self.config.temperature)
 
+        threshold = (
+            confidence_threshold
+            if confidence_threshold is not None
+            else self.config.confidence_threshold
+        )
+
         prediction = ResponseParser.parse(
             raw_text=response_text,
             pair_id=target_pair.id,
-            confidence_threshold=self.config.confidence_threshold,
+            confidence_threshold=threshold,
             usage_info=usage
         )
 
@@ -152,7 +191,9 @@ class LEREDDDetector:
         pairs: List[RequirementPair],
         annotated_pool: List[RequirementPair] | None = None,
         srs_text: str | None = None,
-        max_workers: int = 4
+        max_workers: int = 4,
+        retrieval_mode: str | None = None,
+        confidence_threshold: int | None = None,
     ) -> List[Prediction]:
         """Execute batch detection across a list of requirement pairs."""
         if not pairs:
@@ -164,7 +205,9 @@ class LEREDDDetector:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_pair = {
-                executor.submit(self.detect_pair, pair, annotated_pool, srs_text): pair
+                executor.submit(
+                    self.detect_pair, pair, annotated_pool, srs_text, "automotive software engineering", retrieval_mode, confidence_threshold
+                ): pair
                 for pair in pairs
             }
             for future in as_completed(future_to_pair):

@@ -1,0 +1,3402 @@
+[
+  {
+    "id": "CAND-ADB_SRS-00001",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00002",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00003",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00004",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00005",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00006",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00007",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00008",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00009",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00010",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00011",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00012",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00013",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00014",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00015",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00016",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00017",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00018",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00019",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00020",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00021",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00022",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00023",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00024",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00025",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00026",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00027",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00028",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00029",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00030",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00031",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00032",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00033",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00034",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00035",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00036",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00037",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00038",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00039",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00040",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00041",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00042",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00043",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00044",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00045",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00046",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00047",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00048",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00049",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00050",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00051",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00052",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00053",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00054",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00055",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00056",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00057",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00058",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00059",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00060",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00061",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00062",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00063",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00064",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00065",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00066",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00067",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00068",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00069",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00070",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00071",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00072",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00073",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00074",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00075",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00076",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00077",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00078",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00079",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00080",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00081",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00082",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00083",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00084",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00085",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00086",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00087",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00088",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00089",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00090",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00091",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00092",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00093",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00094",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00095",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00096",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00097",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00098",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00099",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00100",
+    "req_a": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "heuristic",
+      "status": "provisional",
+      "annotator_id": "candidate_generator_all_pairs",
+      "model_id": null,
+      "model_version": null,
+      "config_hash": null,
+      "created_at": null,
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": null,
+      "accepted_label": null,
+      "confidence_score": null,
+      "calibrated_probability": null,
+      "evidence": null,
+      "review_notes": null,
+      "dataset_version": null
+    }
+  }
+]

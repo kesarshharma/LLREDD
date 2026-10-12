@@ -1,0 +1,189 @@
+[
+  {
+    "id": "PAIR-ADB-001",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "The BCS shall accept camera scenery information provided by the PCS to brake the vehicle if an object is within the vehicle's path.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-001",
+      "text": "The system shall include the Brake Control Subsystem (BCS).",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-004",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "The system shall respond to the surroundings around it in less than 2.5 seconds by dimming the light intensity 50%.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Details",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-005",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "The system shall authenticate updates.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "The system shall verify the source of the update.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Is similar",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-006",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-ADB-007",
+    "req_a": {
+      "id": "REQ-ADB-013",
+      "text": "The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux.",
+      "system": "ADB",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights.",
+      "system": "ADB",
+      "source": null
+    },
+    "dependency_type": "Conflicts",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-APA-002",
+    "req_a": {
+      "id": "REQ-APA-002",
+      "text": "The system shall start identifying available parking spots upon user confirmation.",
+      "system": "APA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-APA-003",
+      "text": "The system shall allow the customer to select an available parking spot displayed through the HMI with a confirm button.",
+      "system": "APA",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-APA-003",
+    "req_a": {
+      "id": "REQ-APA-007",
+      "text": "The APA system shall limit maximum vehicle speed to 5 km/h during automated steering and maneuvering.",
+      "system": "APA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-APA-009",
+      "text": "The system shall request steering control override permission from the primary vehicle domain controller prior to maneuver initiation.",
+      "system": "APA",
+      "source": null
+    },
+    "dependency_type": "Implements",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-APA-004",
+    "req_a": {
+      "id": "REQ-APA-004",
+      "text": "The APA system shall utilize 12 ultrasonic sensors and 4 surround view cameras to calculate target trajectory.",
+      "system": "APA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-APA-010",
+      "text": "The system shall verify camera lens clarity and ultrasonic transducer health before enabling parking assist.",
+      "system": "APA",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-002",
+    "req_a": {
+      "id": "REQ-TJA-005",
+      "text": "The system shall resume vehicle motion automatically if the preceding vehicle moves within 3 seconds of stopping.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-006",
+      "text": "If the preceding vehicle remains stopped for longer than 3 seconds, the driver must tap the accelerator pedal to resume TJA.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-003",
+    "req_a": {
+      "id": "REQ-TJA-003",
+      "text": "The system shall issue a visual and acoustic driver takeover request if lane markings become indistinguishable for more than 2 seconds.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-009",
+      "text": "The lateral control subsystem shall keep the vehicle centered within the detected lane boundaries.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Requires",
+    "provenance": null
+  },
+  {
+    "id": "PAIR-TJA-004",
+    "req_a": {
+      "id": "REQ-TJA-007",
+      "text": "The TJA system shall disengage immediately upon driver brake pedal intervention.",
+      "system": "TJA",
+      "source": null
+    },
+    "req_b": {
+      "id": "REQ-TJA-001",
+      "text": "The TJA system shall control longitudinal acceleration and deceleration based on front radar target distance.",
+      "system": "TJA",
+      "source": null
+    },
+    "dependency_type": "Conflicts",
+    "provenance": null
+  }
+]

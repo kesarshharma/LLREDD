@@ -1,0 +1,1056 @@
+[
+  {
+    "id": "CAND-ADB_SRS-00001",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Requires",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.016656+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Requires",
+      "accepted_label": "Requires",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement A explicitly depends on the functionality or system component defined in Requirement B.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00002",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.027953+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00003",
+    "req_a": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.036147+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00004",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.050241+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00005",
+    "req_a": {
+      "id": "REQ-ADB-002",
+      "text": "REQ-ADB-002: The BCS shall accept camera scenery information provided by the Park Control Subsystem (PCS) to brake the vehicle if an object is within the vehicle's path",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.062079+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00006",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.074005+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: Implements (Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'Implements'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00007",
+    "req_a": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.084940+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00008",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.098059+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: Implements (Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'Implements'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00009",
+    "req_a": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.105603+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00010",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.119173+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "No_dependency",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: No_dependency (Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'No_dependency'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00011",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.132351+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "No_dependency",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: No_dependency (Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'No_dependency'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00012",
+    "req_a": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.133582+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00013",
+    "req_a": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Details",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.146653+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Details",
+      "accepted_label": "Details",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Both requirements share the same underlying action, but Requirement B provides additional execution details.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00014",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.156645+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Is similar",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: Is similar (Requirement A and Requirement B describe identical functionality resulting in semantic redundancy.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'Is similar'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00015",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-001",
+      "text": "REQ-ADB-001: The system shall include the Brake Control Subsystem (BCS)",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.169044+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00016",
+    "req_a": {
+      "id": "REQ-ADB-007",
+      "text": "REQ-ADB-007: The system shall authenticate updates before applying firmware changes",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Is similar",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.182128+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Is similar",
+      "accepted_label": "Is similar",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement A and Requirement B describe identical functionality resulting in semantic redundancy.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00017",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.192270+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00018",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.203360+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "No_dependency",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: No_dependency (Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'No_dependency'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00019",
+    "req_a": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.217416+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00020",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-005",
+      "text": "REQ-ADB-005: The system shall respond to the surroundings around it in less than 2",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.230161+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00021",
+    "req_a": {
+      "id": "REQ-ADB-009",
+      "text": "REQ-ADB-009: The system shall verify communication between subsystems to maintain functional safety",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.243258+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00022",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.244942+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00023",
+    "req_a": {
+      "id": "REQ-ADB-010",
+      "text": "REQ-ADB-010: The subsystem shall have checks to mitigate the chances of a cybersecurity attack",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-006",
+      "text": "REQ-ADB-006: The system shall gradually change the light intensity to ensure a smooth operation for the driver by decreasing the intensity of the light by no greater than 50% in one update",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.258211+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: Implements (Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'Implements'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00024",
+    "req_a": {
+      "id": "REQ-ADB-011",
+      "text": "REQ-ADB-011: The system shall not irritate the driver with more than 3 updates or alerts in 10 minutes for the system",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Conflicts",
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.268794+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Conflicts",
+      "accepted_label": "Conflicts",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "AGREEMENT (Heuristic & LLM): Conflicts | Heuristic [RULE-NEG-CONFLICT]: Asymmetric negation detected with 7 shared terms: ['adb', 'driver', 'or', 'req']. | LLM Rationale: The fulfillment of Requirement A imposes restrictions or timing conflicts on Requirement B.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00025",
+    "req_a": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.278569+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00026",
+    "req_a": {
+      "id": "REQ-ADB-012",
+      "text": "REQ-ADB-012: The system shall alert the driver if any malfunctions or errors have been detected within 5 seconds",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Conflicts",
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.289278+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Conflicts",
+      "accepted_label": "Conflicts",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "AGREEMENT (Heuristic & LLM): Conflicts | Heuristic [RULE-NEG-CONFLICT]: Asymmetric negation detected with 7 shared terms: ['adb', 'or', 'req', 'shall']. | LLM Rationale: The fulfillment of Requirement A imposes restrictions or timing conflicts on Requirement B.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00027",
+    "req_a": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.302209+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "No_dependency",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: No_dependency (Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'No_dependency'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00028",
+    "req_a": {
+      "id": "REQ-ADB-013",
+      "text": "REQ-ADB-013: The ADB system shall activate high beams automatically when vehicle speed exceeds 40 km/h and ambient lighting is below 10 lux",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "No_dependency",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.313317+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "No_dependency",
+      "accepted_label": "No_dependency",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00029",
+    "req_a": {
+      "id": "REQ-ADB-014",
+      "text": "REQ-ADB-014: The ADB system shall deactivate high beams within 100 milliseconds upon detecting oncoming headlights or preceding taillights",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-003",
+      "text": "REQ-ADB-003: If a car in an oncoming lane is within 500 feet of the ADB system, or a car in the same lane is within 250 feet, the subsystem shall decrease light intensity by 50%",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": null,
+    "provenance": {
+      "source": "ensemble",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.314802+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": null,
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "Heuristic [RULE-NEG-CONFLICT]: Conflicts | LLM Rationale: Implements (Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.)",
+      "review_notes": "DISAGREEMENT: Heuristic predicted 'Conflicts', LLM predicted 'Implements'.",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00030",
+    "req_a": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-004",
+      "text": "REQ-ADB-004: The subsystem shall check for cars and road elements every 10 milliseconds and determine whether the subsystem shall decrease light intensity",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "Implements",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.321730+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "Implements",
+      "accepted_label": "Implements",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement B defines a lower-level subsystem implementation detail for high-level Requirement A.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  },
+  {
+    "id": "CAND-ADB_SRS-00031",
+    "req_a": {
+      "id": "REQ-ADB-015",
+      "text": "REQ-ADB-015: The system shall log all lighting state transitions and sensor diagnostic flags to persistent memory",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "req_b": {
+      "id": "REQ-ADB-008",
+      "text": "REQ-ADB-008: The system shall verify the source of the update prior to installation",
+      "system": "ADB",
+      "source": "regex_extraction"
+    },
+    "dependency_type": "No_dependency",
+    "provenance": {
+      "source": "llm",
+      "status": "provisional",
+      "annotator_id": "provisional_labeler_hybrid",
+      "model_id": "gpt-4",
+      "model_version": null,
+      "config_hash": null,
+      "created_at": "2026-10-10T12:34:06.331758+00:00",
+      "reviewed_at": null,
+      "reviewer_id": null,
+      "predicted_label": "No_dependency",
+      "accepted_label": "No_dependency",
+      "confidence_score": 5,
+      "calibrated_probability": null,
+      "evidence": "LLM Rationale: Requirement A and Requirement B describe independent vehicle functions with no direct or indirect dependency.",
+      "review_notes": "",
+      "dataset_version": "provisional-v1.0"
+    }
+  }
+]

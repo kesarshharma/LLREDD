@@ -30,9 +30,18 @@ class LEREDDConfig(BaseSettings):
     )
     k_examples: int = Field(
         default=6,
-        ge=1,
+        ge=0,
         le=10,
         description="Number of dynamic in-context examples per dependency type"
+    )
+    retrieval_mode: Literal["dense", "bm25", "hybrid"] = Field(
+        default="dense",
+        description="Example retrieval strategy: 'dense' (SBERT), 'bm25' (lexical), or 'hybrid' (RRF fusion)"
+    )
+    rrf_k: int = Field(
+        default=60,
+        ge=1,
+        description="Reciprocal Rank Fusion constant parameter"
     )
 
     # RAG Settings
@@ -70,9 +79,9 @@ class LEREDDConfig(BaseSettings):
     )
     confidence_threshold: int = Field(
         default=4,
-        ge=0,
+        ge=-1,
         le=5,
-        description="Re-annotation threshold: predictions with confidence <= threshold are set to No_dependency"
+        description="Re-annotation threshold: predictions with confidence <= threshold are set to No_dependency. Set -1 to disable."
     )
 
     # API Keys & URLs
@@ -109,3 +118,15 @@ def get_config() -> LEREDDConfig:
     if _config_instance is None:
         _config_instance = LEREDDConfig()
     return _config_instance
+
+
+def reset_config() -> None:
+    """Reset the cached global configuration singleton.
+
+    Sets the module-level singleton instance to None, forcing the next
+    call to get_config() to reload configuration from environment variables,
+    .env files, or default values. Intended primarily for testing and
+    controlled reinitialization.
+    """
+    global _config_instance
+    _config_instance = None

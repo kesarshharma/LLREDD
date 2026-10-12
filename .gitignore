@@ -1,0 +1,44 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache & build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment & secrets
+.env
+.env.local
+
+# Data cache / scratch
+data/embeddings/
+scratch/
+
+# Model / binary artifacts (do not commit large weights or caches)
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.joblib
+
+# Additional environment files
+.env.*
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~

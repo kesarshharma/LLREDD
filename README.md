@@ -1,121 +1,225 @@
-# LEREDD: LLM-Enabled REquirement Dependency Detection System
+# Improving Automated Requirement Dependency Detection Using Large Language Models and Semi-Automated Dataset Generation
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-green.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.25%2B-red.svg)](https://streamlit.io/)
 
-A production-ready Python framework implementing **LEREDD** based on the research paper *"Automating the Detection of Requirement Dependencies Using Large Language Models"*.
-
-LEREDD automatically detects five dependency types (**Requires**, **Implements**, **Conflicts**, **Details**, **Is similar**) and **No_dependency** between natural language software requirements using Large Language Models, dynamic In-Context Learning (ICL) example retrieval, SBERT vector similarity, and Retrieval-Augmented Generation (RAG).
+A comprehensive research implementation and software framework for **Automated Requirement Dependency Detection (LEREDD)** and **Semi-Automated Dataset Generation**, as presented in the minor project proposal *"Improving Automated Requirement Dependency Detection Using Large Language Models and Semi-Automated Dataset Generation"*.
 
 ---
 
-## 🌟 Key Features
+## 📌 Executive Summary
 
-1. **Knowledge Retrieval Engine**:
-   - **SBERT Vector Embeddings**: Default `all-MiniLM-L6-v2` with disk caching.
-   - **Euclidean Similarity**: Converts distance to similarity $sim = \frac{1}{1 + \text{dist}}$.
-   - **Average Similarity Aggregation (Eq. 1)**: $Score_{avg} = \frac{sim(R_1, R_a) + sim(R_1, R_b) + sim(R_2, R_a) + sim(R_2, R_b)}{4}$.
-   - **Dynamic In-Context Learning (ICL)**: Retrieves top $k$ (default 6) annotated examples for each dependency class.
-   - **RAG Contextual Chunking**: Fixed-size 1000-character chunks with 200-character overlap for cross-system evaluation.
+Software requirements engineering frequently suffers from hidden requirement dependencies that lead to incomplete system architectures, integration bugs, and costly rework. This repository provides a complete dual-workflow platform:
 
-2. **LLM Abstraction & Prompt Engineering**:
-   - Dynamic prompt builder adhering strictly to Paper Figure 2 & Table I definitions.
-   - Supports OpenAI API (`gpt-4`), local models via Ollama (`llama3`), and a built-in `MockLLMClient` for offline execution.
-   - Threshold-based re-annotation filtering: predictions with Likert confidence score $\le 4$ reclassified to `No_dependency`.
-   - Automatic cost tracking, prompt-hash response caching, and exponential backoff retries.
-
-3. **Baselines & Evaluation Suite**:
-   - **TF-IDF & LSA Baseline**: TruncatedSVD with cosine similarity thresholding.
-   - **Fine-Tuned BERT Baseline**: Supervised multi-class classifier handling severe class imbalance via class weighting and oversampling.
-   - **Statistical Significance Testing**: McNemar's test for paired accuracy and Fisher's exact test for precision/recall.
-
-4. **Multi-Interface Support**:
-   - **Typer CLI (`leredd-cli`)**: Full command suite for extraction, pair generation, interactive annotation, detection, training, and evaluation.
-   - **FastAPI REST API**: High-performance REST API with Swagger documentation (`/docs`).
-   - **Streamlit Web UI**: Glassmorphism web dashboard featuring interactive annotation, single/batch detection, benchmark evaluation, and NetworkX dependency network visualization.
+1. **Automated Requirement Dependency Detection**: Implements the **LEREDD** architecture, utilizing Large Language Models (LLMs) with dynamic In-Context Learning (ICL), hybrid BM25 + SBERT retrieval, confidence thresholding, and multi-class classification across six dependency categories.
+2. **Semi-Automated Dataset Generation**: Provides an end-to-end pipeline to transform raw Software Requirements Specification (SRS) text into high-quality, verified requirement dependency datasets. The pipeline features SRS parsing, candidate pair generation, hybrid retrieval filtering, provisional labeling, human review queue management via a Streamlit web interface, system-disjoint dataset splitting, and provenance tracking.
 
 ---
 
-## 🚀 Quick Start
+## 🏷️ Dependency Taxonomy
 
-### 1. Installation
+The framework detects and annotates **six standard requirement dependency categories**:
+
+| Dependency Type | Directional | Description | Example |
+| :--- | :---: | :--- | :--- |
+| **Requires** | Yes ($R_1 \rightarrow R_2$) | $R_1$ requires the existence or execution of $R_2$ to function. | "BCS shall apply brakes" requires "BCS shall receive camera input". |
+| **Implements** | Yes ($R_1 \rightarrow R_2$) | $R_1$ provides a concrete implementation or realization of abstract requirement $R_2$. | High-level architectural specification implemented by component rule. |
+| **Conflicts** | No ($R_1 \leftrightarrow R_2$) | $R_1$ and $R_2$ specify mutually exclusive behavior or resource constraints. | Maximum speed capped at 30km/h vs high-speed cruise mode set to 100km/h. |
+| **Details** | Yes ($R_1 \rightarrow R_2$) | $R_1$ provides additional context, parameters, or refinement for $R_2$. | Detailed sensor sampling rate parameter refining general sensor rule. |
+| **Is_similar** | No ($R_1 \leftrightarrow R_2$) | $R_1$ and $R_2$ share substantial functional overlap without explicit dependency. | Duplicate object detection rules across two separate sub-modules. |
+| **No_dependency** | N/A | $R_1$ and $R_2$ are functionally independent. | User login GUI styling pair vs brake pad material specification. |
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+flowchart TD
+    subgraph Workflow 1: Dataset Generation Pipeline
+        SRS[Raw SRS Documents] --> Parser[SRS Parser / Extractor]
+        Parser --> Reqs[Structured Requirements]
+        Reqs --> CandGen[Candidate Pair Generator
+(Hybrid BM25 + SBERT Filtering)]
+        CandGen --> ProvLabeler[Provisional Labeler
+(Zero-Shot / Rule-based)]
+        ProvLabeler --> RevQueue[Review Queue Manager]
+        RevQueue --> UI[Streamlit Review Dashboard]
+        UI --> Annotator[Human Expert Verification]
+        Annotator --> VerifiedDS[(Verified Ground-Truth Dataset)]
+        VerifiedDS --> Splitter[System-Disjoint Dataset Splitter]
+        Splitter --> Splits[(Train / Dev / Test System-Disjoint Splits)]
+    end
+
+    subgraph Workflow 2: LEREDD Detection Engine
+        Splits --> ICLPool[ICL Example Pool]
+        TestPair[Target Requirement Pair] --> HybridRet[Hybrid Retriever
+(BM25 + SBERT Embeddings)]
+        HybridRet --> ICLPool
+        ICLPool --> PromptEngine[Dynamic Prompt Builder
+(Taxonomy + Selected Examples)]
+        TestPair --> PromptEngine
+        PromptEngine --> LLMClient[LLM Client Engine
+(OpenAI / Ollama / Mock)]
+        LLMClient --> PostFilter[Confidence Threshold Filter
+(Likert Score <= 4 -> No_dependency)]
+        PostFilter --> Pred[Final Dependency Prediction]
+    end
+```
+
+---
+
+## 🚀 Getting Started
+
+### 1. Prerequisites & Installation
+
+- **Python**: 3.10 or higher
+- **Git**
 
 ```bash
-# Clone repository
-git clone https://github.com/leredd/leredd.git
-cd leredd
+# Clone the repository
+git clone https://github.com/kesarshharma/LLREDD.git
+cd minor
 
-# Create virtual environment & install dependencies
+# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# On Windows:
+venv\Scripts\activate
+# On Linux/macOS:
+source venv/bin/activate
 
+# Install requirements and local package
 pip install -r requirements.txt
 pip install -e .
 ```
 
 ### 2. Environment Configuration
-Copy `.env.example` to `.env`:
+
+Copy `.env.example` to `.env` and adjust setup parameters:
+
 ```bash
 cp .env.example .env
 ```
-To run offline without API keys, set `LLM_PROVIDER=mock` in `.env`.
+
+To run completely offline without external API keys (using Mock LLM & local embeddings):
+```env
+LLM_PROVIDER=mock
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+```
 
 ---
 
-## 🖥️ Usage
+## 💻 Usage & Interfaces
 
-### CLI Commands (`leredd-cli`)
+The system provides three primary interfaces for execution:
+
+### 1. Command-Line Interface (`leredd-cli`)
 
 ```bash
-# 1. Extract requirements from SRS document
-leredd-cli extract --input data/raw/adb_srs.txt --system ADB --output requirements.json
+# Workflow 1: Dataset Generation Commands
+# Extract requirement statements from SRS text
+leredd-cli extract --input data/raw/adb_srs.txt --system ADB --output data/provisional/adb_reqs.json
 
-# 2. Generate all unique requirement pairs
-leredd-cli pairs --input requirements.json --output pairs.json
+# Generate candidate requirement pairs
+python scripts/generate_candidates.py --input data/provisional/adb_reqs.json --output data/candidates/adb_candidates.json --top-k 15
 
-# 3. Interactive pair annotation
-leredd-cli annotate --input pairs.json --output data/annotated/pairs.json
+# Label candidates provisionally
+python scripts/label_candidates.py --candidates data/candidates/adb_candidates.json --output data/provisional/adb_labeled.json
 
-# 4. Run LEREDD detection
-leredd-cli detect --input pairs.json --examples data/annotated/adb_pairs.json --output predictions.json
+# Populate human review queue
+python scripts/build_review_queue.py --input data/provisional/adb_labeled.json --output data/queue/review_queue.json
 
-# 5. Evaluate results against ground truth
-leredd-cli evaluate --predictions predictions.json --ground-truth data/annotated/adb_pairs.json --system ADB
+# Split verified dataset into system-disjoint train/dev/test sets
+python scripts/split_dataset.py --input data/verified/all_annotated.json --output-dir data/splits/system_disjoint --strategy system
 
-# 6. Launch REST API Server
-leredd-cli serve --port 8000
+# Workflow 2: Dependency Detection & Evaluation
+# Run LEREDD detection on target requirement pair file
+leredd-cli detect --input data/candidates/test_pairs.json --examples data/verified/all_annotated.json --output data/evaluation/predictions.json
+
+# Run system-disjoint evaluation suite across baselines
+python scripts/run_full_evaluation.py --split-dir data/splits/system_disjoint --output data/evaluation/system_disjoint_report.json
 ```
 
-### Web UI (Streamlit Dashboard)
+### 2. REST API (`api/main.py`)
+
+Launch high-performance FastAPI REST backend:
+
+```bash
+python api/main.py --port 8000
+# or using CLI:
+leredd-cli serve --port 8000
+```
+- Interactive Swagger UI Documentation: `http://localhost:8000/docs`
+- Health check endpoint: `GET /api/v1/health`
+- Pair detection endpoint: `POST /api/v1/detect`
+- Batch detection endpoint: `POST /api/v1/predict/batch`
+- Queue management: `GET /api/v1/queue`
+
+### 3. Streamlit Web Dashboard (`ui/app.py`)
+
+Interactive web interface for dataset annotation, pair detection, queue management, and model evaluation visualization:
 
 ```bash
 streamlit run ui/app.py
 ```
-Open `http://localhost:8501` in your browser.
+Open `http://localhost:8501` to access:
+- **Interactive Review Queue**: Review, edit, approve, or reject provisionally labeled candidate pairs with full provenance tracking.
+- **Single / Batch Detection**: Execute real-time LEREDD detection with customizable confidence thresholding.
+- **Model Benchmark Visualizer**: Explore confusion matrices, precision/recall metrics, and statistical significance tests.
 
 ---
 
-## 🐳 Docker Setup
+## 🐳 Docker Deployment
+
+The repository includes complete Docker containerization (`Dockerfile` and `docker-compose.yml`). *(Note: Docker configuration files are statically verified by automated test suites; live container execution requires an active local Docker daemon).*
 
 ```bash
-# Build and run API, Streamlit UI, and Redis using Docker Compose
+# Build and launch API, Streamlit UI, and services via Docker Compose
 docker-compose up --build
 ```
-- Streamlit Web UI: `http://localhost:8501`
-- FastAPI REST API: `http://localhost:8000/docs`
+
+Services exposed:
+- **Streamlit Web UI**: `http://localhost:8501`
+- **FastAPI REST API**: `http://localhost:8000/docs`
 
 ---
 
-## 🧪 Testing & Verification
+## 📊 Evaluation & Empirical Benchmarks
 
-Run the full pytest suite with coverage report:
+The framework was evaluated under a strict **System-Disjoint Split Strategy** (training on *ADB*, validating on *APA*, and testing on *TJA*) to prevent data leakage between software domains.
+
+### Performance Comparison
+
+| Model Architecture | Evaluation Setting | Accuracy | Macro F1 | Weighted F1 | Primary Characteristics |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **TF-IDF + Cosine Baseline** | System-Disjoint | 0.400 | 0.143 | 0.229 | Unsupervised TF-IDF vector similarity with SVD. |
+| **Supervised BERT (RF)** | System-Disjoint | 0.200 | 0.125 | 0.200 | Supervised SBERT + RandomForest classifier with class balancing. |
+| **LEREDD (Mock Deterministic)** | System-Disjoint | 0.400 | 0.222 | 0.333 | Keyword heuristic fallback mode without active LLM API. |
+| **LEREDD (Paper Reference GPT-4)** | System-Disjoint (Zero/Few-Shot) | **0.880** | **0.860** | **0.875** | Paper reference benchmark using live GPT-4 API (not offline MockLLM). |
+
+*Detailed benchmark metrics, per-class breakdown, and statistical significance results are available in [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) and [`data/evaluation/system_disjoint_report.json`](data/evaluation/system_disjoint_report.json).*
+
+---
+
+## ⚠️ Limitations & Open Challenges
+
+1. **System-Disjoint Performance Gap**: Models trained or evaluated on random splits exhibit optimistic performance due to lexical overlap within the same system SRS. System-disjoint evaluation reveals significant domain adaptation challenges across distinct software specifications.
+2. **Class Imbalance**: Requirement datasets naturally contain an overwhelmingly high proportion of `No_dependency` pairs (>80%). Precision and recall for rare classes like `Details` and `Conflicts` require targeted candidate sampling.
+3. **Candidate Filtering Trade-off**: Aggressive top-$k$ candidate pair retrieval significantly reduces human annotation effort but introduces potential false-negative filtering risk for non-obvious requirement dependencies.
+
+---
+
+## 🛠️ Testing & Verification
+
+Run the full automated test suite (including unit, integration, and provenance verification tests):
+
 ```bash
-pytest tests/ -v --cov=leredd --cov-report=term-missing
+pytest tests/ -v
 ```
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+## 📜 License
+
+This project is licensed under the MIT License - see the `LICENSE` file for details.

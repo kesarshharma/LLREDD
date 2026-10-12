@@ -7,7 +7,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, retry_if_exception
 from leredd.config import LEREDDConfig, get_config
 from leredd.data_models import DependencyType
 
@@ -116,6 +116,19 @@ class OpenAILLMClient(LLMClient):
             raise e
 
 
+def _is_retryable_ollama_exception(exc: BaseException) -> bool:
+    try:
+        import httpx
+    except Exception:
+        return False
+    if isinstance(exc, httpx.RequestError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response is not None:
+            return exc.response.status_code in (500, 502, 503, 504)
+    return False
+
+
 class OllamaLLMClient(LLMClient):
     """Local Ollama REST API Client."""
 
@@ -124,9 +137,19 @@ class OllamaLLMClient(LLMClient):
         self.base_url = base_url or config.ollama_base_url
         self.model = model or config.llm_model
 
-    def generate(self, prompt: str, temperature: float = 0.2) -> Tuple[str, Dict[str, Any]]:
+    @retry(
+        retry=retry_if_exception(_is_retryable_ollama_exception),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=4),
+    )
+    def _call_ollama(self, url: str, payload: dict) -> dict:
         import httpx
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.post(url, json=payload)
+            resp.raise_for_status()
+            return resp.json()
 
+    def generate(self, prompt: str, temperature: float = 0.2) -> Tuple[str, Dict[str, Any]]:
         url = f"{self.base_url.rstrip('/')}/api/generate"
         payload = {
             "model": self.model,
@@ -136,35 +159,53 @@ class OllamaLLMClient(LLMClient):
         }
 
         try:
-            with httpx.Client(timeout=60.0) as client:
-                resp = client.post(url, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                text = data.get("response", "")
-                
-                # Approximate tokens
-                prompt_tokens = len(prompt.split())
-                completion_tokens = len(text.split())
-                usage = {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "cost_usd": 0.0,
-                    "provider": "ollama",
-                    "model": self.model
-                }
-                return text, usage
+            data = self._call_ollama(url, payload)
+            text = data.get("response", "")
+
+            # Approximate tokens
+            prompt_tokens = len(prompt.split())
+            completion_tokens = len(text.split())
+            usage = {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "cost_usd": 0.0,
+                "provider": "ollama",
+                "model": self.model
+            }
+            return text, usage
         except Exception as e:
-            logger.error(f"Ollama API call error: {e}")
-            raise RuntimeError(f"Ollama LLM call failed: {e}")
+            # Unwrap tenacity RetryError so callers see the original transient failure
+            msg_exc = e
+            try:
+                from tenacity import RetryError
+                if isinstance(e, RetryError) and hasattr(e, "last_attempt") and e.last_attempt is not None:
+                    inner = e.last_attempt.exception()
+                    if inner is not None:
+                        msg_exc = inner
+            except Exception:
+                pass
+            logger.error(f"Ollama API call error: {msg_exc}")
+            raise RuntimeError(f"Ollama LLM call failed: {msg_exc}")
 
 
 class MockLLMClient(LLMClient):
     """Deterministic Mock LLM Client for offline testing and fast local evaluation."""
 
-    def __init__(self, model: str = "mock-gpt4"):
+    def __init__(self, model: str = "mock-gpt4", response_text: str | None = None):
         self.model = model
+        self.response_text = response_text
 
     def generate(self, prompt: str, temperature: float = 0.2) -> Tuple[str, Dict[str, Any]]:
+        if self.response_text is not None:
+            output_text = self.response_text
+            usage = {
+                "prompt_tokens": len(prompt.split()),
+                "completion_tokens": len(output_text.split()),
+                "cost_usd": 0.0,
+                "provider": "mock",
+                "model": self.model
+            }
+            return output_text, usage
         # Extract Requirement A and Requirement B text from prompt
         req_a_match = re.search(r"Requirement A:\s*(.*?)\n", prompt)
         req_b_match = re.search(r"Requirement B:\s*(.*?)\n", prompt)

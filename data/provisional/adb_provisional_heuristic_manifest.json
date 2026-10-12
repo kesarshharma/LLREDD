@@ -1,0 +1,13 @@
+{
+  "run_id": "LABEL-C2158250",
+  "source_identity": "ADB_Candidates_BM25",
+  "input_candidate_count": 31,
+  "mode": "heuristic",
+  "labeled_count": 11,
+  "agreed_count": 0,
+  "disagreed_count": 0,
+  "unresolved_count": 20,
+  "failed_count": 0,
+  "created_at": "2026-10-10T12:34:06.006017+00:00",
+  "metadata": {}
+}

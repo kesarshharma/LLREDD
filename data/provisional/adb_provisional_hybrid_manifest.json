@@ -1,0 +1,13 @@
+{
+  "run_id": "LABEL-A2685EEA",
+  "source_identity": "ADB_Candidates_BM25",
+  "input_candidate_count": 31,
+  "mode": "hybrid",
+  "labeled_count": 22,
+  "agreed_count": 2,
+  "disagreed_count": 9,
+  "unresolved_count": 0,
+  "failed_count": 0,
+  "created_at": "2026-10-10T12:34:06.331814+00:00",
+  "metadata": {}
+}

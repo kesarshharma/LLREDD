@@ -117,3 +117,5 @@ Requirement B: {req_b_text}
 **Confidence Score: [SCORE]**
 """
         return prompt
+
+    build_prompt = build

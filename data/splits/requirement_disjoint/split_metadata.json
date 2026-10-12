@@ -1,0 +1,39 @@
+{
+  "summary": {
+    "strategy": "requirement",
+    "seed": 42,
+    "counts": {
+      "train": {
+        "pairs": 9,
+        "requirements": 16
+      },
+      "dev": {
+        "pairs": 0,
+        "requirements": 0
+      },
+      "test": {
+        "pairs": 0,
+        "requirements": 0
+      },
+      "retrieval": {
+        "pairs": 0,
+        "requirements": 0
+      },
+      "cross_partition": {
+        "pairs": 11
+      }
+    },
+    "total_pairs": 20
+  },
+  "leakage_report": {
+    "has_leakage": false,
+    "req_overlap_train_test": [],
+    "req_overlap_train_dev": [],
+    "req_overlap_dev_test": [],
+    "req_overlap_retrieval_test": [],
+    "system_overlap_train_test": [],
+    "total_unique_requirements": 16,
+    "total_pairs": 20,
+    "leakage_rate": 0.0
+  }
+}
