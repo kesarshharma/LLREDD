@@ -1,8 +1,10 @@
-# LEREDD Research Replication Guide
+# LEREDD Local Evaluation Guide
 
-This guide describes how to reproduce the empirical evaluation results from the research paper *"Automating the Detection of Requirement Dependencies Using Large Language Models"*.
+The commands here run the repository's small, leakage-checked system-disjoint demonstration benchmark. They do **not** reproduce the paper's reported results: the included legacy benchmark has 20 pairs, its annotation provenance is unavailable, and the LEREDD variants use `MockLLMClient`.
 
-## Paper Research Questions (RQs) Summary
+## Paper-Reported Research Question Results
+
+The figures below summarize values attributed to the research paper in this project’s prior notes. They are reference claims, not results produced by this local benchmark.
 
 1. **RQ1 (Model Selection)**: GPT-4 achieves superior performance compared to open-source LLMs under zero-shot prompting (F1 = 0.78 overall, 0.87 for No_dependency).
 2. **RQ2 (Optimal Configuration)**:
@@ -18,20 +20,28 @@ This guide describes how to reproduce the empirical evaluation results from the 
 
 ---
 
-## Replication Commands
+## Local Evaluation Commands
 
-### 1. Run Benchmark Evaluation Script
+### 1. Run the system-disjoint benchmark
 ```bash
 python scripts/run_evaluation.py
 ```
 
-### 2. Run CLI Evaluation Command
+The command is retained for compatibility and delegates to `scripts/run_full_evaluation.py`. Each default run writes to a new timestamped directory under `data/evaluation/runs/`; pass `--output` for a chosen new path. Existing reports and source-data directories are protected from overwrite.
+
+To run the underlying entry point directly:
 ```bash
-leredd-cli evaluate --predictions data/annotated/adb_pairs.json --ground-truth data/annotated/adb_pairs.json --system ADB
+python scripts/run_full_evaluation.py --split-dir data/splits/system_disjoint --output data/evaluation/system_disjoint_report.json
 ```
 
-### 3. Run Streamlit UI Evaluation Page
+That direct example writes the standard report and ablation report; choose a fresh output location if prior results must be preserved.
+
+### 2. Score an existing prediction file with the CLI
+
+`leredd-cli evaluate` expects prediction records (including `pair_id` and predicted label) in `--predictions` and the corresponding labeled pairs in `--ground-truth`. Do not point both arguments at the same ground-truth JSON file.
+
+### 3. Use the Streamlit evaluation page
 ```bash
 streamlit run ui/app.py
 ```
-Navigate to **Page 4: Model Evaluation** to view full accuracy, macro/weighted F1 score tables, McNemar's test $p$-values, and confusion matrix heatmaps.
+Navigate to **Page 4: Model Evaluation** to run the fixed system-disjoint split and view metrics, exploratory statistical results, limitations, and a confusion matrix. Each UI run writes into a unique subdirectory under `data/evaluation/ui_runs/`.

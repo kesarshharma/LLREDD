@@ -256,3 +256,52 @@ def test_verified_export_roundtrip_and_exclusions(tmp_path):
     assert corr_pair.provenance.status == VerificationStatus.VERIFIED
     assert corr_pair.provenance.source == AnnotationSource.HUMAN
     assert corr_pair.provenance.reviewer_id == "annotator_a"
+
+
+def test_streamlit_annotation_persists_verified_copy_without_mutating_source(tmp_path):
+    from ui.app import save_ui_annotation
+    from leredd.utils import load_pairs_json
+
+    source_pair = RequirementPair(
+        id="UI-SAVE-1",
+        req_a=Requirement(id="UI-REQ-1", text="First requirement.", system="ADB"),
+        req_b=Requirement(id="UI-REQ-2", text="Second requirement.", system="ADB"),
+        dependency_type=DependencyType.REQUIRES,
+        provenance=AnnotationProvenance(
+            source=AnnotationSource.LLM,
+            status=VerificationStatus.PROVISIONAL,
+            predicted_label=DependencyType.CONFLICTS,
+        ),
+    )
+    output = tmp_path / "annotations.json"
+
+    updated = save_ui_annotation(
+        [source_pair], 0, "Details", "reviewer-1", str(output)
+    )
+
+    assert source_pair.dependency_type == DependencyType.REQUIRES
+    assert source_pair.provenance.status == VerificationStatus.PROVISIONAL
+    assert updated[0].dependency_type == DependencyType.DETAILS
+    assert updated[0].provenance.status == VerificationStatus.VERIFIED
+    assert updated[0].provenance.annotator_id == "reviewer-1"
+    assert updated[0].provenance.predicted_label == DependencyType.CONFLICTS
+    assert load_pairs_json(str(output))[0] == updated[0]
+
+
+def test_streamlit_annotation_refuses_source_dataset_and_unconfirmed_overwrite(tmp_path):
+    from ui.app import save_ui_annotation
+
+    pair = RequirementPair(
+        id="UI-SAVE-2",
+        req_a=Requirement(id="UI-REQ-3", text="A."),
+        req_b=Requirement(id="UI-REQ-4", text="B."),
+    )
+    source_target = os.path.abspath("data/annotated/ui_must_not_write.json")
+    with pytest.raises(ValueError, match="source data"):
+        save_ui_annotation([pair], 0, "Requires", "reviewer", source_target)
+
+    existing = tmp_path / "existing.json"
+    existing.write_text("preserve", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="enable overwrite"):
+        save_ui_annotation([pair], 0, "Requires", "reviewer", str(existing))
+    assert existing.read_text(encoding="utf-8") == "preserve"

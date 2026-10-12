@@ -4,7 +4,7 @@ Tests for scripts/run_full_evaluation.py safe evaluation pipeline.
 Coverage:
   - Contamination guard: test/dev req IDs excluded from retrieval pool
   - Baseline training isolation: test pairs never used during baseline training
-  - Ground-truth eligibility: PROVISIONAL records rejected
+  - Ground-truth eligibility: only VERIFIED provenance is accepted
   - Ground-truth eligibility: UI-test fixture records rejected
   - Report schema completeness
   - Leakage raises ContaminationError with strict=True
@@ -85,6 +85,81 @@ def _verified_provenance() -> AnnotationProvenance:
         source=AnnotationSource.HUMAN,
         status=VerificationStatus.VERIFIED,
     )
+
+
+@pytest.fixture(scope="module")
+def cached_evaluation_report_path():
+    """Module-scoped cached evaluation report for pure-inspection integration tests."""
+    import tempfile, json
+    from pathlib import Path
+    from scripts.run_full_evaluation import run_evaluation
+    with tempfile.TemporaryDirectory() as tmpdir:
+        split_dir = Path(tmpdir) / "system_disjoint"
+        split_dir.mkdir()
+        adb = [
+            {
+                "id": f"PAIR-ADB-{i:03d}",
+                "req_a": {"id": f"REQ-ADB-{i*2:03d}", "text": f"The system shall do action {i}.", "system": "ADB"},
+                "req_b": {"id": f"REQ-ADB-{i*2+1:03d}", "text": f"The system shall support feature {i}.", "system": "ADB"},
+                "dependency_type": dep,
+                "provenance": None,
+            }
+            for i, dep in enumerate([
+                "Requires", "Implements", "Conflicts", "Details",
+                "Is similar", "No_dependency", "No_dependency",
+                "Requires", "Conflicts", "No_dependency"
+            ], start=1)
+        ]
+        (split_dir / "train_pairs.json").write_text(json.dumps(adb), encoding="utf-8")
+        tja = [
+            {
+                "id": f"PAIR-TJA-{i:03d}",
+                "req_a": {"id": f"REQ-TJA-{i*2:03d}", "text": f"TJA shall perform task {i}.", "system": "TJA"},
+                "req_b": {"id": f"REQ-TJA-{i*2+1:03d}", "text": f"TJA shall handle event {i}.", "system": "TJA"},
+                "dependency_type": dep,
+                "provenance": None,
+            }
+            for i, dep in enumerate(["Requires", "Details", "Conflicts", "No_dependency", "Requires"], start=1)
+        ]
+        (split_dir / "test_pairs.json").write_text(json.dumps(tja), encoding="utf-8")
+        apa = [
+            {
+                "id": f"PAIR-APA-{i:03d}",
+                "req_a": {"id": f"REQ-APA-{i*2:03d}", "text": f"APA shall comply with rule {i}.", "system": "APA"},
+                "req_b": {"id": f"REQ-APA-{i*2+1:03d}", "text": f"APA shall verify condition {i}.", "system": "APA"},
+                "dependency_type": dep,
+                "provenance": None,
+            }
+            for i, dep in enumerate(["Details", "Requires", "Implements", "No_dependency", "Requires"], start=1)
+        ]
+        (split_dir / "dev_pairs.json").write_text(json.dumps(apa), encoding="utf-8")
+        meta = {
+            "summary": {
+                "strategy": "system",
+                "seed": 42,
+                "counts": {
+                    "train": {"pairs": 10, "requirements": 15},
+                    "dev": {"pairs": 5, "requirements": 10},
+                    "test": {"pairs": 5, "requirements": 9},
+                },
+            },
+            "leakage_report": {
+                "has_leakage": False,
+                "req_overlap_train_test": [],
+                "system_overlap_train_test": [],
+            },
+        }
+        (split_dir / "split_metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+        out_path = Path(tmpdir) / "cached_report.json"
+        run_evaluation(
+            split_dir=str(split_dir),
+            output_path=str(out_path),
+            seed=42,
+            bert_model_type="rf",
+            strict_contamination=True,
+            strict_gt=True,
+        )
+        yield str(out_path)
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +268,7 @@ class TestCheckGroundTruthEligibility:
             "P-PROV", "REQ-A-001", "REQ-A-002",
             provenance=_provisional_provenance()
         )
-        with pytest.raises(GroundTruthViolationError, match="PROVISIONAL"):
+        with pytest.raises(GroundTruthViolationError, match="explicit VERIFIED status"):
             check_ground_truth_eligibility([pair], "TEST", strict=True)
 
     def test_provisional_record_excluded_non_strict(self):
@@ -205,7 +280,22 @@ class TestCheckGroundTruthEligibility:
         eligible, warnings = check_ground_truth_eligibility([pair], "TEST", strict=False)
 
         assert len(eligible) == 0
-        assert any("REJECTED" in w and "PROVISIONAL" in w for w in warnings)
+        assert any("REJECTED" in w and "provisional" in w and "VERIFIED" in w for w in warnings)
+
+    @pytest.mark.parametrize("status", [VerificationStatus.PENDING_REVIEW, VerificationStatus.HUMAN_REVIEWED])
+    def test_unverified_record_rejected(self, status):
+        """Labels imported or reviewed without explicit verification are not ground truth."""
+        pair = _make_pair(
+            f"P-{status.value}", "REQ-A-001", "REQ-A-002",
+            provenance=AnnotationProvenance(source=AnnotationSource.IMPORTED, status=status),
+        )
+
+        with pytest.raises(GroundTruthViolationError, match="explicit VERIFIED status"):
+            check_ground_truth_eligibility([pair], "TEST", strict=True)
+
+        eligible, warnings = check_ground_truth_eligibility([pair], "TEST", strict=False)
+        assert eligible == []
+        assert any("REJECTED" in warning and status.value in warning for warning in warnings)
 
     def test_verified_pair_accepted(self):
         """Explicitly VERIFIED pairs are accepted."""
@@ -311,26 +401,11 @@ class TestRunEvaluationIntegration:
         }
         (split_dir / "split_metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
 
-    def test_report_written_with_required_fields(self):
+    def test_report_written_with_required_fields(self, cached_evaluation_report_path):
         """run_evaluation writes a JSON report containing all required top-level fields."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-
-            output_path = Path(tmpdir) / "report.json"
-            report = run_evaluation(
-                split_dir=str(split_dir),
-                output_path=str(output_path),
-                seed=42,
-                bert_model_type="lr",
-                strict_contamination=True,
-                strict_gt=True,
-            )
-
-            assert output_path.exists(), "Report file was not written."
-            with open(output_path, "r", encoding="utf-8") as f:
-                saved = json.load(f)
+        assert Path(cached_evaluation_report_path).exists(), "Cached report file was not written."
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            saved = json.load(f)
 
             required_fields = [
                 "schema_version", "script_version", "run_timestamp",
@@ -350,18 +425,10 @@ class TestRunEvaluationIntegration:
                 "duplicate of LEREDD_Hybrid (ISSUE-011)."
             )
 
-    def test_no_test_req_ids_in_retrieval_pool_logged(self):
+    def test_no_test_req_ids_in_retrieval_pool_logged(self, cached_evaluation_report_path):
         """Leakage audit in report confirms 0 contaminated pairs for disjoint split."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-            output_path = Path(tmpdir) / "report.json"
-
-            report = run_evaluation(
-                split_dir=str(split_dir),
-                output_path=str(output_path),
-            )
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             leakage = report["leakage_audit"]
             assert leakage["contaminated_count"] == 0, (
@@ -369,18 +436,10 @@ class TestRunEvaluationIntegration:
             )
             assert leakage["contamination_detected"] is False
 
-    def test_test_pairs_not_in_retrieval_pool(self):
+    def test_test_pairs_not_in_retrieval_pool(self, cached_evaluation_report_path):
         """Explicitly verify that test req IDs appear in excluded_req_ids in the audit."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-            output_path = Path(tmpdir) / "report.json"
-
-            report = run_evaluation(
-                split_dir=str(split_dir),
-                output_path=str(output_path),
-            )
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             excluded = set(report["leakage_audit"]["excluded_req_ids"])
             # TJA test req IDs
@@ -408,7 +467,7 @@ class TestRunEvaluationIntegration:
             (split_dir / "test_pairs.json").write_text(json.dumps(bad_test), encoding="utf-8")
 
             output_path = Path(tmpdir) / "report.json"
-            with pytest.raises(GroundTruthViolationError, match="PROVISIONAL"):
+            with pytest.raises(GroundTruthViolationError, match="explicit VERIFIED status"):
                 run_evaluation(
                     split_dir=str(split_dir),
                     output_path=str(output_path),
@@ -494,15 +553,10 @@ class TestRunEvaluationIntegration:
             assert report["leakage_audit"]["contaminated_count"] == 1
             assert report["leakage_audit"]["safe_pool_size"] == 1
 
-    def test_report_model_metrics_have_correct_schema(self):
+    def test_report_model_metrics_have_correct_schema(self, cached_evaluation_report_path):
         """Each model result dict contains the required metric keys."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-            output_path = Path(tmpdir) / "report.json"
-
-            report = run_evaluation(split_dir=str(split_dir), output_path=str(output_path))
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             for model_key, result in report["model_results"].items():
                 for field in ["model", "note", "overall_accuracy", "macro_f1",
@@ -534,29 +588,19 @@ class TestRunEvaluationIntegration:
             assert "LogisticRegression" in rep_lr["configuration"]["bert_classifier_description"]
             assert rep_lr["model_results"]["BERTBaseline"]["model"] == "BERTBaseline-LR"
 
-    def test_terminology_supervised_cross_system(self):
+    def test_terminology_supervised_cross_system(self, cached_evaluation_report_path):
         """BERTBaseline note must use 'Supervised cross-system evaluation', not 'zero-shot'."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-
-            out_path = Path(tmpdir) / "report.json"
-            report = run_evaluation(split_dir=str(split_dir), output_path=str(out_path))
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             bert_note = report["model_results"]["BERTBaseline"]["note"]
             assert "Supervised cross-system evaluation" in bert_note
             assert "zero-shot" not in bert_note.lower() or "Not a zero-shot model" in bert_note
 
-    def test_mcnemar_exploratory_notice(self):
+    def test_mcnemar_exploratory_notice(self, cached_evaluation_report_path):
         """McNemar statistical test contains exploratory status and notice."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-
-            out_path = Path(tmpdir) / "report.json"
-            report = run_evaluation(split_dir=str(split_dir), output_path=str(out_path))
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             mcnemar = report["statistical_tests"]["mcnemar"]
             assert mcnemar["status"] == "exploratory"
@@ -564,19 +608,14 @@ class TestRunEvaluationIntegration:
             assert "leredd_vs_bert" in mcnemar
             assert "leredd_vs_tfidf" in mcnemar
 
-    def test_mock_llm_demarcation_in_report(self):
+    def test_mock_llm_demarcation_in_report(self, cached_evaluation_report_path):
         """Report correctly identifies MockLLM execution via configuration and LEREDD_Hybrid note.
 
         After ISSUE-011 fix: LEREDD_MockLLM duplicate entry has been removed.
         Demarcation is carried by configuration.leredd_provider and LEREDD_Hybrid note.
         """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-
-            out_path = Path(tmpdir) / "report.json"
-            report = run_evaluation(split_dir=str(split_dir), output_path=str(out_path))
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             # Primary demarcation: top-level configuration field
             assert report["configuration"]["leredd_provider"] == "mock"
@@ -592,15 +631,10 @@ class TestRunEvaluationIntegration:
                 "LEREDD_Hybrid (ISSUE-011)."
             )
 
-    def test_saved_predictions_and_confidence_interval_in_report(self):
+    def test_saved_predictions_and_confidence_interval_in_report(self, cached_evaluation_report_path):
         """Report contains explicit predictions and 95% Wilson confidence intervals for each model."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            split_dir = Path(tmpdir) / "system_disjoint"
-            split_dir.mkdir()
-            self._write_fake_split(split_dir)
-
-            out_path = Path(tmpdir) / "report.json"
-            report = run_evaluation(split_dir=str(split_dir), output_path=str(out_path))
+        with open(cached_evaluation_report_path, "r", encoding="utf-8") as f:
+            report = json.load(f)
 
             for model_key, result in report["model_results"].items():
                 assert "predictions" in result, f"Missing 'predictions' in {model_key}"

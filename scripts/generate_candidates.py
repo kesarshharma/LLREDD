@@ -1,48 +1,92 @@
-"""Script to demonstrate candidate requirement pair generation on SRS documents."""
+"""Generate exhaustive and BM25 candidate pairs from an SRS text file."""
 
-import os
-import json
+import argparse
+from datetime import datetime, timezone
+from pathlib import Path
+import sys
+import uuid
+
 from leredd.utils import extract_requirements_from_file
 from leredd.candidate_generator import CandidateGenerator, GenerationStrategy
 
 
-def main():
-    srs_file = "data/raw/adb_srs.txt"
-    output_dir = "data/candidates"
-    os.makedirs(output_dir, exist_ok=True)
-
-    print(f"Extracting requirements from '{srs_file}'...")
-    reqs = extract_requirements_from_file(srs_file, system_name="ADB")
-    print(f"Extracted {len(reqs)} unique requirements.\n")
-
-    # 1. All-Pairs Strategy
-    candidates_all, manifest_all = CandidateGenerator.generate_candidates(
-        requirements=reqs,
-        strategy=GenerationStrategy.ALL_PAIRS,
-        source_identity="ADB_SRS",
-        max_candidates=100
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", default="data/raw/adb_srs.txt", help="SRS text input file.")
+    parser.add_argument("--system", default="ADB", help="System identifier for extracted requirements.")
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory. Defaults to a unique directory under data/candidates/runs/.",
     )
-    all_pairs_path = os.path.join(output_dir, "adb_candidates_all.json")
-    all_manifest_path = os.path.join(output_dir, "adb_candidates_all_manifest.json")
-    CandidateGenerator.save_candidates(candidates_all, manifest_all, all_pairs_path, all_manifest_path)
+    parser.add_argument("--max-candidates", type=int, default=100)
+    parser.add_argument("--top-k", type=int, default=3)
+    parser.add_argument("--overwrite", action="store_true", help="Replace expected output files in the selected output directory.")
+    args = parser.parse_args(argv)
 
-    # 2. BM25 Retrieval Strategy
-    candidates_bm25, manifest_bm25 = CandidateGenerator.generate_candidates(
-        requirements=reqs,
-        strategy=GenerationStrategy.BM25,
-        source_identity="ADB_SRS",
-        top_k=3
+    input_path = Path(args.input)
+    if not input_path.is_file():
+        parser.error(f"SRS input file not found: {input_path}")
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else (
+            Path("data/candidates/runs")
+            / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+        ).resolve()
     )
-    bm25_pairs_path = os.path.join(output_dir, "adb_candidates_bm25.json")
-    bm25_manifest_path = os.path.join(output_dir, "adb_candidates_bm25_manifest.json")
-    CandidateGenerator.save_candidates(candidates_bm25, manifest_bm25, bm25_pairs_path, bm25_manifest_path)
+    project_data = (Path.cwd() / "data").resolve()
+    protected_roots = [
+        project_data / name for name in ("annotated", "raw", "replication", "splits")
+    ]
+    if any(output_dir == root or root in output_dir.parents for root in protected_roots):
+        parser.error("Candidate output cannot be written inside source dataset directories.")
 
-    print("=== CANDIDATE GENERATION COMPLETE ===")
-    print(f"1. ALL_PAIRS Strategy: {manifest_all.generated_count} candidates generated (exhaustive={manifest_all.is_exhaustive}, truncated={manifest_all.truncated_count})")
-    print(f"   Saved to: {all_pairs_path}")
-    print(f"2. BM25 Strategy: {manifest_bm25.generated_count} candidates generated (top_k={manifest_bm25.top_k})")
-    print(f"   Saved to: {bm25_pairs_path}")
+    system_token = "".join(
+        character.lower() if character.isalnum() else "_" for character in args.system
+    ).strip("_") or "system"
+    names = [
+        f"{system_token}_candidates_all.json",
+        f"{system_token}_candidates_all_manifest.json",
+        f"{system_token}_candidates_bm25.json",
+        f"{system_token}_candidates_bm25_manifest.json",
+    ]
+    if not args.overwrite and any((output_dir / name).exists() for name in names):
+        parser.error("Refusing to overwrite existing candidate files; choose a fresh output directory or pass --overwrite.")
+    if args.max_candidates < 1 or args.top_k < 1:
+        parser.error("--max-candidates and --top-k must be positive integers.")
+
+    try:
+        requirements = extract_requirements_from_file(str(input_path), system_name=args.system)
+        all_pairs, all_manifest = CandidateGenerator.generate_candidates(
+            requirements=requirements,
+            strategy=GenerationStrategy.ALL_PAIRS,
+            source_identity=str(input_path.resolve()),
+            max_candidates=args.max_candidates,
+        )
+        bm25_pairs, bm25_manifest = CandidateGenerator.generate_candidates(
+            requirements=requirements,
+            strategy=GenerationStrategy.BM25,
+            source_identity=str(input_path.resolve()),
+            top_k=args.top_k,
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        CandidateGenerator.save_candidates(
+            all_pairs, all_manifest,
+            str(output_dir / names[0]), str(output_dir / names[1]),
+        )
+        CandidateGenerator.save_candidates(
+            bm25_pairs, bm25_manifest,
+            str(output_dir / names[2]), str(output_dir / names[3]),
+        )
+    except (OSError, ValueError) as exc:
+        parser.error(f"Candidate generation failed: {exc}")
+
+    print(
+        f"Generated {all_manifest.generated_count} ALL_PAIRS and "
+        f"{bm25_manifest.generated_count} BM25 candidates under {output_dir}."
+    )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

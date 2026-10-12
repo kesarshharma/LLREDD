@@ -4,7 +4,7 @@ import numpy as np
 from typing import List, Dict
 from loguru import logger
 from leredd.config import LEREDDConfig, get_config
-from leredd.data_models import RequirementPair, DependencyType
+from leredd.data_models import RequirementPair, DependencyType, VerificationStatus
 from leredd.embeddings import EmbeddingModel
 
 
@@ -75,7 +75,12 @@ class ExampleRetriever:
         """Retrieve top k dynamic in-context example pairs for each dependency type."""
         k = k or self.config.k_examples
 
-        if not annotated_pool:
+        eligible_pool = [
+            pair for pair in annotated_pool
+            if pair.dependency_type is not None
+            and (pair.provenance is None or pair.provenance.status == VerificationStatus.VERIFIED)
+        ]
+        if not eligible_pool:
             logger.warning("Annotated candidate pool is empty. Returning empty examples dictionary.")
             return {}
 
@@ -87,7 +92,7 @@ class ExampleRetriever:
 
         # 2. Extract candidate requirement statements and encode batch
         candidate_texts: List[str] = []
-        for pair in annotated_pool:
+        for pair in eligible_pool:
             candidate_texts.append(pair.req_a.text)
             candidate_texts.append(pair.req_b.text)
 
@@ -98,7 +103,7 @@ class ExampleRetriever:
         for dep_type in DependencyType:
             typed_candidates[dep_type] = []
 
-        for idx, candidate_pair in enumerate(annotated_pool):
+        for idx, candidate_pair in enumerate(eligible_pool):
             # Skip if candidate is identical to target pair
             if candidate_pair.id == target_pair.id or (
                 candidate_pair.req_a.text == target_pair.req_a.text
@@ -115,7 +120,7 @@ class ExampleRetriever:
                 aggregation=self.config.aggregation
             )
 
-            dep_type = candidate_pair.dependency_type or DependencyType.NO_DEPENDENCY
+            dep_type = candidate_pair.dependency_type
             typed_candidates[dep_type].append((score, candidate_pair))
 
         # 4. Sort each group by score descending and select top k

@@ -2,11 +2,15 @@
 
 import os
 import json
+import datetime
 import typer
 from typing import Optional
 from loguru import logger
 from leredd.config import get_config
-from leredd.data_models import RequirementPair, Prediction, Requirement
+from leredd.data_models import (
+    AnnotationProvenance, AnnotationSource, DependencyType, RequirementPair,
+    Prediction, Requirement, VerificationStatus,
+)
 from leredd.utils import (
     extract_requirements_from_file,
     generate_requirement_pairs,
@@ -49,7 +53,7 @@ def pairs_cmd(
     input_file: str = typer.Option(..., "--input", "-i", help="Input JSON file containing extracted requirements"),
     output_file: str = typer.Option("pairs.json", "--output", "-o", help="Output JSON file for generated pairs")
 ):
-    """Generate all unique requirement pairs n(n-1)/2 from extracted requirements."""
+    """Generate unlabeled candidate pairs n(n-1)/2 from extracted requirements."""
     typer.echo(f"Loading requirements from '{input_file}'...")
     with open(input_file, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -80,13 +84,23 @@ def annotate_cmd(
         for opt_idx, opt in enumerate(options, 1):
             typer.echo(f"  [{opt_idx}] {opt}")
 
-        choice = typer.prompt("Select dependency type (1-6)", default="6")
+        choice = typer.prompt("Select dependency type (1-6)")
         try:
             chosen_opt = options[int(choice) - 1]
-        except Exception:
-            chosen_opt = "No_dependency"
+        except (ValueError, IndexError) as exc:
+            raise typer.BadParameter("Choose a dependency type from 1 to 6") from exc
 
-        pair.dependency_type = chosen_opt
+        previous_label = pair.provenance.predicted_label if pair.provenance else pair.dependency_type
+        pair.dependency_type = DependencyType.normalize(chosen_opt)
+        provenance = pair.provenance or AnnotationProvenance()
+        pair.provenance = provenance.model_copy(update={
+            "source": AnnotationSource.HUMAN,
+            "status": VerificationStatus.VERIFIED,
+            "annotator_id": provenance.annotator_id or "human_cli",
+            "reviewed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "predicted_label": previous_label,
+            "accepted_label": pair.dependency_type,
+        })
         annotated.append(pair)
 
     save_pairs_json(annotated, output_file)
@@ -154,16 +168,24 @@ def evaluate_cmd(
 @app.command("train-bert")
 def train_bert_cmd(
     train_file: str = typer.Option(..., "--train", "-t", help="Input JSON file containing annotated training pairs"),
-    output_dir: str = typer.Option("model/", "--output", "-o", help="Output directory to save trained model")
+    output_dir: str = typer.Option("model/", "--output", "-o", help="Output directory for the trained classifier artifact"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing classifier artifact")
 ):
     """Train BERT/ML baseline classifier on annotated requirement pairs."""
+    artifact_path = os.path.join(output_dir, "bert_baseline.joblib")
+    if os.path.exists(artifact_path) and not overwrite:
+        raise typer.BadParameter(
+            f"Model artifact already exists: {artifact_path}. Pass --overwrite to replace it."
+        )
+
     pairs = load_pairs_json(train_file)
     typer.echo(f"Training BERT baseline on {len(pairs)} pairs...")
 
     baseline = BERTBaseline()
     baseline.fit(pairs)
     os.makedirs(output_dir, exist_ok=True)
-    typer.secho(f"Successfully trained BERT baseline model. Saved to '{output_dir}'.", fg=typer.colors.GREEN)
+    baseline.save(artifact_path, overwrite=overwrite)
+    typer.secho(f"Successfully trained BERT baseline model. Saved to '{artifact_path}'.", fg=typer.colors.GREEN)
 
 
 @app.command("split")
@@ -428,7 +450,7 @@ def queue_decide_cmd(
 
 @app.command("serve")
 def serve_cmd(
-    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host address to bind"),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host address to bind (use 0.0.0.0 to expose beyond this machine)"),
     port: int = typer.Option(8000, "--port", "-p", help="Port to listen on")
 ):
     """Launch FastAPI web server using Uvicorn."""

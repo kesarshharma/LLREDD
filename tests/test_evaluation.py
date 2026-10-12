@@ -1,7 +1,11 @@
 """Tests for Evaluation metrics and statistical significance tests."""
 
 from leredd.evaluation import Evaluator
-from leredd.data_models import Requirement, RequirementPair, Prediction, DependencyType
+import pytest
+from leredd.data_models import (
+    AnnotationProvenance, Requirement, RequirementPair, Prediction,
+    DependencyType, VerificationStatus,
+)
 
 
 def test_evaluator_metrics(sample_pair):
@@ -39,3 +43,28 @@ def test_evaluator_mcnemar():
     stat, p_val = Evaluator.run_mcnemar_test(gt, preds_a, preds_b)
     assert isinstance(stat, float)
     assert isinstance(p_val, float)
+
+
+def test_evaluator_rejects_unlabeled_ground_truth(sample_pair):
+    sample_pair.dependency_type = None
+    prediction = Prediction(
+        pair_id=sample_pair.id, dependency_type=DependencyType.NO_DEPENDENCY,
+        rationale="", confidence=5,
+    )
+    with pytest.raises(ValueError, match="unlabeled or unverified"):
+        Evaluator.evaluate([sample_pair], [prediction])
+
+
+def test_evaluator_rejects_provisional_ground_truth(sample_pair):
+    sample_pair.provenance = AnnotationProvenance(status=VerificationStatus.PROVISIONAL)
+    prediction = Prediction(
+        pair_id=sample_pair.id, dependency_type=DependencyType.REQUIRES,
+        rationale="", confidence=5,
+    )
+    with pytest.raises(ValueError, match="unlabeled or unverified"):
+        Evaluator.evaluate([sample_pair], [prediction])
+
+
+def test_evaluator_rejects_missing_predictions(sample_pair):
+    with pytest.raises(ValueError, match="missing ground-truth pair IDs"):
+        Evaluator.evaluate([sample_pair], [])

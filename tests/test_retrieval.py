@@ -7,7 +7,10 @@ from leredd.retrieval import (
     ExampleRetriever,
     RAGRetriever,
 )
-from leredd.data_models import DependencyType
+from leredd.data_models import (
+    AnnotationProvenance, DependencyType, Requirement, RequirementPair,
+    VerificationStatus,
+)
 
 
 def test_similarity_math_formulas():
@@ -35,6 +38,28 @@ def test_example_retriever(mock_config, sample_pair, sample_annotated_pool):
     
     assert isinstance(examples, dict)
     assert DependencyType.REQUIRES in examples or DependencyType.IS_SIMILAR in examples
+
+
+def test_example_retriever_excludes_unlabeled_and_provisional_pairs(mock_config):
+    class TinyEmbedder:
+        @staticmethod
+        def encode(texts):
+            return np.array([[len(text), 1.0] for text in texts], dtype=np.float32)
+
+    req_a = Requirement(id="A", text="brake control", system="S")
+    req_b = Requirement(id="B", text="sensor input", system="S")
+    target = RequirementPair(id="TARGET", req_a=req_a, req_b=req_b)
+    unlabeled = RequirementPair(
+        id="UNLABELED", req_a=req_a, req_b=req_b, dependency_type=None,
+    )
+    provisional = RequirementPair(
+        id="PROVISIONAL", req_a=req_a, req_b=req_b,
+        dependency_type=DependencyType.NO_DEPENDENCY,
+        provenance=AnnotationProvenance(status=VerificationStatus.PROVISIONAL),
+    )
+    retriever = ExampleRetriever(embedder=TinyEmbedder(), config=mock_config)
+    examples = retriever.retrieve(target, [unlabeled, provisional], k=1)
+    assert all(not pairs for pairs in examples.values())
 
 
 def test_rag_retriever_chunking(mock_config, sample_pair):

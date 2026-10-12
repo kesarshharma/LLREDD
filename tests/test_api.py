@@ -26,6 +26,22 @@ def test_api_config():
     assert response.status_code == 200
     data = response.json()
     assert "embedding_model" in data
+    assert "openai_api_key" not in data
+
+
+def test_api_config_never_returns_openai_secret(monkeypatch):
+    from leredd.config import LEREDDConfig
+    from api import routes
+
+    monkeypatch.setattr(
+        routes, "get_config", lambda: LEREDDConfig(openai_api_key="test-secret")
+    )
+
+    response = client.get("/api/v1/config")
+
+    assert response.status_code == 200
+    assert "test-secret" not in response.text
+    assert response.json()["openai_api_key_configured"] is True
 
 
 def test_api_single_detect():
@@ -79,3 +95,16 @@ def test_api_invalid_payload_422():
     }
     response = client.post("/api/v1/detect", json=payload)
     assert response.status_code == 422
+
+
+def test_api_main_starts_uvicorn_with_requested_host_and_port(monkeypatch):
+    import sys
+    import uvicorn
+    from api import main as api_main
+
+    calls = []
+    monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(sys, "argv", ["api/main.py", "--host", "127.0.0.1", "--port", "8123"])
+
+    assert api_main.main() == 0
+    assert calls == [(("api.main:app",), {"host": "127.0.0.1", "port": 8123, "reload": False})]

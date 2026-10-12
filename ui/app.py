@@ -2,6 +2,10 @@
 
 import os
 import json
+import datetime
+import tempfile
+import uuid
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -9,18 +13,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 import networkx as nx
 from leredd.config import get_config
-from leredd.data_models import Requirement, RequirementPair, DependencyType, Prediction
+from leredd.data_models import (
+    AnnotationProvenance, AnnotationSource, Requirement, RequirementPair,
+    DependencyType, Prediction, VerificationStatus,
+)
 from leredd.utils import (
     extract_requirements_from_text,
     generate_requirement_pairs,
-    calculate_cohens_kappa,
     load_pairs_json,
     save_pairs_json,
 )
 from leredd.detector import LEREDDDetector
-from leredd.evaluation import Evaluator
-from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline
-from leredd.baselines.bert_classifier import BERTBaseline
+from scripts.run_full_evaluation import run_evaluation
 from leredd.review_queue import (
     ReviewQueueManager,
     QueueStatus,
@@ -118,6 +122,66 @@ def render_badge(dep_type: str) -> str:
         return f'<span class="metric-badge badge-nodep">No Dependency</span>'
 
 
+def validate_ui_output_path(output_path: str, overwrite: bool = False) -> Path:
+    """Resolve an output path while protecting source datasets and existing files."""
+    target = Path(output_path).expanduser().resolve()
+    project_data = (Path.cwd() / "data").resolve()
+    for protected_name in ("annotated", "raw", "replication", "splits"):
+        protected = project_data / protected_name
+        if target == protected or protected in target.parents:
+            raise ValueError(f"Cannot write annotation output inside source data: {target}")
+    if target.exists() and not overwrite:
+        raise FileExistsError(f"Output already exists; enable overwrite to replace it: {target}")
+    return target
+
+
+def persist_ui_pairs(pairs, target: Path) -> None:
+    """Write pair JSON atomically so an interrupted save cannot truncate prior output."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=target.parent,
+            prefix=f".{target.name}.", suffix=".tmp", delete=False,
+        ) as temp_file:
+            temp_name = temp_file.name
+        save_pairs_json(pairs, temp_name)
+        os.replace(temp_name, target)
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
+
+
+def save_ui_annotation(
+    pairs, pair_index: int, label: str, reviewer_id: str, output_path: str,
+    overwrite: bool = False,
+):
+    """Persist one explicit human label to a separate, protected output file."""
+    if not reviewer_id.strip():
+        raise ValueError("Reviewer identifier must not be empty.")
+    target = validate_ui_output_path(output_path, overwrite=overwrite)
+    if not 0 <= pair_index < len(pairs):
+        raise IndexError("Selected pair index is outside the annotation dataset.")
+
+    updated_pairs = [pair.model_copy(deep=True) for pair in pairs]
+    pair = updated_pairs[pair_index]
+    prior_label = pair.dependency_type
+    accepted_label = DependencyType.normalize(label)
+    prior_provenance = pair.provenance or AnnotationProvenance()
+    pair.dependency_type = accepted_label
+    pair.provenance = prior_provenance.model_copy(update={
+        "source": AnnotationSource.HUMAN,
+        "status": VerificationStatus.VERIFIED,
+        "annotator_id": reviewer_id.strip(),
+        "reviewed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "predicted_label": prior_provenance.predicted_label or prior_label,
+        "accepted_label": accepted_label,
+    })
+
+    persist_ui_pairs(updated_pairs, target)
+    return updated_pairs
+
+
 # Session State Initialization
 if "extracted_reqs" not in st.session_state:
     st.session_state.extracted_reqs = []
@@ -172,15 +236,11 @@ if page == "1. Home Overview":
     with col2:
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("🎯 Paper Highlights & Performance")
-        st.markdown("""
-        - **Overall Accuracy**: **87% - 96% F1 score** on automotive SRS specifications (ADB, TJA, APA).
-        - **No_dependency Filtering**: **93% average F1 score** for filtering independent requirement pairs.
-        - **Optimal Configuration (RQ2)**:
-          * Embeddings: SBERT `all-MiniLM-L6-v2`
-          * Metric: Euclidean distance $sim = 1 / (1 + dist)$
-          * Aggregation: Average Similarity (Eq. 1)
-          * Examples per type: $k = 6$
-          * Confidence Threshold: Re-annotate $\le 4 \rightarrow \text{No\_dependency}$
+        st.markdown(r"""
+        - The evaluation page reports only results generated from this checkout's fixed system-disjoint split.
+        - The included legacy evaluation set has 20 pairs; its results are demonstrative and do not establish paper-level performance.
+        - LEREDD evaluations in this local workflow use MockLLM unless separately configured and authorized.
+        - Reference configuration: SBERT `all-MiniLM-L6-v2`, average similarity, and confidence thresholding at 4.
         """)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -197,6 +257,7 @@ elif page == "2. Requirement Annotation":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("Upload SRS Document")
         system_name = st.text_input("System Identifier", value="ADB")
+        uploaded_srs = st.file_uploader("Upload a text SRS (.txt or .md)", type=["txt", "md"])
 
         default_srs_file = "data/raw/adb_srs.txt"
         default_text = ""
@@ -205,14 +266,37 @@ elif page == "2. Requirement Annotation":
                 default_text = f.read()
 
         srs_input = st.text_area("SRS Content", value=default_text, height=200)
+        candidates_output = st.text_input(
+            "Generated Candidate JSON Output",
+            value="data/provisional/ui_candidates.json",
+        )
+        replace_candidates = st.checkbox("Replace this existing candidate output file")
 
         if st.button("Extract Requirements & Generate Pairs"):
-            if srs_input.strip():
-                reqs = extract_requirements_from_text(srs_input, system_name=system_name)
-                st.session_state.extracted_reqs = reqs
-                pairs = generate_requirement_pairs(reqs)
-                st.session_state.generated_pairs = pairs
-                st.success(f"Extracted {len(reqs)} requirements and generated {len(pairs)} unique pairs!")
+            try:
+                document_text = uploaded_srs.getvalue().decode("utf-8") if uploaded_srs else srs_input
+            except UnicodeDecodeError:
+                st.error("The uploaded document is not valid UTF-8 text.")
+                document_text = ""
+            if document_text.strip():
+                try:
+                    reqs = extract_requirements_from_text(document_text, system_name=system_name)
+                    pairs = generate_requirement_pairs(reqs)
+                    safe_output = validate_ui_output_path(
+                        candidates_output, overwrite=replace_candidates
+                    )
+                    persist_ui_pairs(pairs, safe_output)
+                    st.session_state.extracted_reqs = reqs
+                    st.session_state.generated_pairs = pairs
+                    st.session_state.annotated_pairs = []
+                    st.success(
+                        f"Extracted {len(reqs)} requirements and generated {len(pairs)} "
+                        f"provisional pairs. Saved to `{safe_output}`."
+                    )
+                except Exception as exc:
+                    st.error(f"Could not generate or save candidate pairs: {exc}")
+            else:
+                st.warning("Provide non-empty SRS content or upload a UTF-8 .txt/.md document.")
         st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state.extracted_reqs:
@@ -223,7 +307,7 @@ elif page == "2. Requirement Annotation":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("Interactive Pair Annotator")
 
-        pairs_to_annotate = st.session_state.generated_pairs
+        pairs_to_annotate = st.session_state.generated_pairs or st.session_state.annotated_pairs
         if not pairs_to_annotate:
             # Load default annotated sample if present
             default_annotated_file = "data/annotated/adb_pairs.json"
@@ -239,25 +323,46 @@ elif page == "2. Requirement Annotation":
             st.markdown(f"**Requirement A ({curr_pair.req_a.id}):** {curr_pair.req_a.text}")
             st.markdown(f"**Requirement B ({curr_pair.req_b.id}):** {curr_pair.req_b.text}")
 
+            labels = [dt.value for dt in DependencyType]
+            current_label = curr_pair.dependency_type.value if curr_pair.dependency_type else None
             selected_type = st.selectbox(
                 "Select Dependency Type",
-                [dt.value for dt in DependencyType],
-                index=0
+                labels,
+                index=labels.index(current_label) if current_label in labels else None,
+                placeholder="Choose a label",
             )
+            reviewer_id = st.text_input("Annotator Identifier", value="")
+            annotation_output = st.text_input(
+                "Annotation Output File",
+                value="data/verified/streamlit_annotations.json",
+            )
+            allow_replace = st.checkbox("Replace this existing annotation output file")
 
             if st.button("Save Annotation for Pair"):
-                curr_pair.dependency_type = DependencyType.normalize(selected_type)
-                st.success(f"Saved annotation: `{selected_type}` for pair {curr_pair.id}")
+                if not selected_type:
+                    st.error("Choose a dependency label before saving.")
+                else:
+                    try:
+                        updated_pairs = save_ui_annotation(
+                            pairs_to_annotate, pair_idx, selected_type, reviewer_id,
+                            annotation_output, overwrite=allow_replace,
+                        )
+                        st.session_state.annotated_pairs = updated_pairs
+                        if st.session_state.generated_pairs:
+                            st.session_state.generated_pairs = updated_pairs
+                        st.success(
+                            f"Saved verified annotation for pair {curr_pair.id} to `{annotation_output}`."
+                        )
+                    except Exception as exc:
+                        st.error(f"Could not save annotation: {exc}")
 
-            # Inter-annotator agreement test demo
+            # Agreement requires an independent second annotation for each pair.
             st.divider()
             st.subheader("Inter-Annotator Agreement (Cohen's Kappa)")
-            if st.button("Compute Cohen's Kappa Agreement"):
-                ann1 = [p.dependency_type or DependencyType.NO_DEPENDENCY for p in pairs_to_annotate]
-                # Simulated second annotator for demo
-                ann2 = [p.dependency_type or DependencyType.NO_DEPENDENCY for p in pairs_to_annotate]
-                kappa = calculate_cohens_kappa(ann1, ann2)
-                st.metric("Cohen's Kappa (κ)", f"{kappa:.4f}", help=">0.4 indicates moderate agreement")
+            st.info(
+                "Agreement is not calculated here because this workflow stores one annotation per pair. "
+                "A second independently collected label vector is required for Cohen's kappa."
+            )
         else:
             st.warning("No requirement pairs available. Please extract requirements first.")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -280,6 +385,12 @@ elif page == "3. LEREDD Detection":
         k_examples = st.slider("Dynamic Examples (k)", min_value=1, max_value=9, value=6)
         use_rag = st.checkbox("Enable RAG Context", value=False)
         conf_thresh = st.slider("Confidence Threshold", min_value=0, max_value=5, value=4)
+        if provider == "openai":
+            authorize_openai = st.checkbox(
+                "I authorize sending requirement text to the configured OpenAI service"
+            )
+        else:
+            authorize_openai = False
 
         config.llm_provider = provider
         config.llm_model = llm_model
@@ -303,35 +414,41 @@ elif page == "3. LEREDD Detection":
         )
 
         if st.button("Run LEREDD Detection", use_container_width=True):
-            with st.spinner("Executing LEREDD Pipeline (Knowledge Retrieval + Inference)..."):
-                detector = LEREDDDetector(config=config)
-                req_a = Requirement(id="REQ-A", text=req_a_input, system="ADB")
-                req_b = Requirement(id="REQ-B", text=req_b_input, system="ADB")
-                pair = RequirementPair(id="PAIR-DEMO-001", req_a=req_a, req_b=req_b)
+            if not req_a_input.strip() or not req_b_input.strip():
+                st.error("Both requirement texts must be non-empty.")
+            elif provider == "openai" and not authorize_openai:
+                st.warning("Confirm the external OpenAI request before sending requirement text.")
+            else:
+                try:
+                    with st.spinner("Executing LEREDD Pipeline (Knowledge Retrieval + Inference)..."):
+                        detector = LEREDDDetector(config=config)
+                        req_a = Requirement(id="REQ-A", text=req_a_input, system="ADB")
+                        req_b = Requirement(id="REQ-B", text=req_b_input, system="ADB")
+                        pair = RequirementPair(id="PAIR-DEMO-001", req_a=req_a, req_b=req_b)
 
-                # Load example pool
-                examples_pool = []
-                default_file = "data/annotated/adb_pairs.json"
-                if os.path.exists(default_file):
-                    examples_pool = load_pairs_json(default_file)
+                        examples_pool = []
+                        default_file = "data/annotated/adb_pairs.json"
+                        if os.path.exists(default_file):
+                            examples_pool = load_pairs_json(default_file)
 
-                srs_text = ""
-                srs_file = "data/raw/adb_srs.txt"
-                if use_rag and os.path.exists(srs_file):
-                    with open(srs_file, "r", encoding="utf-8") as f:
-                        srs_text = f.read()
+                        srs_text = ""
+                        srs_file = "data/raw/adb_srs.txt"
+                        if use_rag and os.path.exists(srs_file):
+                            with open(srs_file, "r", encoding="utf-8") as f:
+                                srs_text = f.read()
 
-                pred = detector.detect_pair(target_pair=pair, annotated_pool=examples_pool, srs_text=srs_text)
-
-                st.session_state.detection_results.append(pred)
-
-                st.markdown("### Detection Result")
-                st.markdown(f"**Predicted Type:** {render_badge(pred.dependency_type.value)}", unsafe_allow_html=True)
-                st.markdown(f"**Likert Confidence Score:** `{pred.confidence}/5`")
-                st.markdown(f"**Generated Rationale:**\n\n_{pred.rationale}_")
-
-                with st.expander("View Full Raw LLM Output"):
-                    st.code(pred.raw_response or "N/A")
+                        pred = detector.detect_pair(
+                            target_pair=pair, annotated_pool=examples_pool, srs_text=srs_text
+                        )
+                    st.session_state.detection_results.append(pred)
+                    st.markdown("### Detection Result")
+                    st.markdown(f"**Predicted Type:** {render_badge(pred.dependency_type.value)}", unsafe_allow_html=True)
+                    st.markdown(f"**Likert Confidence Score:** `{pred.confidence}/5`")
+                    st.markdown(f"**Generated Rationale:**\n\n_{pred.rationale}_")
+                    with st.expander("View Full Raw LLM Output"):
+                        st.code(pred.raw_response or "N/A")
+                except Exception as exc:
+                    st.error(f"Detection failed: {exc}")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -343,82 +460,48 @@ elif page == "4. Model Evaluation":
     st.title("📊 Model Evaluation & Baseline Comparison")
 
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.subheader("Reproduce Paper Results")
+    st.subheader("System-Disjoint Benchmark")
+    st.caption(
+        "Uses the repository's fixed ADB train / APA development / TJA test split. "
+        "LEREDD uses MockLLM; this is a small demonstrative benchmark, not a paper replication."
+    )
 
-    dataset_choice = st.selectbox("Select Benchmark Dataset", ["ADB System (D1)", "TJA System (D2)", "APA System (D3)"])
-    ds_file = "data/annotated/adb_pairs.json"
-    if "TJA" in dataset_choice:
-        ds_file = "data/annotated/tja_pairs.json"
-    elif "APA" in dataset_choice:
-        ds_file = "data/annotated/apa_pairs.json"
-
-    if st.button("Run Full Benchmark Evaluation"):
-        if os.path.exists(ds_file):
-            ground_truth = load_pairs_json(ds_file)
-
-            with st.spinner("Evaluating LEREDD and Baselines (TF-IDF & LSA, Fine-Tuned BERT)..."):
-                # 1. Run LEREDD
-                detector = LEREDDDetector(config=config)
-                leredd_preds = detector.detect_batch(ground_truth, annotated_pool=ground_truth)
-                report_leredd = Evaluator.evaluate(ground_truth, leredd_preds, system_name=dataset_choice, model_name="LEREDD")
-
-                # 2. Run TF-IDF & LSA Baseline
-                tfidf_baseline = TFIDF_LSABaseline()
-                tfidf_preds = tfidf_baseline.predict_batch(ground_truth)
-                report_tfidf = Evaluator.evaluate(ground_truth, tfidf_preds, system_name=dataset_choice, model_name="TF-IDF & LSA")
-
-                # 3. Run BERT Baseline
-                bert_baseline = BERTBaseline()
-                bert_preds = bert_baseline.predict_batch(ground_truth)
-                report_bert = Evaluator.evaluate(ground_truth, bert_preds, system_name=dataset_choice, model_name="Fine-Tuned BERT")
-
-                # Display Comparative Table
-                st.markdown("### Comparative Performance Results")
-                summary_data = [
-                    {
-                        "Model Approach": "LEREDD (LLM + Dynamic ICL)",
-                        "Overall Accuracy": f"{report_leredd.overall_accuracy:.4f}",
-                        "Macro F1": f"{report_leredd.macro_f1:.4f}",
-                        "Weighted F1": f"{report_leredd.weighted_f1:.4f}"
-                    },
-                    {
-                        "Model Approach": "Fine-Tuned BERT Baseline",
-                        "Overall Accuracy": f"{report_bert.overall_accuracy:.4f}",
-                        "Macro F1": f"{report_bert.macro_f1:.4f}",
-                        "Weighted F1": f"{report_bert.weighted_f1:.4f}"
-                    },
-                    {
-                        "Model Approach": "TF-IDF & LSA Baseline",
-                        "Overall Accuracy": f"{report_tfidf.overall_accuracy:.4f}",
-                        "Macro F1": f"{report_tfidf.macro_f1:.4f}",
-                        "Weighted F1": f"{report_tfidf.weighted_f1:.4f}"
-                    }
-                ]
-                st.table(pd.DataFrame(summary_data))
-
-                # Statistical Significance Tests
-                st.markdown("### Statistical Significance Tests")
-                stat_mc, p_mc = Evaluator.run_mcnemar_test(ground_truth, leredd_preds, bert_preds)
-                st.write(f"**McNemar's Test (LEREDD vs BERT):** Statistic = `{stat_mc:.4f}`, p-value = `{p_mc:.4f}`")
-                if p_mc < 0.05:
-                    st.success("LEREDD demonstrates statistically significant superiority over BERT (p < 0.05)!")
-
-                # Confusion Matrix Heatmap
-                st.markdown("### Confusion Matrix (LEREDD)")
-                if report_leredd.confusion_matrix:
-                    cm_df = pd.DataFrame(report_leredd.confusion_matrix)
-                    fig = px.imshow(
-                        cm_df,
-                        labels=dict(x="Predicted Class", y="Ground Truth", color="Pairs"),
-                        x=list(cm_df.columns),
-                        y=list(cm_df.index),
-                        text_auto=True,
-                        color_continuous_scale="Viridis"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-        else:
-            st.error(f"Benchmark file '{ds_file}' not found.")
+    if st.button("Run System-Disjoint Evaluation"):
+        run_id = f"{datetime.datetime.now(datetime.timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+        report_path = Path("data/evaluation/ui_runs") / run_id / "system_disjoint_report.json"
+        try:
+            with st.spinner("Running the leakage-checked system-disjoint evaluation..."):
+                report = run_evaluation(
+                    split_dir="data/splits/system_disjoint",
+                    output_path=str(report_path),
+                    strict_contamination=True,
+                    strict_gt=True,
+                )
+            st.success(f"Evaluation completed. Report saved to `{report_path}`.")
+            st.markdown("### Comparative Results")
+            summary = []
+            for result in report["model_results"].values():
+                summary.append({
+                    "Model": result["model"],
+                    "Accuracy": f"{result['overall_accuracy']:.4f}",
+                    "Macro F1": f"{result['macro_f1']:.4f}",
+                    "Weighted F1": f"{result['weighted_f1']:.4f}",
+                })
+            st.table(pd.DataFrame(summary))
+            notices = report.get("evaluation_limitations", [])
+            st.warning("Exploratory results only: " + " ".join(notices))
+            hybrid_matrix = report["model_results"]["LEREDD_Hybrid"]["confusion_matrix"]
+            if hybrid_matrix:
+                st.markdown("### LEREDD Hybrid Confusion Matrix")
+                cm_df = pd.DataFrame(hybrid_matrix)
+                fig = px.imshow(
+                    cm_df, labels=dict(x="Predicted Class", y="Ground Truth", color="Pairs"),
+                    x=list(cm_df.columns), y=list(cm_df.index), text_auto=True,
+                    color_continuous_scale="Viridis",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        except Exception as exc:
+            st.error(f"Evaluation failed: {exc}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -431,6 +514,10 @@ elif page == "5. Graph Visualization":
 
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader("System Dependency Network")
+    st.caption(
+        "Displays relations from the legacy ADB annotation file. This graph is illustrative; "
+        "the source records have no verification provenance and are not certified ground truth."
+    )
 
     ds_file = "data/annotated/adb_pairs.json"
     if os.path.exists(ds_file):
@@ -439,7 +526,7 @@ elif page == "5. Graph Visualization":
         # Build NetworkX Graph
         G = nx.DiGraph()
         for pair in pairs:
-            dt = pair.dependency_type.value if pair.dependency_type else "No_dependency"
+            dt = pair.dependency_type.value if pair.dependency_type else "Unlabeled"
             if dt != "No_dependency":
                 G.add_node(pair.req_a.id, text=pair.req_a.text)
                 G.add_node(pair.req_b.id, text=pair.req_b.text)
@@ -512,6 +599,7 @@ elif page == "5. Graph Visualization":
 elif page == "6. Human Review Queue":
     st.title("🛡️ Multi-Method Disagreement & Uncertainty Review Queue")
     st.caption("Inspect provisional predictions, resolve heuristic/LLM conflicts, record human decisions, and produce verified annotations.")
+    st.info("Note: Imported replication annotations (pending_review) preserved original Implemented by label; direction unresolved per Eq 1/2.")
 
     # Workspace File Selection Bar
     col_path, col_btn = st.columns([3, 1])
@@ -713,6 +801,7 @@ elif page == "6. Human Review Queue":
             st.markdown('<div class="glass-card">', unsafe_allow_html=True)
             st.subheader("📤 Export Verified Annotations")
             export_path = st.text_input("Verified Dataset Output File Path", value="data/verified/adb_verified.json")
+            overwrite_export = st.checkbox("Replace this existing verified export file")
 
             verified_count = sum(1 for i in items if i.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED) and i.human_decision and i.human_decision.final_label is not None)
             st.write(f"Ready to export **{verified_count}** human-verified annotations (provisional, deferred, rejected, and unresolved items are excluded).")
@@ -728,9 +817,12 @@ elif page == "6. Human Review Queue":
                                 _, v_pair = manager.record_decision(i, i.status, final_label=i.human_decision.final_label, reviewer_id=i.human_decision.reviewer_id, reviewer_notes=i.human_decision.reviewer_notes)
                                 verified_pairs.append(v_pair)
 
-                        os.makedirs(os.path.dirname(os.path.abspath(export_path)), exist_ok=True)
-                        save_pairs_json(verified_pairs, export_path)
-                        st.success(f"Successfully exported {len(verified_pairs)} verified requirement pairs to '{export_path}'.")
+                        safe_export_path = validate_ui_output_path(
+                            export_path, overwrite=overwrite_export
+                        )
+                        safe_export_path.parent.mkdir(parents=True, exist_ok=True)
+                        save_pairs_json(verified_pairs, str(safe_export_path))
+                        st.success(f"Successfully exported {len(verified_pairs)} verified requirement pairs to '{safe_export_path}'.")
                     except Exception as e:
                         st.error(f"Error exporting verified dataset: {e}")
             st.markdown('</div>', unsafe_allow_html=True)

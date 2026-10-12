@@ -10,7 +10,7 @@ from leredd.utils import (
     load_pairs_csv,
     save_pairs_csv,
 )
-from leredd.data_models import Requirement, DependencyType, RequirementPair
+from leredd.data_models import AnnotationSource, Requirement, DependencyType, RequirementPair, VerificationStatus
 
 
 def test_extract_requirements_from_text():
@@ -40,6 +40,9 @@ def test_generate_requirement_pairs():
 
     pairs = generate_requirement_pairs([req1, req2, req3])
     assert len(pairs) == 3
+    assert all(pair.dependency_type is None for pair in pairs)
+    assert all(pair.provenance.source == AnnotationSource.CANDIDATE_GENERATOR for pair in pairs)
+    assert all(pair.provenance.status == VerificationStatus.PROVISIONAL for pair in pairs)
 
 
 def test_calculate_cohens_kappa():
@@ -65,3 +68,11 @@ def test_save_load_pairs_csv(tmp_path, sample_pair):
 
     assert len(loaded) == 1
     assert loaded[0].id == sample_pair.id
+
+
+def test_unlabeled_pair_csv_roundtrip_remains_unlabeled(tmp_path, sample_pair):
+    sample_pair.dependency_type = None
+    file_path = str(tmp_path / "unlabeled.csv")
+    save_pairs_csv([sample_pair], file_path)
+    loaded = load_pairs_csv(file_path)
+    assert loaded[0].dependency_type is None

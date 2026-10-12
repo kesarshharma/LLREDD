@@ -2,10 +2,14 @@
 
 import re
 import json
+from pathlib import Path
 import pandas as pd
 from typing import List, Tuple
 from loguru import logger
-from leredd.data_models import Requirement, RequirementPair, DependencyType
+from leredd.data_models import (
+    AnnotationProvenance, AnnotationSource, DependencyType, Requirement,
+    RequirementPair, VerificationStatus,
+)
 
 
 def extract_requirements_from_text(
@@ -70,25 +74,36 @@ def extract_requirements_from_file(
     """Extract requirements from a file (.txt, .pdf, or .docx)."""
     system = system_name or "SRS"
 
-    if file_path.endswith(".txt") or file_path.endswith(".md"):
+    suffix = Path(file_path).suffix.lower()
+    if suffix in {".txt", ".md"}:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
-    elif file_path.endswith(".pdf"):
+    elif suffix == ".pdf":
         try:
             import pypdf
+        except ImportError as exc:
+            raise RuntimeError(
+                "PDF extraction requires the optional document dependencies; "
+                "install the 'documents' extra (pip install 'leredd[documents]')."
+            ) from exc
+        try:
             reader = pypdf.PdfReader(file_path)
             text = "\n".join([page.extract_text() or "" for page in reader.pages])
-        except Exception as e:
-            logger.error(f"Error reading PDF file {file_path}: {e}")
-            text = ""
-    elif file_path.endswith(".docx"):
+        except Exception as exc:
+            raise ValueError(f"Could not extract text from PDF file '{file_path}': {exc}") from exc
+    elif suffix == ".docx":
         try:
             import docx
+        except ImportError as exc:
+            raise RuntimeError(
+                "DOCX extraction requires the optional document dependencies; "
+                "install the 'documents' extra (pip install 'leredd[documents]')."
+            ) from exc
+        try:
             doc = docx.Document(file_path)
             text = "\n".join([p.text for p in doc.paragraphs])
-        except Exception as e:
-            logger.error(f"Error reading DOCX file {file_path}: {e}")
-            text = ""
+        except Exception as exc:
+            raise ValueError(f"Could not extract text from DOCX file '{file_path}': {exc}") from exc
     else:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             text = f.read()
@@ -112,7 +127,12 @@ def generate_requirement_pairs(requirements: List[Requirement]) -> List[Requirem
                     id=pair_id,
                     req_a=req_a,
                     req_b=req_b,
-                    dependency_type=DependencyType.NO_DEPENDENCY
+                    dependency_type=None,
+                    provenance=AnnotationProvenance(
+                        source=AnnotationSource.CANDIDATE_GENERATOR,
+                        status=VerificationStatus.PROVISIONAL,
+                        annotator_id="legacy_pairs_generator",
+                    ),
                 )
             )
             pair_idx += 1
@@ -186,7 +206,12 @@ def load_pairs_csv(csv_path: str) -> List[RequirementPair]:
             text=str(row["req_b"]),
             system=str(row.get("system", "Generic"))
         )
-        dep_type = DependencyType.normalize(str(row.get("dependency_type", "No_dependency")))
+        raw_dep_type = row.get("dependency_type")
+        dep_type = (
+            None
+            if pd.isna(raw_dep_type) or not str(raw_dep_type).strip()
+            else DependencyType.normalize(str(raw_dep_type))
+        )
         pair_id = str(row.get("id", f"PAIR-{idx:04d}"))
         pairs.append(
             RequirementPair(
@@ -210,7 +235,7 @@ def save_pairs_csv(pairs: List[RequirementPair], csv_path: str) -> None:
             "req_b_id": pair.req_b.id,
             "req_b": pair.req_b.text,
             "system": pair.req_a.system,
-            "dependency_type": pair.dependency_type.value if pair.dependency_type else "No_dependency"
+            "dependency_type": pair.dependency_type.value if pair.dependency_type else ""
         })
     df = pd.DataFrame(rows)
     df.to_csv(csv_path, index=False)

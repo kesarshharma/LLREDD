@@ -2,7 +2,16 @@
 
 import pytest
 from leredd.config import LEREDDConfig
+from leredd.config import reset_config
 from leredd.data_models import Requirement, RequirementPair, DependencyType
+
+
+@pytest.fixture(autouse=True)
+def reset_config_singleton_between_tests():
+    """Keep environment-derived singleton state local to one test."""
+    reset_config()
+    yield
+    reset_config()
 
 
 @pytest.fixture

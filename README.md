@@ -14,7 +14,7 @@ A comprehensive research implementation and software framework for **Automated R
 Software requirements engineering frequently suffers from hidden requirement dependencies that lead to incomplete system architectures, integration bugs, and costly rework. This repository provides a complete dual-workflow platform:
 
 1. **Automated Requirement Dependency Detection**: Implements the **LEREDD** architecture, utilizing Large Language Models (LLMs) with dynamic In-Context Learning (ICL), hybrid BM25 + SBERT retrieval, confidence thresholding, and multi-class classification across six dependency categories.
-2. **Semi-Automated Dataset Generation**: Provides an end-to-end pipeline to transform raw Software Requirements Specification (SRS) text into high-quality, verified requirement dependency datasets. The pipeline features SRS parsing, candidate pair generation, hybrid retrieval filtering, provisional labeling, human review queue management via a Streamlit web interface, system-disjoint dataset splitting, and provenance tracking.
+2. **Semi-Automated Dataset Generation**: Provides an end-to-end pipeline to transform raw Software Requirements Specification (SRS) text into candidate datasets that remain provisional until an explicit human review decision. The pipeline features SRS parsing, candidate pair generation, hybrid retrieval filtering, provisional labeling, human review queue management via a Streamlit web interface, system-disjoint dataset splitting, and provenance tracking.
 
 ---
 
@@ -89,9 +89,11 @@ venv\Scripts\activate
 # On Linux/macOS:
 source venv/bin/activate
 
-# Install requirements and local package
-pip install -r requirements.txt
-pip install -e .
+# Install the package and development/test dependencies
+pip install -e ".[dev]"
+
+# Optional: enable PDF and DOCX text extraction
+pip install -e ".[documents]"
 ```
 
 ### 2. Environment Configuration
@@ -121,25 +123,38 @@ The system provides three primary interfaces for execution:
 # Extract requirement statements from SRS text
 leredd-cli extract --input data/raw/adb_srs.txt --system ADB --output data/provisional/adb_reqs.json
 
-# Generate candidate requirement pairs
-python scripts/generate_candidates.py --input data/provisional/adb_reqs.json --output data/candidates/adb_candidates.json --top-k 15
+# Legacy exhaustive pair generation also writes unlabeled candidates
+leredd-cli pairs --input data/provisional/adb_reqs.json --output data/candidates/adb_pairs.json
 
-# Label candidates provisionally
-python scripts/label_candidates.py --candidates data/candidates/adb_candidates.json --output data/provisional/adb_labeled.json
+# Train and save a reusable baseline classifier artifact
+leredd-cli train-bert --train data/verified/adb_pairs.json --output model/
 
-# Populate human review queue
-python scripts/build_review_queue.py --input data/provisional/adb_labeled.json --output data/queue/review_queue.json
+# Generate exhaustive and BM25 candidates from an SRS (outputs are isolated by run)
+python scripts/generate_candidates.py --input data/raw/adb_srs.txt --output-dir data/candidates/runs/demo
+
+# Label candidates with the offline mock provider by default
+python scripts/label_candidates.py --input data/candidates/runs/demo/adb_candidates_bm25.json --output-dir data/provisional/runs/demo --provider mock
+
+# Create a pending queue only; this command never creates human decisions
+python scripts/build_review_queue.py --input data/provisional/runs/demo/adb_candidates_bm25_provisional_hybrid.json --output data/queue/runs/demo/review_queue.json
 
 # Split verified dataset into system-disjoint train/dev/test sets
-python scripts/split_dataset.py --input data/verified/all_annotated.json --output-dir data/splits/system_disjoint --strategy system
+python scripts/split_dataset.py --input data/verified/all_annotated.json --output-dir data/split_runs/demo
 
 # Workflow 2: Dependency Detection & Evaluation
 # Run LEREDD detection on target requirement pair file
 leredd-cli detect --input data/candidates/test_pairs.json --examples data/verified/all_annotated.json --output data/evaluation/predictions.json
 
-# Run system-disjoint evaluation suite across baselines
-python scripts/run_full_evaluation.py --split-dir data/splits/system_disjoint --output data/evaluation/system_disjoint_report.json
+# Run the safe system-disjoint demonstration benchmark (writes to a unique run folder)
+python scripts/run_evaluation.py
 ```
+
+The training command writes `model/bert_baseline.joblib`. Existing artifacts are
+preserved unless `--overwrite` is supplied. Load only artifacts from trusted
+sources; joblib uses Python pickle serialization. The artifact can be loaded with
+`BERTBaseline.load(path)` for prediction.
+
+Generated pairs are unlabeled (`dependency_type: null`) until an explicit annotation is recorded. Provenance-bearing ground-truth annotations are eligible for metrics only when their status is `verified`; imported replication records currently marked `pending_review` must pass through local human review first. The replication runner therefore does not produce metrics from the current imported annotations.
 
 ### 2. REST API (`api/main.py`)
 
@@ -153,8 +168,9 @@ leredd-cli serve --port 8000
 - Interactive Swagger UI Documentation: `http://localhost:8000/docs`
 - Health check endpoint: `GET /api/v1/health`
 - Pair detection endpoint: `POST /api/v1/detect`
-- Batch detection endpoint: `POST /api/v1/predict/batch`
-- Queue management: `GET /api/v1/queue`
+- Batch detection endpoint: `POST /api/v1/batch_detect`
+- Requirement extraction endpoint: `POST /api/v1/extract`
+- Active config endpoint (secrets redacted): `GET /api/v1/config`
 
 ### 3. Streamlit Web Dashboard (`ui/app.py`)
 

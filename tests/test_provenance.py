@@ -336,7 +336,7 @@ class TestAnnotationSourceEnum:
     """Verify AnnotationSource enum values and serialization."""
 
     def test_all_values_present(self):
-        expected = {"human", "llm", "heuristic", "imported", "ensemble"}
+        expected = {"human", "llm", "heuristic", "imported", "ensemble", "candidate_generator"}
         actual = {item.value for item in AnnotationSource}
         assert actual == expected
 
@@ -390,6 +390,10 @@ class TestDependencyTypePreservation:
         assert DependencyType.normalize("Is Similar") == DependencyType.IS_SIMILAR
         assert DependencyType.normalize("no_dependency") == DependencyType.NO_DEPENDENCY
         assert DependencyType.normalize("implements") == DependencyType.IMPLEMENTS
+        with pytest.raises(ValueError, match="Unsupported dependency type"):
+            DependencyType.normalize("Notable")
+        with pytest.raises(ValueError, match="Unsupported dependency type"):
+            DependencyType.normalize("Implemented by")
 
 
 # ===========================================================================

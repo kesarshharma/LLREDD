@@ -66,6 +66,19 @@ def test_tokenization_and_normalization():
     assert BM25Retriever.tokenize("   !!! ???   ") == []
 
 
+def test_example_retrieval_excludes_unlabeled_and_provisional(sample_req_corpus):
+    req_a, req_b, req_c, req_d = sample_req_corpus
+    target = RequirementPair(id="TARGET", req_a=req_a, req_b=req_b)
+    unlabeled = RequirementPair(id="UNLABELED", req_a=req_c, req_b=req_d)
+    provisional = RequirementPair(
+        id="PROVISIONAL", req_a=req_c, req_b=req_d,
+        dependency_type=DependencyType.NO_DEPENDENCY,
+        provenance=AnnotationProvenance(status=VerificationStatus.PROVISIONAL),
+    )
+    examples = BM25Retriever().retrieve_example_pairs(target, [unlabeled, provisional], k=2)
+    assert all(not pairs for pairs in examples.values())
+
+
 def test_exact_and_partial_lexical_matches(sample_req_corpus):
     """Verify exact and partial lexical matches are ranked appropriately."""
     retriever = BM25Retriever(sample_req_corpus)

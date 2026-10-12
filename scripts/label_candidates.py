@@ -1,60 +1,87 @@
-"""Script to demonstrate provisional requirement dependency labeling on candidate pairs."""
+"""Create provisional labels; remote inference requires an explicit provider flag."""
 
+import argparse
+from datetime import datetime, timezone
 import json
-import os
+from pathlib import Path
+import sys
+import uuid
+
+from leredd.config import get_config
 from leredd.data_models import RequirementPair
 from leredd.provisional_labeler import ProvisionalLabeler, LabelingMode
 
 
-def main():
-    candidate_file = "data/candidates/adb_candidates_bm25.json"
-    output_dir = "data/provisional"
-    os.makedirs(output_dir, exist_ok=True)
-
-    if not os.path.exists(candidate_file):
-        print(f"Candidate file '{candidate_file}' not found. Please run scripts/generate_candidates.py first.")
-        return
-
-    print(f"Loading candidate requirement pairs from '{candidate_file}'...")
-    with open(candidate_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    candidates = [RequirementPair.model_validate(item) for item in data]
-    print(f"Loaded {len(candidates)} candidate pairs.\n")
-
-    # Initialize ProvisionalLabeler
-    labeler = ProvisionalLabeler()
-
-    # 1. Run Heuristic-only labeling
-    print("Running Heuristic-only Provisional Labeling...")
-    provisional_pairs_h, manifest_h = labeler.process_batch(
-        candidates=candidates,
-        mode=LabelingMode.HEURISTIC,
-        source_identity="ADB_Candidates_BM25"
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--input",
+        default="data/candidates/adb_candidates_bm25.json",
+        help="Candidate-pair JSON input.",
     )
-
-    output_h_path = os.path.join(output_dir, "adb_provisional_heuristic.json")
-    output_h_manifest = os.path.join(output_dir, "adb_provisional_heuristic_manifest.json")
-    labeler.save_provisional_dataset(provisional_pairs_h, manifest_h, output_h_path, output_h_manifest)
-
-    # 2. Run Hybrid labeling (Heuristic + Mock LLM / configured LLM)
-    print("Running Hybrid Provisional Labeling...")
-    provisional_pairs_hybrid, manifest_hybrid = labeler.process_batch(
-        candidates=candidates,
-        mode=LabelingMode.HYBRID,
-        source_identity="ADB_Candidates_BM25"
+    parser.add_argument(
+        "--output-dir",
+        help="Output directory. Defaults to a unique path under data/provisional/runs/.",
     )
+    parser.add_argument(
+        "--provider", choices=["mock", "openai", "ollama"], default="mock",
+        help="LLM provider; defaults to mock even when environment config selects a remote provider.",
+    )
+    parser.add_argument("--overwrite", action="store_true", help="Replace existing output files in the selected output directory.")
+    args = parser.parse_args(argv)
 
-    output_hybrid_path = os.path.join(output_dir, "adb_provisional_hybrid.json")
-    output_hybrid_manifest = os.path.join(output_dir, "adb_provisional_hybrid_manifest.json")
-    labeler.save_provisional_dataset(provisional_pairs_hybrid, manifest_hybrid, output_hybrid_path, output_hybrid_manifest)
+    input_path = Path(args.input)
+    if not input_path.is_file():
+        parser.error(f"Candidate input file not found: {input_path}")
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else (
+            Path("data/provisional/runs")
+            / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+        ).resolve()
+    )
+    project_data = (Path.cwd() / "data").resolve()
+    protected_roots = [
+        project_data / name for name in ("annotated", "raw", "replication", "splits")
+    ]
+    if any(output_dir == root or root in output_dir.parents for root in protected_roots):
+        parser.error("Provisional output cannot be written inside source dataset directories.")
 
-    print("\n=== PROVISIONAL LABELING COMPLETE ===")
-    print(f"Heuristic Mode: {manifest_h.labeled_count}/{manifest_h.input_candidate_count} labeled, {manifest_h.unresolved_count} unresolved.")
-    print(f"   Saved to: {output_h_path}")
-    print(f"Hybrid Mode: {manifest_hybrid.labeled_count}/{manifest_hybrid.input_candidate_count} labeled, {manifest_hybrid.agreed_count} agreed, {manifest_hybrid.disagreed_count} disagreed, {manifest_hybrid.unresolved_count} unresolved.")
-    print(f"   Saved to: {output_hybrid_path}")
+    outputs = [
+        output_dir / f"{input_path.stem}_provisional_{mode}.json"
+        for mode in ("heuristic", "hybrid")
+    ]
+    outputs += [path.with_name(f"{path.stem}_manifest.json") for path in list(outputs)]
+    if not args.overwrite and any(path.exists() for path in outputs):
+        parser.error("Refusing to overwrite existing provisional outputs; choose a fresh output directory or pass --overwrite.")
+
+    try:
+        with input_path.open("r", encoding="utf-8") as source:
+            candidates = [RequirementPair.model_validate(item) for item in json.load(source)]
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        parser.error(f"Could not load candidate pairs: {exc}")
+
+    config = get_config().model_copy(update={"llm_provider": args.provider})
+    labeler = ProvisionalLabeler(config=config)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for mode, output_path in zip((LabelingMode.HEURISTIC, LabelingMode.HYBRID), outputs[:2]):
+        labeled, manifest = labeler.process_batch(
+            candidates=candidates,
+            mode=mode,
+            source_identity=str(input_path.resolve()),
+        )
+        manifest_path = output_path.with_name(f"{output_path.stem}_manifest.json")
+        labeler.save_provisional_dataset(
+            labeled, manifest, str(output_path), str(manifest_path)
+        )
+        print(
+            f"{mode.value}: {manifest.labeled_count}/{manifest.input_candidate_count} labeled, "
+            f"{manifest.unresolved_count} unresolved; output={output_path}"
+        )
+    print("All generated labels remain provisional; no human verification was recorded.")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

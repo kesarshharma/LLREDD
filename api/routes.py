@@ -48,7 +48,9 @@ def health_check():
 def get_system_config():
     """Return active system configuration settings."""
     cfg = get_config()
-    return cfg.model_dump(mode="json")
+    public_config = cfg.model_dump(mode="json", exclude={"openai_api_key"})
+    public_config["openai_api_key_configured"] = bool(cfg.openai_api_key)
+    return public_config
 
 
 @router.post("/detect", response_model=Prediction)

@@ -2,6 +2,34 @@
 
 This document records key architectural, design, and implementation decisions for the project.
 
+## [ADR-019] Keep API Tests Unmodified; Run Windows TestClient Outside Restricted Sandbox
+- **Date:** 2026-10-12
+- **Status:** Accepted
+- **Context:** The API root test stalled inside the execution sandbox. Faulthandler showed Starlette TestClient waiting for AnyIO's portal thread while Windows asyncio created its self-pipe. This Python build lacked native `_socket.socketpair` and `AF_UNIX`, so Python used a TCP loopback fallback that blocked in `accept()`.
+- **Decision:** Do not alter the API route, replace TestClient, or weaken the existing route assertion. Run pytest in a Windows process context that permits local TCP loopback. The same root test passed outside the sandbox, followed by all 7 API tests and the complete 228-test suite.
+- **Consequences:** Existing API coverage remains intact. The sandbox limitation is documented as an execution constraint; the full suite is verified outside it. ISSUE-017 is resolved based on the full pytest summary (228 passed, 46 deprecation warnings, exit code 0).
+
+## [ADR-020] Require Explicit Verification for Provenance-Bearing Evaluation Ground Truth
+- **Date:** 2026-10-12
+- **Status:** Accepted (user selected)
+- **Context:** Replication imports preserve source spreadsheet labels but are marked `pending_review`; spreadsheet labels alone do not establish local human verification. Letting those records into metrics would overstate annotation verification.
+- **Decision:** Evaluation accepts provenance-bearing labels only when `VerificationStatus.VERIFIED`. Pending-review, human-reviewed-but-not-verified, provisional, rejected, or absent-status provenance is excluded (or raises in strict mode). Existing provenance-free legacy benchmark records remain conditionally accepted with an audit warning for backward compatibility. Replication prototype evaluation fails closed on current imported packages and writes no report until records are locally verified.
+- **Consequences:** No replication metrics are reported from the current pending-review imports. Verification must occur through the human review workflow; the source spreadsheets and imported JSON are not modified. Full suite: **236 passed**, 40 warnings.
+
+## [ADR-018] Candidate Generation Emits Explicitly Unlabeled Records
+- **Date:** 2026-10-12
+- **Status:** Accepted; implemented in TASK-P9-13
+- **Context:** The repository has both a legacy all-pairs helper/CLI (`generate_requirement_pairs`, `leredd-cli pairs`) and a newer candidate-generation pipeline. Their initial label semantics differ.
+- **Decision:** Both generation paths emit `dependency_type=None` and candidate-generator provisional provenance. `No_dependency` is only an explicit annotation. Human CLI annotation records a `VERIFIED` decision; unverified labels cannot be used as evaluation ground truth. Unknown label strings are rejected rather than guessed.
+- **Consequences:** Candidate creation no longer fabricates negative labels. JSON/CSV and downstream training/retrieval/evaluation preserve and enforce the unlabeled state. Existing serialized labels remain readable.
+
+## [ADR-017] Audit Reporting Must Distinguish Focused Passes from Full-Suite Verification
+- **Date:** 2026-10-12
+- **Status:** Accepted
+- **Context:** Existing project context claimed a fully passing, clean tree, while this audit found user modifications, untracked replication additions, test-side production-data mutation, and a full suite that did not complete.
+- **Decision:** Record verification by exact command/scope and observed result. Do not mark the entire project verified based on focused tests or prior historical reports. Avoid running tests that mutate checked-in datasets until they use isolated fixture files.
+- **Consequences:** Audit statements remain reproducible and accurately bounded; a full-suite pass is still required before claiming whole-project test success.
+
 ---
 
 ## [ADR-016] Comprehensive Documentation Alignment for Academic Submission
@@ -165,3 +193,25 @@ This document records key architectural, design, and implementation decisions fo
   2. **Isolated Root Cause:** Proved that identical predictions stem from `MockLLMClient` behavior: `MockLLMClient` evaluates regex keyword heuristics on Requirement A & B statement text only, ignoring prompt example blocks, and hardcodes `Confidence Score: 5` (which is strictly above `threshold=4` in all cases).
   3. **Demarcation & Unit Test Evidence:** Added explicit regression unit tests (`test_threshold_behavior_reannotation_vs_disabled`, `test_mock_llm_per_example_deterministic_predictions`) in `tests/test_ablation_benchmark.py` verifying that threshold re-annotation functions when predictions have confidence $\le 4$ and documenting mock LLM determinism.
 - **Consequences:** Fully clarifies scientific validity limits for offline demonstration runs. Real-LLM inference (OpenAI/Ollama) will demonstrate full prompt sensitivity in live deployment. Total test suite: **167/167 passed**.
+
+## [ADR-021] Isolated and Auditable End-to-End UI and Script Workflows
+- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Context:** The whole-project workflow audit found UI state changes without persistence, same-dataset evaluation leakage, synthetic inter-annotator agreement, a review script that fabricated human verification, and utility scripts that could overwrite prior outputs. The API config route also serialized an OpenAI key, and unfit baselines could fit against their prediction batch.
+- **Decision:**
+  1. UI-generated candidate and annotation data use atomic writes to separate output paths. Source dataset directories are protected; existing outputs require an explicit replacement control.
+  2. UI evaluation uses the strict fixed system-disjoint runner and unique output paths. The kappa control is replaced by a statement requiring independent second labels.
+  3. Review-queue construction never makes human decisions; only a reviewer action through the existing CLI/UI review flows can promote a record.
+  4. Provisional labeling scripts default explicitly to MockLLM, and script outputs use fresh run directories unless the caller explicitly supplies paths.
+  5. Prediction methods require baselines to be fitted on a separate training dataset.
+  6. API configuration output redacts secrets. Local API/UI servers bind to loopback by default, and the wildcard CORS configuration does not allow credentials.
+  7. PDF/DOCX parsing is an optional dependency extra and missing or malformed document inputs produce errors rather than a silent empty extraction result.
+- **Consequences:** Local workflow outputs are auditable and isolated. Remote LLM services, cold-cache model downloads, Docker deployment, and imported replication labels remain external or research verification limits.
+- **TASK-P9-14 verification update (2026-10-13):** Fresh unrestricted whole suite completes with 264 passed, 38 warnings, exit 0 (170.21s pytest / 173.83s outer duration). The sandboxed run hung at API root, confirming that loopback-permitted execution remains necessary for this environment.
+
+## [ADR-022] Persist Reusable BERT Baseline Artifacts
+- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Context:** The `train-bert` CLI advertised saving a trained model but wrote no artifact, so successful completion could not be followed by prediction.
+- **Decision:** Save the fitted classifier plus artifact format/model metadata using atomic joblib serialization; expose `BERTBaseline.load()`; refuse output replacement unless `--overwrite` is explicit. Record the embedding model name and initialize that embedder when loading unless a caller injects one.
+- **Consequences:** The CLI output is reusable. Because joblib is pickle-based, artifacts must be trusted and loaded with compatible dependency versions. `joblib` is declared directly rather than relied on as a transitive scikit-learn dependency.

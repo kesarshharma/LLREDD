@@ -1,69 +1,92 @@
-"""Script to generate leakage-resistant dataset splits across ADB, APA, and TJA systems."""
+"""Create system-disjoint and requirement-disjoint pair dataset splits."""
 
-import os
+import argparse
+from datetime import datetime, timezone
 import glob
+from pathlib import Path
+import sys
+import uuid
+
 from leredd.utils import load_pairs_json
 from leredd.dataset_splitter import DatasetSplitter, SplitConfig, SplitStrategy
-from loguru import logger
 
 
-def main():
-    annotated_dir = "data/annotated"
-    output_base_dir = "data/splits"
-
-    pattern = os.path.join(annotated_dir, "*_pairs.json")
-    json_files = glob.glob(pattern)
-
-    if not json_files:
-        logger.error(f"No annotated JSON files found in {annotated_dir}")
-        return
-
-    all_pairs = []
-    for fpath in sorted(json_files):
-        pairs = load_pairs_json(fpath)
-        logger.info(f"Loaded {len(pairs)} pairs from {fpath}")
-        all_pairs.extend(pairs)
-
-    logger.info(f"Total pairs collected across all systems: {len(all_pairs)}")
-
-    # 1. System-level split (ADB -> Train, APA -> Dev, TJA -> Test)
-    sys_config = SplitConfig(
-        strategy=SplitStrategy.SYSTEM,
-        explicit_system_splits={
-            "train": ["ADB"],
-            "dev": ["APA"],
-            "test": ["TJA"],
-        },
-        random_seed=42
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--input", nargs="*", default=None,
+        help="Pair JSON input files. Defaults to data/annotated/*_pairs.json.",
     )
-    sys_split = DatasetSplitter.split(all_pairs, config=sys_config)
-    sys_out = os.path.join(output_base_dir, "system_disjoint")
-    DatasetSplitter.save_split(sys_split, sys_out)
-    sys_leakage = DatasetSplitter.check_leakage(sys_split)
-    logger.info(f"System-level split completed. Leakage detected: {sys_leakage.has_leakage}")
-
-    # 2. Requirement-level split (Disjoint requirements across Train/Dev/Test)
-    req_config = SplitConfig(
-        strategy=SplitStrategy.REQUIREMENT,
-        train_ratio=0.6,
-        dev_ratio=0.2,
-        test_ratio=0.2,
-        random_seed=42
+    parser.add_argument(
+        "--output-dir",
+        help="Output base directory. Defaults to a new run under data/split_runs/.",
     )
-    req_split = DatasetSplitter.split(all_pairs, config=req_config)
-    req_out = os.path.join(output_base_dir, "requirement_disjoint")
-    DatasetSplitter.save_split(req_split, req_out)
-    req_leakage = DatasetSplitter.check_leakage(req_split)
-    logger.info(f"Requirement-level split completed. Leakage detected: {req_leakage.has_leakage}")
+    parser.add_argument("--overwrite", action="store_true", help="Replace existing split output directories.")
+    args = parser.parse_args(argv)
 
-    print("\n=== DATASET SPLITTING COMPLETED ===")
-    print(f"1. System Disjoint Split saved to: {sys_out}")
-    print(f"   Train pairs: {len(sys_split.train_pairs)}, Dev pairs: {len(sys_split.dev_pairs)}, Test pairs: {len(sys_split.test_pairs)}")
-    print(f"   Requirement leakage: {sys_leakage.has_leakage} (rate: {sys_leakage.leakage_rate:.2%})")
-    print(f"2. Requirement Disjoint Split saved to: {req_out}")
-    print(f"   Train pairs: {len(req_split.train_pairs)}, Dev pairs: {len(req_split.dev_pairs)}, Test pairs: {len(req_split.test_pairs)}")
-    print(f"   Requirement leakage: {req_leakage.has_leakage} (rate: {req_leakage.leakage_rate:.2%})")
+    input_files = args.input or sorted(glob.glob("data/annotated/*_pairs.json"))
+    input_files = [Path(filename) for filename in input_files]
+    if not input_files:
+        parser.error("No input pair JSON files were provided or found.")
+    missing = [str(filename) for filename in input_files if not filename.is_file()]
+    if missing:
+        parser.error(f"Input file(s) not found: {', '.join(missing)}")
+
+    output_base = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else (
+            Path("data/split_runs")
+            / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+        ).resolve()
+    )
+    project_data = (Path.cwd() / "data").resolve()
+    protected_roots = [
+        project_data / name for name in ("annotated", "raw", "replication")
+    ]
+    if any(output_base == root or root in output_base.parents for root in protected_roots):
+        parser.error("Split output cannot be written inside source dataset directories.")
+    split_paths = [output_base / "system_disjoint", output_base / "requirement_disjoint"]
+    if not args.overwrite and any(path.exists() for path in split_paths):
+        parser.error("Refusing to overwrite existing split directories; choose a fresh output directory or pass --overwrite.")
+
+    try:
+        pairs = []
+        for filename in input_files:
+            pairs.extend(load_pairs_json(str(filename)))
+        system_config = SplitConfig(
+            strategy=SplitStrategy.SYSTEM,
+            explicit_system_splits={"train": ["ADB"], "dev": ["APA"], "test": ["TJA"]},
+            random_seed=42,
+        )
+        system_split = DatasetSplitter.split(pairs, config=system_config)
+        requirement_config = SplitConfig(
+            strategy=SplitStrategy.REQUIREMENT,
+            train_ratio=0.6,
+            dev_ratio=0.2,
+            test_ratio=0.2,
+            random_seed=42,
+        )
+        requirement_split = DatasetSplitter.split(pairs, config=requirement_config)
+        DatasetSplitter.save_split(system_split, str(split_paths[0]))
+        DatasetSplitter.save_split(requirement_split, str(split_paths[1]))
+        system_leakage = DatasetSplitter.check_leakage(system_split)
+        requirement_leakage = DatasetSplitter.check_leakage(requirement_split)
+    except (OSError, ValueError) as exc:
+        parser.error(f"Dataset split failed: {exc}")
+
+    print(
+        f"System-disjoint: train={len(system_split.train_pairs)}, "
+        f"dev={len(system_split.dev_pairs)}, test={len(system_split.test_pairs)}, "
+        f"leakage={system_leakage.has_leakage}; output={split_paths[0]}"
+    )
+    print(
+        f"Requirement-disjoint: train={len(requirement_split.train_pairs)}, "
+        f"dev={len(requirement_split.dev_pairs)}, test={len(requirement_split.test_pairs)}, "
+        f"leakage={requirement_leakage.has_leakage}; output={split_paths[1]}"
+    )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

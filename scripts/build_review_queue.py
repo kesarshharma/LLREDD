@@ -1,94 +1,68 @@
-"""Script to demonstrate building and managing the human review queue from provisional labeled pairs."""
+"""Build a pending human-review queue without simulating reviewer decisions."""
 
+import argparse
+from datetime import datetime, timezone
 import json
-import os
+from pathlib import Path
+import sys
+import uuid
+
 from leredd.data_models import RequirementPair
-from leredd.review_queue import (
-    QueueStatus,
-    ReviewQueueConfig,
-    ReviewQueueManager,
-    ReviewReasonCode,
-)
+from leredd.review_queue import ReviewQueueConfig, ReviewQueueManager
 
 
-def main():
-    provisional_file = "data/provisional/adb_provisional_hybrid.json"
-    output_dir = "data/queue"
-    os.makedirs(output_dir, exist_ok=True)
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--input",
+        default="data/provisional/adb_provisional_hybrid.json",
+        help="Provisional pair JSON input.",
+    )
+    parser.add_argument(
+        "--output",
+        help="Queue JSON output. Defaults to a unique path under data/queue/runs/.",
+    )
+    parser.add_argument("--overwrite", action="store_true", help="Replace both existing queue and manifest files.")
+    args = parser.parse_args(argv)
 
-    if not os.path.exists(provisional_file):
-        print(f"Provisional file '{provisional_file}' not found. Run scripts/label_candidates.py first.")
-        return
+    output_path = (
+        Path(args.output).expanduser().resolve()
+        if args.output
+        else (
+            Path("data/queue/runs")
+            / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:8]}"
+            / "review_queue.json"
+        ).resolve()
+    )
+    manifest_path = output_path.with_name(f"{output_path.stem}_manifest{output_path.suffix}")
+    project_data = (Path.cwd() / "data").resolve()
+    protected_roots = [
+        project_data / name for name in ("annotated", "raw", "replication", "splits")
+    ]
+    if any(output_path == root or root in output_path.parents for root in protected_roots):
+        parser.error("Queue output cannot be written inside source dataset directories.")
+    if not args.overwrite and (output_path.exists() or manifest_path.exists()):
+        parser.error("Refusing to overwrite existing queue or manifest files; choose a fresh path or pass --overwrite.")
 
-    print(f"Loading provisional labeled pairs from '{provisional_file}'...")
-    with open(provisional_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    input_path = Path(args.input)
+    if not input_path.is_file():
+        parser.error(f"Provisional input file not found: {input_path}")
+    try:
+        with input_path.open("r", encoding="utf-8") as source:
+            pairs = [RequirementPair.model_validate(item) for item in json.load(source)]
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        parser.error(f"Could not load provisional pairs: {exc}")
 
-    pairs = [RequirementPair.model_validate(item) for item in data]
-    print(f"Loaded {len(pairs)} provisional requirement pairs.\n")
-
-    # Reconcile outcome counts across the 31 candidates
-    agreed = [p for p in pairs if p.provenance and "AGREEMENT" in (p.provenance.evidence or "")]
-    disagreed = [p for p in pairs if p.provenance and "DISAGREEMENT" in (p.provenance.review_notes or "")]
-    llm_only = [p for p in pairs if p.provenance and p.provenance.source.value == "llm"]
-    heur_only = [p for p in pairs if p.provenance and p.provenance.source.value == "heuristic"]
-    both_abstained = [p for p in pairs if p.provenance and "UNRESOLVED" in (p.provenance.review_notes or "")]
-
-    print("=== PROVISIONAL CANDIDATE MUTUALLY EXCLUSIVE BREAKDOWN ===")
-    print(f"Total Candidates Input : {len(pairs)}")
-    print(f"1. Agreement (Ensemble): {len(agreed)}")
-    print(f"2. Disagreement        : {len(disagreed)}")
-    print(f"3. LLM-Only            : {len(llm_only)}")
-    print(f"4. Heuristic-Only      : {len(heur_only)}")
-    print(f"5. Both Abstained      : {len(both_abstained)}")
-    print(f"Check Sum: {len(agreed) + len(disagreed) + len(llm_only) + len(heur_only) + len(both_abstained)} == {len(pairs)}\n")
-
-    # Initialize ReviewQueueManager with default config
     manager = ReviewQueueManager(config=ReviewQueueConfig(include_single_method=True))
-
-    print("Building Review Queue...")
-    queue_items = manager.build_queue(pairs)
-    manifest = manager.create_manifest(queue_items, source_identity="ADB_Provisional_Hybrid")
-
-    queue_file = os.path.join(output_dir, "adb_review_queue.json")
-    manifest_file = os.path.join(output_dir, "adb_review_queue_manifest.json")
-    manager.save_queue(queue_items, manifest, queue_file, manifest_file)
-
-    print("\n=== REVIEW QUEUE GENERATION SUMMARY ===")
-    print(f"Total Items Queued : {manifest.total_items}")
-    print(f"Pending Items      : {manifest.pending_count}")
-    print(f"Reasons Breakdown  : {manifest.reasons_breakdown}")
-    print(f"Saved queue to: '{queue_file}'\n")
-
-    # Demonstrate recording a human decision on the highest priority pending item
-    if queue_items:
-        first_item = queue_items[0]
-        print(f"Simulating Human Decision on Top Priority Queue Item [{first_item.queue_id}]...")
-        print(f"   Pair: {first_item.pair_id} ({first_item.req_a_id} -> {first_item.req_b_id})")
-        print(f"   Reasons: {[r.value for r in first_item.review_reasons]}")
-        print(f"   Notes: {first_item.review_notes}")
-
-        # Record decision: Accept if proposed label exists, else Correct to Requires
-        decision_type = QueueStatus.ACCEPTED if first_item.proposed_label else QueueStatus.CORRECTED
-        target_label = first_item.proposed_label or "Requires"
-
-        updated_item, verified_pair = manager.record_decision(
-            item=first_item,
-            decision_type=decision_type,
-            final_label=target_label,
-            reviewer_id="lead_annotator_42",
-            reviewer_notes="Verified direct requirement dependency after inspecting architectural specifications."
-        )
-
-        # Refresh queue idempotently
-        refreshed_items = manager.refresh_queue(queue_items, pairs)
-        refreshed_manifest = manager.create_manifest(refreshed_items, source_identity="ADB_Provisional_Hybrid")
-        manager.save_queue(refreshed_items, refreshed_manifest, queue_file, manifest_file)
-
-        print(f"\nRecorded Decision: Status={updated_item.status.value.upper()}, Final Label={verified_pair.dependency_type.value if verified_pair.dependency_type else 'None'}")
-        print(f"Verified Pair Status: {verified_pair.provenance.status.value.upper()} (Source: {verified_pair.provenance.source.value.upper()})")
-        print(f"Updated Queue Pending Count: {refreshed_manifest.pending_count} / {refreshed_manifest.total_items}")
+    items = manager.build_queue(pairs)
+    manifest = manager.create_manifest(items, source_identity=str(input_path.resolve()))
+    manager.save_queue(items, manifest, str(output_path), str(manifest_path))
+    print(
+        f"Created {manifest.total_items} review items ({manifest.pending_count} pending). "
+        f"No human decisions were recorded. Queue: {output_path}; manifest: {manifest_path}"
+    )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

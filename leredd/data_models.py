@@ -16,6 +16,7 @@ class AnnotationSource(str, Enum):
     HEURISTIC = "heuristic"
     IMPORTED = "imported"
     ENSEMBLE = "ensemble"
+    CANDIDATE_GENERATOR = "candidate_generator"
 
 
 class VerificationStatus(str, Enum):
@@ -42,26 +43,26 @@ class DependencyType(str, Enum):
 
     @classmethod
     def normalize(cls, val: str) -> "DependencyType":
-        """Normalize input string to standard DependencyType enum."""
-        clean = val.strip().replace("_", " ").replace("-", " ").title()
-        if "Require" in clean:
-            return cls.REQUIRES
-        elif "Implement" in clean:
-            return cls.IMPLEMENTS
-        elif "Conflict" in clean:
-            return cls.CONFLICTS
-        elif "Detail" in clean:
-            return cls.DETAILS
-        elif "Similar" in clean:
-            return cls.IS_SIMILAR
-        elif "No" in clean or "None" in clean or "Independent" in clean:
-            return cls.NO_DEPENDENCY
-        
-        # Fallback exact string match
-        for item in cls:
-            if item.value.lower() == val.strip().lower():
-                return item
-        return cls.NO_DEPENDENCY
+        """Normalize supported label spellings without guessing unknown labels."""
+        clean = " ".join(val.strip().replace("_", " ").replace("-", " ").lower().split())
+        aliases = {
+            "requires": cls.REQUIRES,
+            "require": cls.REQUIRES,
+            "implements": cls.IMPLEMENTS,
+            "implement": cls.IMPLEMENTS,
+            "conflicts": cls.CONFLICTS,
+            "conflict": cls.CONFLICTS,
+            "details": cls.DETAILS,
+            "detail": cls.DETAILS,
+            "is similar": cls.IS_SIMILAR,
+            "similar": cls.IS_SIMILAR,
+            "no dependency": cls.NO_DEPENDENCY,
+            "independent": cls.NO_DEPENDENCY,
+        }
+        try:
+            return aliases[clean]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported dependency type: {val!r}") from exc
 
 
 class Requirement(BaseModel):

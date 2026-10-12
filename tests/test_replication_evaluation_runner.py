@@ -3,7 +3,7 @@
 Uses temporary directories for outputs; does not modify production dataset files or legacy reports.
 Synthetic fixtures used where possible; real loader used only for dataset-selection verification.
 """
-import sys, tempfile, json, shutil
+import sys
 from pathlib import Path
 
 _project_root = Path(__file__).resolve().parent.parent
@@ -16,49 +16,21 @@ from scripts.run_replication_evaluation import run_prototype, DATASET, build_pai
 
 
 class TestReplicationRunner:
-    def test_runner_loads_explicit_adb_pilot(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = Path(tmpdir) / "test_adb_pilot_mock.json"
-            path, report, te, ib = run_prototype(dataset="adb_pilot", output_path=str(out_path))
-            assert path.exists()
-            assert report["dataset"] == "adb_pilot"
-            assert report["provider"] == "mock"
-            assert "MockLLM" in report["note"]
-            assert len(te) > 0
-            # Dataset not merged
-            assert "apa" not in report["dataset"]
-            assert "tja" not in report["dataset"]
-
-    def test_output_does_not_overwrite_legacy_report(self):
-        legacy = Path("data/evaluation/system_disjoint_report.json")
-        assert legacy.exists()
-        original_size = legacy.stat().st_size
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = Path(tmpdir) / "test_adb_pilot_mock.json"
-            run_prototype(dataset=DATASET, output_path=str(out_path))
-            # Legacy untouched
-            assert legacy.stat().st_size == original_size
+    def test_pending_imported_labels_block_evaluation(self, tmp_path):
+        """Imported spreadsheet labels cannot produce metrics before local verification."""
+        out_path = tmp_path / "pending.json"
+        with pytest.raises(ValueError, match="eligible test set empty"):
+            run_prototype(dataset="adb_pilot", output_path=str(out_path))
+        assert not out_path.exists()
 
     def test_implemented_by_preserved_not_remapped(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = Path(tmpdir) / "test_impl.json"
-            _, report, _, ib = run_prototype(dataset=DATASET, output_path=str(out_path))
-            # ADB Pilot has 6 Implemented by records (verified from loader)
-            assert report["implemented_by_summary"]["implemented_by_original"] == 6
-            # Should not be silently remapped to IMPLEMENTS
-            for pred_map in [report["model_results"]["HeuristicLabeler"], report["model_results"]["LEREDD-Hybrid-Mock"]]:
-                # Predictions for eligible test pairs; Implemented by excluded from eligible, so no wrong mapping can occur
-                pass
-            # Explicit preservation verified by loader-level count; no IMPLMENTS mapping in summary
-            assert "IMPLMENTS" not in str(report["implemented_by_summary"])
-
-    def test_missing_identity_blocks_unsupported_retrieval(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = Path(tmpdir) / "test_retrieval.json"
-            _, report, _, _ = run_prototype(dataset=DATASET, output_path=str(out_path))
-            # Synthetic identity explicitly noted
-            assert "synthetic" in report["leakage_audit"]["note"].lower() or "Synthetic" in report["leakage_audit"]["note"]
-            assert "unsupported" in report["configuration"]["retrieval_note"].lower() or "unsupported" in report["leakage_audit"]["note"].lower()
+        pairs, implemented_by = build_pairs(DATASET)
+        assert len(implemented_by) == 6
+        assert all(record["original_label"] == "Implemented by" for record in implemented_by)
+        assert all(record["normalized_internal_label"] == "Implemented by" for record in implemented_by)
+        assert all(record["normalized_mapping_unresolved"] is True for record in implemented_by)
+        assert "IMPLMENTS" not in str(implemented_by)
+        assert all(pair.dependency_type is None for pair in pairs if pair.id in {r["pair_id"] for r in implemented_by})
 
     def test_invalid_unresolved_handled_transparently(self):
         # Direct pair construction with synthetic invalid Implemented by (unresolved False) — fail-closed
@@ -109,15 +81,7 @@ class TestReplicationRunner:
         assert len(train_ids & dev_ids) == 0
         assert len(dev_ids & test_ids) == 0
 
-    def test_confusion_matrix_total_matches_eligible(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = Path(tmpdir) / "test_cm.json"
-            _, report, te, _ = run_prototype(dataset=DATASET, output_path=str(out_path))
-            cm = report["model_results"]["LEREDD-Hybrid-Mock"]["confusion_matrix"]
-            total = sum(sum(row.values()) for row in cm.values())
-            assert total == len(te), f"Confusion total {total} != eligible {len(te)}"
-
-    def test_empty_eligible_fails_clearly(self):
+    def test_empty_eligible_fails_clearly(self, monkeypatch, tmp_path):
         import scripts.run_replication_evaluation as runner_mod
         original_build = runner_mod.build_pairs
         # Force all dependency_type None -> all excluded -> empty eligible
@@ -126,31 +90,18 @@ class TestReplicationRunner:
             for p in pairs:
                 p.dependency_type = None
             return pairs, ib
-        runner_mod.build_pairs = fake_build
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                with pytest.raises(ValueError, match="eligible test set empty"):
-                    run_prototype(dataset=DATASET, output_path=str(Path(tmpdir) / "should_not_create.json"))
-        finally:
-            runner_mod.build_pairs = original_build
+        monkeypatch.setattr(runner_mod, "build_pairs", fake_build)
+        with pytest.raises(ValueError, match="eligible test set empty"):
+            run_prototype(dataset=DATASET, output_path=str(tmp_path / "should_not_create.json"))
 
-    def test_retrieval_pool_not_passed_when_synthetic(self):
-        captured = {}
-        original_detect = None
-        def spy_detect(self, pairs, annotated_pool=None, srs_text=None, max_workers=4, retrieval_mode=None, confidence_threshold=None):
-            captured["annotated_pool"] = annotated_pool
-            # Call original to preserve behavior
-            return original_detect(self, pairs, annotated_pool=annotated_pool, srs_text=srs_text, max_workers=max_workers, retrieval_mode=retrieval_mode, confidence_threshold=confidence_threshold)
-
+    def test_pending_imports_fail_before_model_or_detector_initialization(self, monkeypatch, tmp_path):
         from leredd.detector import LEREDDDetector
-        original_detect = LEREDDDetector.detect_batch
-        LEREDDDetector.detect_batch = spy_detect
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                out_path = Path(tmpdir) / "test_no_pool.json"
-                _, report, _, _ = run_prototype(dataset=DATASET, output_path=str(out_path))
-                assert report["configuration"]["retrieval_evaluated"] is False
-                assert report["configuration"]["retrieval_pool_available"] is False
-                assert captured.get("annotated_pool") is None, f"detect_batch received annotated_pool={captured.get('annotated_pool')} instead of None"
-        finally:
-            LEREDDDetector.detect_batch = original_detect
+        from leredd.embeddings import EmbeddingModel
+
+        def unexpected_init(*args, **kwargs):
+            raise AssertionError("model initialization must not run for unverified ground truth")
+
+        monkeypatch.setattr(EmbeddingModel, "__init__", unexpected_init)
+        monkeypatch.setattr(LEREDDDetector, "__init__", unexpected_init)
+        with pytest.raises(ValueError, match="eligible test set empty"):
+            run_prototype(dataset=DATASET, output_path=str(tmp_path / "not-written.json"))

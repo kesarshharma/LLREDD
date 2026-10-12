@@ -36,11 +36,13 @@ class ResponseParser:
             parsed_type = DependencyType.normalize(raw_type_str)
         else:
             # Fallback search anywhere in text
-            parsed_type = DependencyType.NO_DEPENDENCY
+            parsed_type = None
             for item in DependencyType:
                 if item.value.lower() in raw_text.lower():
                     parsed_type = item
                     break
+            if parsed_type is None:
+                raise ValueError("Malformed LLM response: no supported dependency label found")
 
         # 2. Parse Rationale
         rat_match = re.search(
@@ -217,12 +219,9 @@ class LEREDDDetector:
                     results[pair.id] = pred
                 except Exception as e:
                     logger.error(f"Error processing pair {pair.id}: {e}")
-                    results[pair.id] = Prediction(
-                        pair_id=pair.id,
-                        dependency_type=DependencyType.NO_DEPENDENCY,
-                        rationale=f"Pipeline error: {str(e)}",
-                        confidence=0
-                    )
+                    raise RuntimeError(
+                        f"Failed to detect dependency for pair {pair.id}: {e}"
+                    ) from e
 
         # Preserve original input list ordering
         return [results[p.id] for p in pairs if p.id in results]

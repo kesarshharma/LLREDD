@@ -11,6 +11,7 @@ from leredd.data_models import (
     DependencyType,
     EvaluationMetric,
     EvaluationReport,
+    VerificationStatus,
 )
 
 
@@ -25,6 +26,8 @@ class Evaluator:
         model_name: str = "LEREDD"
     ) -> EvaluationReport:
         """Compute Accuracy, Precision, Recall, F1 (per-class & macro/weighted) and confusion matrix."""
+        Evaluator._validate_ground_truth(ground_truth)
+        Evaluator._validate_prediction_coverage(ground_truth, predictions)
         # Align predictions by pair_id
         pred_map = {p.pair_id: p.dependency_type for p in predictions}
 
@@ -32,7 +35,7 @@ class Evaluator:
         y_pred: List[str] = []
 
         for pair in ground_truth:
-            gt_type = pair.dependency_type.value if pair.dependency_type else DependencyType.NO_DEPENDENCY.value
+            gt_type = pair.dependency_type.value
             pred_type = pred_map.get(pair.id, DependencyType.NO_DEPENDENCY).value
             y_true.append(gt_type)
             y_pred.append(pred_type)
@@ -89,6 +92,9 @@ class Evaluator:
 
         Returns (statistic, p_value).
         """
+        Evaluator._validate_ground_truth(ground_truth)
+        Evaluator._validate_prediction_coverage(ground_truth, preds_a)
+        Evaluator._validate_prediction_coverage(ground_truth, preds_b)
         map_a = {p.pair_id: p.dependency_type for p in preds_a}
         map_b = {p.pair_id: p.dependency_type for p in preds_b}
 
@@ -98,7 +104,7 @@ class Evaluator:
         n00 = n01 = n10 = n11 = 0
 
         for pair in ground_truth:
-            gt = pair.dependency_type or DependencyType.NO_DEPENDENCY
+            gt = pair.dependency_type
             pa = map_a.get(pair.id, DependencyType.NO_DEPENDENCY)
             pb = map_b.get(pair.id, DependencyType.NO_DEPENDENCY)
 
@@ -170,6 +176,9 @@ class Evaluator:
         preds_b: List[Prediction]
     ) -> Dict:
         """Perform McNemar's test and return complete contingency table & discordant details."""
+        Evaluator._validate_ground_truth(ground_truth)
+        Evaluator._validate_prediction_coverage(ground_truth, preds_a)
+        Evaluator._validate_prediction_coverage(ground_truth, preds_b)
         map_a = {p.pair_id: p.dependency_type for p in preds_a}
         map_b = {p.pair_id: p.dependency_type for p in preds_b}
 
@@ -177,7 +186,7 @@ class Evaluator:
         discordant_pairs = []
 
         for pair in ground_truth:
-            gt = pair.dependency_type or DependencyType.NO_DEPENDENCY
+            gt = pair.dependency_type
             pa = map_a.get(pair.id, DependencyType.NO_DEPENDENCY)
             pb = map_b.get(pair.id, DependencyType.NO_DEPENDENCY)
 
@@ -227,3 +236,31 @@ class Evaluator:
             "statistic": stat,
             "p_value": pval,
         }
+    @staticmethod
+    def _validate_ground_truth(ground_truth: List[RequirementPair]) -> None:
+        """Refuse to score missing or explicitly unverified labels as negatives."""
+        invalid = []
+        for pair in ground_truth:
+            if pair.dependency_type is None:
+                invalid.append(f"{pair.id}: unlabeled")
+            elif pair.provenance and pair.provenance.status != VerificationStatus.VERIFIED:
+                invalid.append(f"{pair.id}: status={pair.provenance.status.value}")
+        if invalid:
+            raise ValueError(
+                "Ground truth contains unlabeled or unverified pairs: "
+                + ", ".join(invalid)
+            )
+
+    @staticmethod
+    def _validate_prediction_coverage(
+        ground_truth: List[RequirementPair], predictions: List[Prediction]
+    ) -> None:
+        expected = [pair.id for pair in ground_truth]
+        actual = [prediction.pair_id for prediction in predictions]
+        if len(set(actual)) != len(actual):
+            raise ValueError("Predictions contain duplicate pair IDs")
+        missing = sorted(set(expected) - set(actual))
+        if missing:
+            raise ValueError(
+                "Predictions are missing ground-truth pair IDs: " + ", ".join(missing)
+            )

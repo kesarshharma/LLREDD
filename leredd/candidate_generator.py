@@ -175,7 +175,7 @@ class CandidateGenerator:
                     continue
 
                 prov = AnnotationProvenance(
-                    source=AnnotationSource.HEURISTIC,
+                    source=AnnotationSource.CANDIDATE_GENERATOR,
                     status=VerificationStatus.PROVISIONAL,
                     annotator_id="candidate_generator_all_pairs",
                     evidence_text=f"Exhaustive candidate generation from {source_identity}"
@@ -245,7 +245,7 @@ class CandidateGenerator:
                 seen_canonical_keys.add(canon_key)
 
                 prov = AnnotationProvenance(
-                    source=AnnotationSource.HEURISTIC,
+                    source=AnnotationSource.CANDIDATE_GENERATOR,
                     status=VerificationStatus.PROVISIONAL,
                     annotator_id=f"candidate_generator_{strategy.value}",
                     evidence_text=f"Retrieved via {strategy.value} strategy (top_{top_k}, score={score:.4f})"

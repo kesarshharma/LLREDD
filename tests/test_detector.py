@@ -2,6 +2,7 @@
 
 from leredd.detector import ResponseParser, LEREDDDetector
 from leredd.data_models import DependencyType
+import pytest
 
 
 def test_response_parser_threshold_reannotation():
@@ -19,6 +20,14 @@ def test_response_parser_threshold_reannotation():
     pred2 = ResponseParser.parse(raw_response, pair_id="PAIR-001", confidence_threshold=2)
     assert pred2.dependency_type == DependencyType.REQUIRES
     assert pred2.rationale == "Test rationale explanation."
+
+
+def test_response_parser_does_not_map_unknown_label_to_no_dependency():
+    with pytest.raises(ValueError, match="Unsupported dependency type"):
+        ResponseParser.parse(
+            "Dependency_Type: Notable\nRationale: unknown\nConfidence Score: 5",
+            pair_id="PAIR-UNKNOWN",
+        )
 
 
 def test_response_parser_multiline_rationale_preserved():

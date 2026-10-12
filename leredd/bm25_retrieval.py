@@ -11,7 +11,7 @@ from loguru import logger
 from rank_bm25 import BM25Okapi, BM25Plus
 
 from leredd.config import LEREDDConfig, get_config
-from leredd.data_models import DependencyType, Requirement, RequirementPair
+from leredd.data_models import DependencyType, Requirement, RequirementPair, VerificationStatus
 
 
 class BM25Retriever:
@@ -159,7 +159,12 @@ class BM25Retriever:
 
         pool = candidate_pool if candidate_pool is not None else self._corpus
         # Filter pool to ensure RequirementPair items only
-        pairs_pool = [item for item in pool if isinstance(item, RequirementPair)]
+        pairs_pool = [
+            item for item in pool
+            if isinstance(item, RequirementPair)
+            and item.dependency_type is not None
+            and (item.provenance is None or item.provenance.status == VerificationStatus.VERIFIED)
+        ]
 
         if not pairs_pool:
             logger.warning("No RequirementPair items in candidate pool for example retrieval.")
@@ -185,7 +190,7 @@ class BM25Retriever:
                     and pair.req_b.text == target_pair.req_b.text
                 ):
                     continue
-                dep_type = pair.dependency_type or DependencyType.NO_DEPENDENCY
+                dep_type = pair.dependency_type
                 typed_candidates[dep_type].append((0.0, pair.id, pair))
         else:
             raw_scores = retriever._bm25.get_scores(query_tokens)
@@ -198,7 +203,7 @@ class BM25Retriever:
                     continue
 
                 score = float(raw_scores[idx])
-                dep_type = candidate_pair.dependency_type or DependencyType.NO_DEPENDENCY
+                dep_type = candidate_pair.dependency_type
                 typed_candidates[dep_type].append((score, candidate_pair.id, candidate_pair))
 
         retrieved_examples: Dict[DependencyType, List[RequirementPair]] = {}

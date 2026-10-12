@@ -24,7 +24,8 @@ Returns system health status, version, and active LLM provider.
 ```
 
 #### `GET /api/v1/config`
-Returns active `LEREDDConfig` parameters.
+
+Returns active non-secret configuration fields. The configured OpenAI key is never included; the response contains only `openai_api_key_configured` as a boolean.
 
 ---
 
@@ -79,10 +80,10 @@ The Typer CLI offers full suite controls for data processing and model operation
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `leredd-cli extract` | `--input <path> --system <name> --output <path>` | Extract requirement statements from SRS text. |
-| `leredd-cli pairs` | `--input <path> --output <path>` | Generate exhaustive requirement pair combinations. |
-| `leredd-cli annotate` | `--input <path> --output <path>` | Launch interactive CLI pair annotation mode. |
+| `leredd-cli pairs` | `--input <path> --output <path>` | Generate exhaustive unlabeled candidate pairs (`dependency_type: null`, candidate-generator provenance). |
+| `leredd-cli annotate` | `--input <path> --output <path>` | Collect an explicit human label; records the human annotation as VERIFIED. |
 | `leredd-cli detect` | `--input <path> --examples <path> --output <path>` | Execute LEREDD automated dependency detection. |
-| `leredd-cli evaluate` | `--predictions <path> --ground-truth <path>` | Compute accuracy, F1, and confusion matrices. |
+| `leredd-cli evaluate` | `--predictions <path> --ground-truth <path>` | Compute metrics only with complete prediction coverage and labeled ground truth; provenance-bearing ground truth requires `VERIFIED` status. |
 | `leredd-cli serve` | `--host <host> --port <port>` | Start the FastAPI REST API server. |
 
 ---

@@ -51,9 +51,10 @@ from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline
 from leredd.detector import LEREDDDetector
 from leredd.llm import MockLLMClient
 from leredd.provisional_labeler import HeuristicLabeler
+from leredd.embeddings import EmbeddingModel
 
 SCRIPT_VERSION = "2.0.0"
-PROVISIONAL_STATUS_VALUE = VerificationStatus.PROVISIONAL.value
+VERIFIED_STATUS_VALUE = VerificationStatus.VERIFIED.value
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +74,7 @@ def check_ground_truth_eligibility(
     Check each pair for ground-truth eligibility. Returns (eligible, warnings).
 
     Rules (fail-closed):
-      - provenance.status == PROVISIONAL  -> REJECTED (always)
+      - provenance.status != VERIFIED     -> REJECTED (always)
       - dependency_type is None           -> SKIPPED (cannot evaluate)
       - provenance is None (legacy)       -> Conditionally accepted with warning
     """
@@ -93,11 +94,11 @@ def check_ground_truth_eligibility(
                 if pair.provenance.status
                 else None
             )
-            if status_val == PROVISIONAL_STATUS_VALUE:
+            if status_val != VERIFIED_STATUS_VALUE:
                 msg = (
                     f"[{partition_label}] REJECTED pair {pair.id}: "
-                    f"VerificationStatus=PROVISIONAL. Machine-generated labels "
-                    f"must not be used as evaluation ground truth."
+                    f"VerificationStatus={status_val!r}; explicit VERIFIED status "
+                    f"is required for evaluation ground truth."
                 )
                 warnings_found.append(msg)
                 if strict:
@@ -282,6 +283,7 @@ def run_leredd_variant(
     k_examples: int = 6,
     confidence_threshold: int = 4,
     model_name: str = "LEREDD-Hybrid",
+    embedder: Optional[EmbeddingModel] = None,
 ) -> Tuple[List[Prediction], Any]:
     """Evaluate LEREDD detector variant on test pairs."""
     config = LEREDDConfig(
@@ -291,7 +293,7 @@ def run_leredd_variant(
         confidence_threshold=confidence_threshold,
     )
     mock_llm = MockLLMClient(model="mock")
-    detector = LEREDDDetector(config=config, llm=mock_llm)
+    detector = LEREDDDetector(config=config, llm=mock_llm, embedder=embedder)
     pool = retrieval_pool if k_examples > 0 else None
     preds = detector.detect_batch(
         test_pairs,
@@ -405,30 +407,33 @@ def run_evaluation(
     # Step 7: Zero-Shot LLM & Proposed Hybrid System & Ablation Matrix
     logger.info("Step 7: LEREDD Variants & Ablation Matrix (MockLLM) ...")
 
+    # Reuse a single real EmbeddingModel instance across all LEREDD evaluation variants
+    shared_embedder = EmbeddingModel()
+
     # Primary LEREDD Proposed System (Hybrid RRF + Examples k=6 + Confidence Threshold=4)
     leredd_hybrid_preds, leredd_hybrid_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="hybrid", k_examples=6, confidence_threshold=4, model_name="LEREDD-Hybrid"
+        test_pairs, safe_retrieval_pool, retrieval_mode="hybrid", k_examples=6, confidence_threshold=4, model_name="LEREDD-Hybrid", embedder=shared_embedder
     )
 
     # Primary LEREDD Zero-Shot (k=0 examples)
     leredd_zeroshot_preds, leredd_zeroshot_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="dense", k_examples=0, confidence_threshold=4, model_name="LEREDD-ZeroShot"
+        test_pairs, safe_retrieval_pool, retrieval_mode="dense", k_examples=0, confidence_threshold=4, model_name="LEREDD-ZeroShot", embedder=shared_embedder
     )
 
     # Ablation Variants:
     # A1. Dense Retrieval Only (SBERT)
     leredd_dense_preds, leredd_dense_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="dense", k_examples=6, confidence_threshold=4, model_name="LEREDD-Dense"
+        test_pairs, safe_retrieval_pool, retrieval_mode="dense", k_examples=6, confidence_threshold=4, model_name="LEREDD-Dense", embedder=shared_embedder
     )
 
     # A2. Lexical Retrieval Only (BM25)
     leredd_bm25_preds, leredd_bm25_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="bm25", k_examples=6, confidence_threshold=4, model_name="LEREDD-BM25"
+        test_pairs, safe_retrieval_pool, retrieval_mode="bm25", k_examples=6, confidence_threshold=4, model_name="LEREDD-BM25", embedder=shared_embedder
     )
 
     # A3. Thresholding Disabled (Off: threshold=-1)
     leredd_nothresh_preds, leredd_nothresh_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="hybrid", k_examples=6, confidence_threshold=-1, model_name="LEREDD-Hybrid-NoThreshold"
+        test_pairs, safe_retrieval_pool, retrieval_mode="hybrid", k_examples=6, confidence_threshold=-1, model_name="LEREDD-Hybrid-NoThreshold", embedder=shared_embedder
     )
 
     logger.info(f"  Proposed Hybrid Accuracy={leredd_hybrid_report.overall_accuracy:.4f}, Macro-F1={leredd_hybrid_report.macro_f1:.4f}")
@@ -714,10 +719,23 @@ def main():
                         help="Log warnings instead of raising errors for contamination/GT violations.")
     args = parser.parse_args()
 
+    output_path = Path(args.output).expanduser().resolve()
+    ablation_path = output_path.parent / "ablation_report.json"
+    if output_path.exists() or ablation_path.exists():
+        parser.error(
+            "Refusing to overwrite an existing evaluation report; choose a fresh output directory."
+        )
+    project_data = (Path.cwd() / "data").resolve()
+    protected_roots = [
+        project_data / name for name in ("annotated", "raw", "replication", "splits")
+    ]
+    if any(output_path == root or root in output_path.parents for root in protected_roots):
+        parser.error("Evaluation report output cannot be written inside source dataset directories.")
+
     try:
         run_evaluation(
             split_dir=args.split_dir,
-            output_path=args.output,
+            output_path=str(output_path),
             seed=args.seed,
             bert_model_type=args.bert_classifier_type,
             strict_contamination=not args.no_strict,

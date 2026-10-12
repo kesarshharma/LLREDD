@@ -6,6 +6,69 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 
 ## Active Issues & Blockers
 
+### [ISSUE-018] MEDIUM: Generated Pair Labels Must Not Masquerade as Verified Ground Truth
+- **Severity:** Medium / Data Semantics
+- **Status:** Resolved (TASK-P9-13, 2026-10-12)
+- **Files:** `leredd/utils.py`, `leredd/candidate_generator.py`, `leredd/data_models.py`, `leredd/cli.py`, `leredd/evaluation.py`, `scripts/run_full_evaluation.py`, downstream loaders/retrievers and regression tests
+- **Description:** Generated candidates previously could receive `No_dependency` before annotation, making an unknown relation indistinguishable from an explicit negative label. Label handling also accepted ambiguous unknown text, and some consumers defaulted missing labels to `No_dependency`.
+- **Resolution:** Both generation paths now preserve unknown labels as `None` and provisional provenance. Unknown explicit labels fail validation. Evaluation requires complete prediction coverage and rejects provenance-bearing ground truth unless status is exactly `VERIFIED`; retrieval and supervised fitting ignore unlabeled/unverified examples. The legacy pairs command's interactive annotation stores an explicit human VERIFIED decision. Regression coverage and the full suite pass (**236 passed**, 40 warnings).
+
+### [ISSUE-019] HIGH: API Configuration Endpoint Could Return the OpenAI Secret
+- **Severity:** High / Credential Exposure
+- **Status:** Resolved (TASK-P9-14, verified by full suite 261 passed).
+- **File:** `api/routes.py`
+- **Description:** `GET /api/v1/config` serialized the complete settings model, including `openai_api_key`.
+- **Resolution:** The route excludes the secret and reports only `openai_api_key_configured: bool`. `tests/test_api.py::test_api_config_never_returns_openai_secret` asserts the secret does not appear in the response.
+
+### [ISSUE-020] HIGH: UI Evaluation Leaked Test Labels and Agreement Was Fabricated
+- **Severity:** High / Evaluation Integrity
+- **Status:** Resolved (TASK-P9-14, verified by full suite 261 passed).
+- **File:** `ui/app.py`
+- **Description:** The former evaluation page used the selected target dataset as its retrieval pool and let both baselines fit on that same target batch. Its kappa control compared a label vector with itself and displayed artificial perfect agreement. UI annotations were also only mutated in memory.
+- **Resolution:** Page 4 now calls the system-disjoint runner with strict eligibility and contamination checks, writes each report into a unique run directory, and displays limitations. Page 2 atomically saves a separate verified output with reviewer identity and explicit replacement confirmation; Cohen's kappa is stated as unavailable without independent labels. AppTest covers the UI contract and safe output.
+
+### [ISSUE-021] HIGH: Demonstration Script Invented a Human Review Decision
+- **Severity:** High / Annotation Provenance
+- **Status:** Resolved (TASK-P9-14, verified by full suite 261 passed).
+- **File:** `scripts/build_review_queue.py`
+- **Description:** The former script automatically recorded a made-up `lead_annotator_42` decision and promoted a provisional prediction to VERIFIED.
+- **Resolution:** The script now creates only pending queue records, supports isolated output paths, and never records a decision. A synthetic script test verifies pending status and absent `human_decision`.
+
+### [ISSUE-022] MEDIUM: Unfitted Baselines Could Fit on the Prediction Batch
+- **Severity:** Medium / Data Leakage
+- **Status:** Resolved (TASK-P9-14, verified by full suite 261 passed).
+- **Files:** `leredd/baselines/bert_classifier.py`, `leredd/baselines/tfidf_lsa.py`
+- **Description:** `predict_batch()` could fit an untrained baseline on the same pairs it was asked to predict; BERT also returned a hidden heuristic prediction when unfitted.
+- **Resolution:** Prediction now requires an explicit prior `fit(training_pairs)` call and raises a clear `ValueError` otherwise. Regression tests cover single and batch prediction. The safe evaluator explicitly fits both baselines on train pairs.
+
+### [ISSUE-023] LOW: Document Extraction Silently Returned No Requirements Without Optional Libraries
+- **Severity:** Low / Optional Dependency Clarity
+- **Status:** Resolved (TASK-P9-14, verified by full suite 261 passed).
+- **Files:** `leredd/utils.py`, `pyproject.toml`
+- **Description:** PDF/DOCX extraction swallowed import and parse errors and returned an empty list, while those libraries were not declared dependencies.
+- **Resolution:** Added the `documents` optional extra (`pypdf`, `python-docx`), explicit missing-library errors, and surfaced parser errors. No packages were installed for this task. Tests simulate absent optional dependencies.
+
+### [ISSUE-024] MEDIUM: `train-bert` Reported Saving a Model Without Writing an Artifact
+- **Severity:** Medium / CLI Correctness
+- **Status:** Resolved (TASK-P9-15, verified by 264-test full suite).
+- **Files:** `leredd/baselines/bert_classifier.py`, `leredd/cli.py`, `pyproject.toml`, `requirements.txt`, `tests/test_baselines.py`, `tests/test_cli.py`
+- **Description:** The command created the output directory and printed a successful save message but persisted no trained model, making subsequent prediction impossible.
+- **Resolution:** Fitted BERT baselines now serialize atomically to versioned joblib artifacts and can be reloaded with `BERTBaseline.load()`. `train-bert` refuses to overwrite by default and its tests verify artifact creation, reload/prediction, and preservation of an existing artifact.
+- **Caveat:** joblib/pickle artifacts are executable serialization; only load trusted files and preserve compatible Python/scikit-learn/joblib versions.
+
+### [ISSUE-016] HIGH: Replication Loader Failure Tests Mutate Checked-In Dataset Files
+- **Severity:** High / Test Safety
+- **Status:** Resolved (TASK-P9-04; verified in TASK-P9-12)
+- **File:** `tests/test_replication_loader_failure_modes.py`
+- **Description:** The former `_temp_dataset()` implementation could overwrite checked-in files under `data/replication/` and leave them replaced if cleanup failed.
+- **Resolution:** `load_replication_annotation()` accepts an optional keyword-only `data_root`; failure-mode cases now write synthetic records only under pytest temporary directories. The focused replication runner/loader/dataset coverage and full suite pass. The first 16 hexadecimal characters of each of the four imported JSON SHA-256 digests matched before and after the full-suite run, and the failure-mode tests write only to their `tmp_path` fixture.
+
+### [ISSUE-017] HIGH: Full Test Suite Has No Current Clean Completion Evidence
+- **Severity:** High / Verification Gap
+- **Status:** Resolved (TASK-P9-12, 2026-10-12)
+- **Description:** Earlier complete-suite attempts were interrupted. A later attempt in the restricted sandbox stalled because Windows asyncio's socket-pair fallback waited on local TCP `accept()` during Starlette TestClient portal startup.
+- **Resolution:** Reconfirmed outside the restricted sandbox on 2026-10-13: latest `python -m pytest tests/` completed with **264 passed, 38 warnings in 170.21s**, exit code 0 (173.83s outer duration). All API tests, including `test_api_root`, passed. The Windows TCP socket-pair fallback stall recurred in the sandbox and did not recur outside it; no API code change was needed.
+
 ### [ISSUE-009] CRITICAL: MockLLMClient Ignores Retrieved Examples — Ablation Invariance Under Mock Backend
 - **Severity:** Critical / Architectural Caveat
 - **Status:** 🟡 Open — Prompt Forwarding Verified, Mock Backend Limitation Documented (updated 2026-10-11)
@@ -51,7 +114,7 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 
 ### [ISSUE-012] HIGH: Global Config Singleton Breaks Test Isolation
 - **Severity:** High / Architectural Debt
-- **Status:** 🟡 Partially Addressed — Explicit Reset Available; Automatic Isolation Pending (updated 2026-10-11)
+- **Status:** ✅ Resolved (TASK-P9-13, 2026-10-12)
 - **Files:** `leredd/config.py` (lines 112–134), `tests/test_config.py`
 - **Description:** `get_config()` uses a module-level `_config_instance` singleton that caches configuration in memory. Once initialized, subsequent calls return the cached instance, which previously prevented environment variable overrides or controlled reinitialization during tests.
 - **Implemented Remediation:**
@@ -62,7 +125,7 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
     3. `test_env_variable_reflected_after_reset`: Verifies environment variable changes (`LLM_PROVIDER`) take effect upon reinitialization following `reset_config()`.
     4. `test_reset_does_not_mutate_existing_reference`: Verifies resetting and reloading does not mutate an already-held reference to a prior configuration instance.
 - **Remaining Limitation & Next Steps:**
-  - Automatic isolation between tests (e.g., an `autouse=True` fixture in `conftest.py`) has not been implemented or evaluated across the broader suite. Tests that do not explicitly call `reset_config()` may still share the singleton instance across test boundaries.
+  - Added an autouse fixture in `tests/conftest.py` that resets configuration before and after each test. Verified by the complete suite (**236 passed**, 40 warnings).
 
 ### [ISSUE-013] MEDIUM: ResponseParser Rationale Regex Truncates Multi-Line LLM Output
 - **Severity:** Medium
@@ -79,9 +142,10 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 
 ### [ISSUE-015] LOW: DependencyType.normalize() Substring Ambiguity
 - **Severity:** Low
-- **Status:** 🔴 Open (discovered 2026-10-11 code audit)
+- **Status:** ✅ Resolved (TASK-P9-13, 2026-10-12)
 - **File:** `leredd/data_models.py`, line 57
-- **Description:** The condition `"No" in clean` uses Python substring matching (not word boundary). Any string containing "No" as a substring (e.g., "Notable", "Notification") would incorrectly normalize to `NO_DEPENDENCY`. Latent risk for unexpected LLM outputs.
+- **Description:** The former substring normalizer could map arbitrary text containing "No" to `NO_DEPENDENCY`.
+- **Resolution:** Replaced substring matching with an explicit alias table and a `ValueError` for unknown labels. Regressions cover ambiguous text and the preserved `Implemented by` label. Full suite: **236 passed**, 40 warnings.
 
 ---
 
@@ -139,13 +203,27 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 - **Severity:** Medium (Blocks safe automated evaluation)
 - **Status:** ✅ Resolved (2026-10-10, TASK-P6-02)
 - **Description:** `leredd-cli evaluate --ground-truth gt.json` accepted any JSON array as ground truth including PROVISIONAL records with no warning.
-- **Resolution:** Implemented `check_ground_truth_eligibility` in `leredd/evaluation.py` and integrated into `scripts/run_full_evaluation.py`. Rejects `data/provisional/*` and review-queue records when `VerificationStatus.PROVISIONAL`, raising `ValueError` in strict mode.
+- **Resolution:** Evaluation guards reject provenance-bearing records unless status is exactly `VERIFIED`; the CLI evaluator also rejects unverified provenance through `Evaluator`. Focused regressions cover provisional, pending-review, and human-reviewed states. Legacy records without provenance retain the explicitly documented compatibility path with a warning. Full suite: **236 passed**, 40 warnings.
 
 ### [BLOCKER-005] `adb_verified_ui_test.json` Contains an Explicit Test Fixture
 - **Severity:** Low (Risk for automated dataset ingestion)
 - **Status:** ✅ Resolved (2026-10-10, TASK-P6-02)
 - **Description:** `data/verified/adb_verified_ui_test.json` (2 records) — 1 record has `review_notes` explicitly stating "UI persistence test... not an independently verified dependency annotation." Both carried `VerificationStatus.VERIFIED` or `PROVISIONAL`.
 - **Resolution:** `check_ground_truth_eligibility` filters out provisional records and raises strict errors if provisional review queue / UI test exports are supplied as ground truth without human verification.
+
+### [BLOCKER-006] Replication Imports Have Not Been Locally Verified
+- **Severity:** High (Blocks replication metrics)
+- **Status:** 🔴 Active (confirmed TASK-P9-13, 2026-10-12)
+- **Files:** `scripts/integrate_replication.py`, `scripts/run_replication_evaluation.py`, `docs/REPLICATION_NOTE.md`
+- **Evidence:** Loader provenance for imported spreadsheet records is `source=imported`, `status=pending_review`, and `annotator_id=None`. The evaluation eligibility rule now requires provenance-bearing labels to be explicitly `VERIFIED`. The replication prototype therefore exits before initializing its model or writing a report for current imports.
+- **Required resolution:** Complete local human review using auditable identity and decision records, export verified annotations separately, then evaluate those verified exports without altering the source imports.
+
+### [BLOCKER-007] Replication Dataset Redistribution Rights Are Unverified
+- **Severity:** Medium (Research/data governance)
+- **Status:** 🔴 Active (confirmed TASK-P9-13, 2026-10-12)
+- **Files:** `docs/REPLICATION_NOTE.md`, `docs/EVALUATION_PROTOCOL.md`
+- **Evidence:** Local replication package files do not establish a separate dataset license or redistribution agreement. The paper's license is not proof that separately packaged annotation data may be redistributed.
+- **Required resolution:** Obtain authoritative dataset-specific permission/license terms before redistribution or publication of the imported annotation files. Do not infer permission from the paper license alone.
 
 ### [ISSUE-006] Evaluation CLI Argument Ambiguity & Supervised Cross-System Terminology Alignment
 - **Severity:** Medium (Documentation & Metadata Integrity)

@@ -45,8 +45,7 @@ class TFIDF_LSABaseline:
         text_b = pair.req_b.text
 
         if not self.is_fitted:
-            # Fit on-the-fly for pair if not pre-trained
-            self.fit([pair])
+            raise ValueError("TFIDF_LSABaseline must be fit on training pairs before prediction.")
 
         try:
             vec_a = self.tfidf.transform([text_a])
@@ -73,5 +72,5 @@ class TFIDF_LSABaseline:
     def predict_batch(self, pairs: List[RequirementPair]) -> List[Prediction]:
         """Predict dependencies across a batch of requirement pairs."""
         if not self.is_fitted and pairs:
-            self.fit(pairs)
+            raise ValueError("TFIDF_LSABaseline must be fit on training pairs before batch prediction.")
         return [self.predict_pair(p) for p in pairs]
