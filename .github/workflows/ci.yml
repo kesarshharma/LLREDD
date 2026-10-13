@@ -29,7 +29,7 @@ jobs:
 
       - name: Run Pytest with Coverage
         run: |
-          pytest tests/ --cov=leredd --cov-report=xml --cov-report=term-missing
+          python -m pytest tests/ --cov=leredd --cov-report=xml --cov-report=term-missing
 
       - name: Build Docker Image
         run: |

@@ -381,3 +381,8 @@ All notable changes, task completions, and verification events for the Minor Pro
 - **Focused verification:** `python -m pytest tests/test_baselines.py tests/test_cli.py -k "not cli_detect" -q` → **14 passed, 1 deselected in 3.48s**.
 - **Full verification:** `python -m pytest tests/` (unrestricted, TEMP/TMP at `.pytest-tmp`) → **264 passed, 38 warnings in 170.21s**, exit 0; outer duration **173.83s**. The four replication JSON SHA-256 hashes matched before/after. No package install or Git state operation occurred.
 - **Security/compatibility:** joblib uses pickle serialization; only trusted artifacts should be loaded, with compatible Python/scikit-learn/joblib versions.
+
+## [2026-10-13] - TASK-P9-16: Correct CI Pytest Module Resolution
+- **Finding and change:** The GitHub Actions log showed six collection errors importing repository-root `api` and `scripts` modules under the `pytest` console command. Changed `.github/workflows/ci.yml` to run `python -m pytest`.
+- **Verification:** `python -m pytest tests/ --cov=leredd --cov-report=xml:.pytest-tmp/coverage.xml --cov-report=term-missing` → **264 passed, 38 warnings**, exit 0, 199.09s pytest time (wrapper elapsed 202.81s). The GitHub Actions matrix has not yet rerun.
+- **Files changed:** `.github/workflows/ci.yml`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`, `ISSUES.md`, `DECISIONS.md`.

@@ -215,3 +215,10 @@ This document records key architectural, design, and implementation decisions fo
 - **Context:** The `train-bert` CLI advertised saving a trained model but wrote no artifact, so successful completion could not be followed by prediction.
 - **Decision:** Save the fitted classifier plus artifact format/model metadata using atomic joblib serialization; expose `BERTBaseline.load()`; refuse output replacement unless `--overwrite` is explicit. Record the embedding model name and initialize that embedder when loading unless a caller injects one.
 - **Consequences:** The CLI output is reusable. Because joblib is pickle-based, artifacts must be trusted and loaded with compatible dependency versions. `joblib` is declared directly rather than relied on as a transitive scikit-learn dependency.
+
+## [ADR-023] Invoke Pytest as a Python Module in CI
+- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Context:** GitHub Actions failed test collection because the `pytest` console entry point did not expose the repository root for imports of top-level `api` and `scripts` packages. These modules are source-tree packages and are not included by the package's `leredd*` setuptools include rule.
+- **Decision:** Run the existing configured pytest coverage command as `python -m pytest ...`; preserve the same test path and coverage arguments.
+- **Consequences:** The interpreter adds the current working directory to the module search path. Local full-suite coverage succeeds; the hosted Python-version matrix must rerun before CI status is confirmed.

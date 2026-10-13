@@ -6,6 +6,13 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 
 ## Active Issues & Blockers
 
+### [ISSUE-022] CI Pytest Console Entry Point Fails to Import Repository Modules
+- **Severity:** Medium / CI Reliability
+- **Status:** Locally mitigated; hosted matrix verification pending.
+- **File:** `.github/workflows/ci.yml`
+- **Description:** GitHub Actions run #4 failed during collection on Python 3.10 and was cancelled on Python 3.11. The console invocation `pytest tests/ --cov=...` produced `ModuleNotFoundError` for top-level `scripts` and `api` modules (six collection errors shown in the Python 3.10 log), before test execution.
+- **Mitigation:** The workflow now invokes `python -m pytest`, which places the current repository root on `sys.path`. Local coverage suite passed **264 tests, 38 warnings**, exit 0. Keep this issue open until the hosted matrix rerun completes successfully.
+
 ### [ISSUE-018] MEDIUM: Generated Pair Labels Must Not Masquerade as Verified Ground Truth
 - **Severity:** Medium / Data Semantics
 - **Status:** Resolved (TASK-P9-13, 2026-10-12)

@@ -184,3 +184,6 @@ This roadmap tracks the development phases for extending the LEREDD repository i
   - **Implementation:** Added atomic, versioned joblib persistence and `BERTBaseline.load()`. CLI now writes `bert_baseline.joblib`, refuses replacement unless `--overwrite` is given, and checks collision before training. Added the direct joblib dependency and documented trusted-artifact handling.
   - **Verification:** Focused baseline/CLI suite: **14 passed, 1 deselected in 3.48s**. Fresh unrestricted `python -m pytest tests/`: **264 passed, 38 warnings in 170.21s**, exit 0; outer duration **173.83s**. Four replication dataset hashes matched before/after.
   - **Limits:** Artifact loading uses pickle serialization and therefore must only be used with trusted files; compatible Python/scikit-learn/joblib versions are required.
+- [x] **TASK-P9-16: Use Module Invocation for CI Pytest Imports**
+  - **Finding and change:** GitHub Actions collection failed to import top-level `api` and `scripts` when invoking the pytest console entry point. Changed the CI step to `python -m pytest` so the repository root is on `sys.path`.
+  - **Verification:** Local full suite via `python -m pytest tests/ --cov=leredd --cov-report=xml:.pytest-tmp/coverage.xml --cov-report=term-missing` → **264 passed, 38 warnings**, exit 0. GitHub Actions Python 3.10/3.11 matrix rerun remains pending.
