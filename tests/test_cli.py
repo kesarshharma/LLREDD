@@ -108,7 +108,7 @@ def test_cli_annotate_records_explicit_human_verification(tmp_path):
 def test_cli_annotate_requires_explicit_annotator(tmp_path):
     pairs_file = tmp_path / "pairs.json"
     pairs_file.write_text("[]", encoding="utf-8")
-    result = runner.invoke(app, ["annotate", "--input", str(pairs_file)])
+    result = runner.invoke(app, ["annotate", "--input", str(pairs_file)], color=False)
     assert result.exit_code != 0
     assert "--annotator" in result.output
 

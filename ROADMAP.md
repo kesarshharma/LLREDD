@@ -258,6 +258,7 @@ This roadmap tracks the development phases for extending the LEREDD repository i
 - [ ] **TASK-P21: Verify Docker image build and local Compose services**
   - **Progress:** Added `.dockerignore` because the Dockerfile's `COPY . .` otherwise included local `data/`, replication packages, reports, credentials, and temporary files in the image build context. Compose configuration parses successfully.
   - **Blocked verification:** Docker CLI is installed (29.1.5), but `docker info` cannot connect to `dockerDesktopLinuxEngine`; no image build or container launch was possible. Keep this task open until the daemon is available, then build and exercise API/UI health paths without publishing local data.
+  - **Latest local check (2026-11-24):** `com.docker.service` is `Stopped` with `Manual` start type, and no Docker Desktop/backend process was found. A bounded `docker info` probe timed out. An elevated `Start-Service com.docker.service` attempt returned “Cannot open ... service”; no build or container state was changed. A local administrator must start Docker Desktop before this verification can continue.
 
 - [x] **TASK-P22: Diagnose and verify live Streamlit rendering**
   - **Finding:** The blank-shell observation was time-bounded, not a persistent failure. On the documented port 8501, native Chrome first showed Streamlit's `Running...` shell; the dashboard rendered after approximately 16 seconds from navigation. A separate fresh instance on 8502 rendered after about six seconds. HTTP health/root checks succeeded on the diagnostic instance.
@@ -440,3 +441,10 @@ This roadmap tracks the development phases for extending the LEREDD repository i
   - Published as `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` on `origin/main`.
   - Verification: post-merge full suite **456 passed in 106.86s**; merge-specific evaluation/synthetic tests **42 passed**; `git diff --check` passed. Remote `refs/heads/main` exactly matched the pushed hash.
   - Kept local-only the PDF, imported replication JSON, external replication materials, generated reports, temporary logs/caches, and scratch files. Source rights and label-crosswalk blockers remain open.
+
+- [x] **TASK-P55: Correct Linux CI test portability failures**
+  - **Finding:** The supplied Python 3.11 CI log collected 456 tests and reported 449 passed, 4 skipped, and 3 failed. Two CLI tests searched ANSI-colored output where Click inserted escape codes between the option's leading hyphens. A protected-output test derived the repository root from `tmp_path`; on Linux that resolved to `/`, so it attempted `/data/...` and hit an OS permission error before the product's path guard.
+  - **Fix:** Disabled color in the two CLI error assertions and derived the protected output from the test file's repository-relative location. Assertions still check required reviewer rejection and protected-path rejection.
+  - **Verification:** Focused regressions: **3 passed in 12.45s**. Full local Windows suite: **456 passed in 171.76s**, exit 0 (PowerShell duration **178.50s**). `git diff --check` passed before tracking updates.
+  - **CI-equivalent verification:** `python -m pytest tests/ --cov=leredd --cov-report=xml --cov-report=term-missing` with coverage outputs directed to `.pytest-tmp/task-p57-coverage` completed **456 passed in 197.92s**, **89% coverage**, exit 0 (PowerShell duration **206.61s**). The pre-existing root `.coverage` hash was unchanged.
+  - **Boundary:** This does not prove the hosted Linux job now passes; it must be rerun after the reviewed changes are published. Docker verification is still blocked by an unresponsive daemon.

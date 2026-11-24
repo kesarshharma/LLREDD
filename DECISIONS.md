@@ -539,3 +539,15 @@ This document records key architectural, design, and implementation decisions fo
 - **Decision:** Publish reviewed application code, tests, and project documentation only. Keep `Minor_Project.pdf`, local imported replication JSON and spreadsheets, external package files, generated reports, caches, and scratch artifacts untracked. Reconcile divergent history with a merge commit; do not rewrite either side's history.
 - **Verification:** `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` is the verified `origin/main` tip; post-merge suite **456 passed**. The newer remote demo SRS and `.gitattributes` commits were already on GitHub and were preserved as remote ancestors.
 - **Consequence:** The repository's software checkpoint is published, but local replication evaluation remains blocked until rights and label semantics are documented.
+
+## ADR-070 — Make CLI and protected-path tests platform independent (2026-11-24)
+- **Status:** Accepted
+- **Context:** Hosted Linux CI exposed test-only assumptions that passed on Windows: colored Click output inserted escape sequences within option spellings, and `tmp_path.parents[3]` did not identify the checkout root.
+- **Decision:** Disable color for tests that assert CLI option names, and derive repository-owned protected paths from the test file's location. Keep the existing behavior assertions intact.
+- **Verification:** All three affected regressions passed locally; the full Windows suite passed **456 tests**. The hosted Linux rerun remains pending.
+
+## ADR-071 — Require a live Docker engine for container verification (2026-11-24)
+- **Status:** Accepted
+- **Context:** Docker CLI presence alone does not prove that image builds or Compose runtime checks are possible. The local service is stopped and cannot be opened by the current process, even in the elevated attempt.
+- **Decision:** Keep Docker image/runtime verification open until Docker Desktop and its Linux engine are running; do not infer success from Compose configuration parsing or past API/UI health checks.
+- **Verification:** `com.docker.service` reported `Stopped`/`Manual`; `docker info` timed out; elevated service start returned an access/open error. No build or container mutation was performed.

@@ -639,3 +639,15 @@ All notable changes, task completions, and verification events for the Minor Pro
 - Corrected a remote test fixture to supply a reviewer identity required by the human-decision API; unknown dependency labels are explicitly rejected, with the supported `No` shorthand retained.
 - Verification: focused merge regression group **42 passed**; post-merge complete suite **456 passed in 106.86s**; `git diff --check` passed.
 - Pushed merge commit `d419d998e8ed9c05098c4fb0bf4f6789df08c74f`; `git ls-remote origin refs/heads/main` matched. Imported replication datasets, external package files, historical/generated reports, temp outputs, and `Minor_Project.pdf` were not added by the local checkpoint.
+
+### TASK-P55 — Correct Linux CI test portability failures (2026-11-24)
+- Modified `tests/test_cli.py`, `tests/test_independent_annotation.py`, and `tests/test_ui_and_queue_integration.py`: CLI error assertions now run without ANSI coloring, and the protected-output fixture builds its target from the repository root rather than pytest's platform-dependent temporary directory.
+- Supplied hosted log: Python 3.11.18 / pytest 9.2.0, 456 collected, **449 passed, 3 failed, 4 skipped**. The three failures were these portability assertions/path setup issues; no product implementation failure was shown by those traces.
+- Focused regressions: **3 passed in 12.45s**. Full local Windows suite: **456 passed in 171.76s**, exit 0 (PowerShell duration **178.50s**). `git diff --check` passed before this tracking entry.
+- CI-equivalent coverage command, with coverage outputs isolated under `.pytest-tmp/task-p57-coverage`: **456 passed in 197.92s**, **89% coverage**, exit 0 (PowerShell duration **206.61s**). The pre-existing root `.coverage` SHA-256 remained unchanged.
+- Hosted rerun remains pending; no commit or push was made. Docker daemon connectivity timed out, so no Docker build or container test was run.
+
+### TASK-P56 — Recheck Docker Desktop availability (2026-11-24)
+- Read-only service inspection found `com.docker.service` stopped with `Manual` start type and no Docker Desktop/backend process. A bounded `docker info` probe timed out.
+- Attempted to start the service with an elevated `Start-Service`; Windows returned “Cannot open 'com.docker.service' service on computer '.'.” The service remains stopped. No image was built and no container was created or changed.
+- Docker verification remains open until a local administrator starts Docker Desktop and its Linux engine becomes available.

@@ -215,7 +215,7 @@ def test_cli_queue_decide_rejects_blank_reviewer_without_mutating_queue(tmp_path
     result = runner.invoke(app, [
         "queue-decide", "--queue", str(queue_path), "--item-id", item_id,
         "--decision", "accepted", "--reviewer", "   ",
-    ])
+    ], color=False)
 
     assert result.exit_code != 0
     assert "--reviewer" in result.output

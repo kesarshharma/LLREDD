@@ -393,6 +393,7 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 - **Evidence:** Dockerfile copies the repository with `COPY . .`; there was no `.dockerignore`. The local working tree contains untracked replication JSON and evaluation artifacts.
 - **Mitigation:** `.dockerignore` excludes local `data/`, the project PDF, environment/secret files, repository metadata, and caches/temp. Both Docker images built using CPU-only Torch. Compose launched API/UI; API root and health returned 200, and Streamlit root and health returned 200/`ok`. No dataset-writing operation was requested.
 - **Remaining verification:** A later Docker management API probe returned 500/hung; a bounded `docker info` recheck timed out after 20 seconds. In that same check, API health and Streamlit health still returned 200/`ok`, so app responsiveness is confirmed while Docker CLI management remains unstable. Image-content inspection and a final `docker compose ps` could not be completed. Browser visual inspection was also blocked because the computer-use tool could not verify the browser URL. `docker compose config` still warns that the top-level `version` key is obsolete.
+- **Latest environment check (2026-11-24):** `com.docker.service` is stopped/manual-start and no Docker Desktop/backend process was found. A bounded `docker info` timed out; the elevated service-start attempt failed with “Cannot open ... service.” No build was attempted. A local administrator must start Docker Desktop before the remaining checks can run.
 - **Next:** Recheck Docker Desktop management commands and visually inspect `http://127.0.0.1:8501`; retain the `.dockerignore` data exclusions and do not publish mounted local research data.
 
 ### [ISSUE-035] Live Streamlit page remains blank after health success
@@ -533,3 +534,10 @@ The long-running 8501 process displayed an import error for `PredictionValidatio
 ### TASK-P54 checkpoint status (2026-11-24)
 - Local synthetic-data and split-integrity safeguards are now included in public `origin/main` at `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` after a non-destructive merge with the latest remote commits.
 - The post-merge local suite passed **456 tests**. This does not resolve ISSUE-056: imported replication rights and the `Implemented by` crosswalk still require authoritative evidence. Hosted CI has not yet been verified for this commit.
+
+### [ISSUE-058] Linux CI failed on platform-dependent test assertions
+- **Severity:** Medium (blocks hosted CI verification)
+- **Status:** Locally corrected; hosted rerun pending.
+- **Description:** The supplied Linux/Python 3.11 coverage run collected 456 tests and ended with 449 passed, 4 skipped, and 3 failed. Two CLI tests searched colored Click output for `--annotator`/`--reviewer`; ANSI sequences split the option's two leading hyphens. The independent-annotation path test inferred the project root from `tmp_path`, which resolved to `/` on Linux and triggered a filesystem permission error before the intended protected-path guard.
+- **Resolution:** The two CLI assertions invoke `CliRunner` with color disabled; the path test derives the project root from `__file__`. No application behavior or assertions were weakened.
+- **Verification:** The three focused tests pass on local Windows; the complete local suite reports **456 passed**. The GitHub Actions workflow has not rerun against this fix, so hosted CI remains unverified.

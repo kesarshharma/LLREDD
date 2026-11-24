@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -226,7 +227,8 @@ def test_compare_counts_abstentions_as_a_separate_response():
 
 def test_blind_annotation_refuses_protected_data_output_path(tmp_path, capsys):
     candidates = _candidate(tmp_path / "candidates.json")
-    protected_output = tmp_path.parents[3] / "data" / "replication" / "new-human-labels.json"
+    project_root = Path(__file__).resolve().parents[1]
+    protected_output = project_root / "data" / "replication" / "new-human-labels.json"
     assert annotate_independent.main([
         "--input", str(candidates), "--annotator", "reviewer-a", "--output", str(protected_output)
     ]) == 2
