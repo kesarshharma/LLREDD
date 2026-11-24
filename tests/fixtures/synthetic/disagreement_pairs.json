@@ -1,0 +1,70 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "disagreement_pairs",
+  "description": "Synthetic requirement pairs where heuristic rules and LLM predictions produce conflicting classifications.",
+  "pairs": [
+    {
+      "id": "SYNTH-DIS-001",
+      "req_a": {
+        "id": "REQ-SYNTH-DIS-01",
+        "text": "The vision subsystem shall require verification of lens clarity every 500ms.",
+        "system": "SyntheticVision"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-DIS-02",
+        "text": "Camera processing shall detail fault logging formats for degraded sensor optics.",
+        "system": "SyntheticVision"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Requires",
+      "heuristic_prediction": "Requires",
+      "heuristic_evidence": "RULE-REF-ID-DIRECT: keyword 'require' present in text A.",
+      "llm_prediction": "Details",
+      "llm_confidence": 4,
+      "llm_rationale": "Requirement B elaborates on the detailed fault logging mechanism for degraded optics mentioned in A.",
+      "review_reasons": ["disagreement"],
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 4,
+        "evidence": "Heuristic classified as Requires, LLM classified as Details.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-DIS-002",
+      "req_a": {
+        "id": "REQ-SYNTH-DIS-03",
+        "text": "The emergency braking module shall implement brake pressure regulation up to 150 bar.",
+        "system": "SyntheticBrakes"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-DIS-04",
+        "text": "The hydraulic actuator shall conflict with rapid deceleration requests when fluid temperature exceeds 120C.",
+        "system": "SyntheticBrakes"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Conflicts",
+      "heuristic_prediction": "Implements",
+      "heuristic_evidence": "RULE-REF-IMPLEMENTS: keyword 'implement' present in text A.",
+      "llm_prediction": "Conflicts",
+      "llm_confidence": 5,
+      "llm_rationale": "Thermal limit prevents execution of emergency braking under high temperatures.",
+      "review_reasons": ["disagreement"],
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Heuristic classified as Implements, LLM classified as Conflicts.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}

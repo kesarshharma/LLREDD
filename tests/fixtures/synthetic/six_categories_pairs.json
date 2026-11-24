@@ -1,0 +1,188 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "six_categories_pairs",
+  "description": "Synthetic requirement pairs demonstrating all six formal dependency categories.",
+  "pairs": [
+    {
+      "id": "SYNTH-CAT-001",
+      "req_a": {
+        "id": "REQ-SYNTH-CAT-01",
+        "text": "The brake assist controller requires active sensor telemetry from the front radar.",
+        "system": "SyntheticActiveSafety"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-CAT-02",
+        "text": "The front radar sensor shall transmit object distance vectors at 50 Hz.",
+        "system": "SyntheticActiveSafety"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Requires",
+      "heuristic_prediction": "Requires",
+      "heuristic_evidence": "RULE-REF-ID-DIRECT: 'requires' in text A.",
+      "llm_prediction": "Requires",
+      "llm_confidence": 5,
+      "llm_rationale": "Controller cannot operate without telemetry feed.",
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Explicit prerequisite dependency.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-CAT-002",
+      "req_a": {
+        "id": "REQ-SYNTH-CAT-03",
+        "text": "The powertrain supervisory controller shall implement torque vectoring distribution.",
+        "system": "SyntheticDrivetrain"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-CAT-04",
+        "text": "The vehicle shall maintain stability under high lateral acceleration.",
+        "system": "SyntheticDrivetrain"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Implements",
+      "heuristic_prediction": "Implements",
+      "heuristic_evidence": "RULE-REF-IMPLEMENTS: 'implement' in text A.",
+      "llm_prediction": "Implements",
+      "llm_confidence": 5,
+      "llm_rationale": "Torque vectoring distribution realizes high-level stability requirement.",
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Realization of abstract requirement.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-CAT-003",
+      "req_a": {
+        "id": "REQ-SYNTH-CAT-05",
+        "text": "The maximum vehicle speed shall be governed strictly to 30 km/h in valet mode.",
+        "system": "SyntheticChassis"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-CAT-06",
+        "text": "The high-speed highway cruise mode shall allow vehicle cruising speeds up to 130 km/h.",
+        "system": "SyntheticChassis"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Conflicts",
+      "heuristic_prediction": "Conflicts",
+      "heuristic_evidence": "RULE-NEG-CONFLICT: Mutually exclusive speed limits.",
+      "llm_prediction": "Conflicts",
+      "llm_confidence": 5,
+      "llm_rationale": "30 km/h valet limit directly conflicts with 130 km/h cruise mode.",
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Mutually exclusive speed bounds.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-CAT-004",
+      "req_a": {
+        "id": "REQ-SYNTH-CAT-07",
+        "text": "The system shall gradually dim cabin lighting to avoid driver distraction.",
+        "system": "SyntheticCabin"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-CAT-08",
+        "text": "The cabin lighting dimming rate shall not exceed 10% per second.",
+        "system": "SyntheticCabin"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Details",
+      "heuristic_prediction": "Details",
+      "heuristic_evidence": "RULE-REF-ID-DIRECT: 'gradually' in text A with rate specification in text B.",
+      "llm_prediction": "Details",
+      "llm_confidence": 5,
+      "llm_rationale": "Requirement B provides specific numerical parameters detailing requirement A.",
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Parameter refinement.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-CAT-005",
+      "req_a": {
+        "id": "REQ-SYNTH-CAT-09",
+        "text": "The front ultrasonic sensor shall detect static obstacles within a range of 2.5 meters.",
+        "system": "SyntheticSensors"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-CAT-10",
+        "text": "The rear ultrasonic sensor shall detect stationary objects within a distance of 2.5 meters.",
+        "system": "SyntheticSensors"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Is similar",
+      "heuristic_prediction": "Is similar",
+      "heuristic_evidence": "RULE-SIM-JACCARD: High token overlap across front/rear sensor specifications.",
+      "llm_prediction": "Is similar",
+      "llm_confidence": 5,
+      "llm_rationale": "Identical sensing functionality across different vehicle mounting locations.",
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Functional similarity and overlap.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-CAT-006",
+      "req_a": {
+        "id": "REQ-SYNTH-CAT-11",
+        "text": "The digital radio receiver shall decode DAB+ audio streams with bitrates up to 192 kbps.",
+        "system": "SyntheticInfotainment"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-CAT-12",
+        "text": "The tire pressure monitoring module shall alert the driver if pressure drops below 2.0 bar.",
+        "system": "SyntheticTire"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "No_dependency",
+      "heuristic_prediction": "No_dependency",
+      "heuristic_evidence": "RULE-ABSTAIN: No cross-system connection.",
+      "llm_prediction": "No_dependency",
+      "llm_confidence": 5,
+      "llm_rationale": "Infotainment radio broadcast is functionally independent of tire pressure monitoring.",
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 5,
+        "evidence": "Complete functional independence.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}

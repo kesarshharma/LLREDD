@@ -109,6 +109,8 @@ class ReviewItem(BaseModel):
     status: QueueStatus = Field(default=QueueStatus.PENDING, description="Current queue status")
     priority: int = Field(default=ReviewPriority.LOW, ge=1, le=5, description="Priority rank (1=Highest, 5=Lowest)")
     human_decision: Optional[HumanDecision] = Field(default=None, description="Recorded human decision if reviewed")
+    synthetic: bool = Field(default=False, description="Whether this item is synthetic test data")
+    source_identity: Optional[str] = Field(default=None, description="Identifier of the dataset or fixture source")
     created_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
 
@@ -448,6 +450,8 @@ class ReviewQueueManager:
             evidence=f"Human Reviewer ({reviewer_id}) decision: {decision_type.value.upper()}. Notes: {reviewer_notes}",
             review_notes=reviewer_notes,
             dataset_version="human-verified-v1.0",
+            synthetic=item.synthetic,
+            source_identity=item.source_identity,
         )
 
         verified_pair = RequirementPair(
@@ -456,6 +460,8 @@ class ReviewQueueManager:
             req_b=Requirement(id=item.req_b_id, text=item.req_b_text, system=item.system_name or "GenericSystem"),
             dependency_type=parsed_label if new_status == VerificationStatus.VERIFIED else None,
             provenance=verified_prov,
+            synthetic=item.synthetic,
+            source_identity=item.source_identity,
         )
 
         logger.info(f"Recorded decision {decision_type.value} for item {item.queue_id} by {reviewer_id}.")
@@ -533,3 +539,38 @@ class ReviewQueueManager:
             data = json.load(f)
 
         return [ReviewItem.model_validate(item) for item in data]
+
+    @classmethod
+    def export_verified_pairs(
+        cls,
+        items: List[ReviewItem],
+        allow_synthetic: bool = False,
+    ) -> List[RequirementPair]:
+        """Export human-verified RequirementPairs from items with ACCEPTED or CORRECTED decisions.
+
+        If allow_synthetic is False (default), synthetic test items are strictly excluded from
+        the exported verified dataset.
+        """
+        verified_pairs: List[RequirementPair] = []
+        excluded_synthetic_count = 0
+
+        for item in items:
+            if item.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED) and item.human_decision and item.human_decision.final_label:
+                if item.synthetic and not allow_synthetic:
+                    excluded_synthetic_count += 1
+                    continue
+                _, pair = cls.record_decision(
+                    item,
+                    item.status,
+                    final_label=item.human_decision.final_label,
+                    reviewer_id=item.human_decision.reviewer_id,
+                    reviewer_notes=item.human_decision.reviewer_notes
+                )
+                verified_pairs.append(pair)
+
+        if excluded_synthetic_count > 0:
+            logger.warning(
+                f"Excluded {excluded_synthetic_count} synthetic review items from verified export (allow_synthetic=False)."
+            )
+
+        return verified_pairs

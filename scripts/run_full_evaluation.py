@@ -44,7 +44,16 @@ from leredd.data_models import (
     RequirementPair,
     VerificationStatus,
 )
-from leredd.evaluation import Evaluator
+from leredd.evaluation import (
+    ContaminationError,
+    Evaluator,
+    GroundTruthViolationError,
+    build_safe_retrieval_pool,
+    check_ground_truth_eligibility,
+    validate_ground_truth,
+    validate_predictions,
+    validate_system_disjoint_splits,
+)
 from leredd.utils import load_pairs_json
 from leredd.baselines.bert_classifier import BERTBaseline
 from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline

@@ -1,0 +1,15 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "fixture_version": "1.0.0",
+  "description": "Index manifest of deterministic synthetic review fixtures for LEREDD testing.",
+  "fixtures": [
+    "ambiguous_pairs.json",
+    "disagreement_pairs.json",
+    "abstention_pairs.json",
+    "low_confidence_pairs.json",
+    "parsing_failure_pairs.json",
+    "missing_metadata_pairs.json",
+    "six_categories_pairs.json"
+  ]
+}

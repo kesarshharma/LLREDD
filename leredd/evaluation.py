@@ -1,37 +1,423 @@
-"""Evaluation suite for computing metrics, confusion matrices, and statistical significance tests."""
+"""Evaluation suite for computing metrics, confusion matrices, and statistical significance tests.
+
+Provides strict ground truth guardrails, prediction alignment verification,
+contamination detection, and system-disjoint split validation.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
-from typing import List, Dict, Tuple
 from scipy.stats import fisher_exact
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support
 from statsmodels.stats.contingency_tables import mcnemar
-from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
+
 from leredd.data_models import (
-    RequirementPair,
-    Prediction,
     DependencyType,
     EvaluationMetric,
     EvaluationReport,
+    Prediction,
+    RequirementPair,
+    VerificationStatus,
 )
+from leredd.synthetic import is_synthetic
 
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Guardrail Exceptions
+# ---------------------------------------------------------------------------
+
+class EvaluationGuardrailError(ValueError):
+    """Base exception for evaluation guardrail violations."""
+
+    def __init__(self, message: str, invalid_ids: Optional[List[str]] = None):
+        super().__init__(message)
+        self.invalid_ids: List[str] = invalid_ids or []
+
+
+class GroundTruthViolationError(EvaluationGuardrailError):
+    """Raised when ground truth contains unverified, provisional, synthetic, or unlabeled records."""
+
+
+class PredictionAlignmentError(EvaluationGuardrailError):
+    """Raised when predictions have duplicate IDs or missing coverage for ground truth."""
+
+
+class SplitOverlapError(EvaluationGuardrailError):
+    """Raised when train/test/dev partitions have overlapping systems, requirements, or pairs."""
+
+
+class ContaminationError(RuntimeError):
+    """Raised when test/dev requirement IDs leak into the retrieval pool."""
+
+
+# ---------------------------------------------------------------------------
+# Ground Truth and Split Guardrail Functions
+# ---------------------------------------------------------------------------
+
+def validate_ground_truth(
+    pairs: List[RequirementPair],
+    partition_label: str = "EVAL",
+    strict: bool = True,
+    allow_legacy: bool = True,
+    reject_unlabeled: bool = True,
+) -> Tuple[List[RequirementPair], List[str]]:
+    """Validate ground truth records ensuring strictly verified, non-synthetic, and labeled pairs.
+
+    Enforces fail-closed evaluation guardrails:
+      - Empty dataset raises GroundTruthViolationError when strict=True.
+      - Synthetic fixtures (synthetic=True or source_identity='synthetic-review-tests')
+        are strictly rejected and must never enter benchmark evaluations.
+      - Pairs with dependency_type=None are rejected when reject_unlabeled=True.
+      - Pairs with non-verified provenance status (PROVISIONAL, PENDING_REVIEW, REJECTED)
+        are rejected.
+      - Legacy pairs (no provenance) are accepted conditionally when allow_legacy=True,
+        or rejected when allow_legacy=False.
+
+    Returns:
+        (eligible_pairs, warnings)
+
+    Raises:
+        GroundTruthViolationError: when violations are found and strict=True.
+    """
+    if not pairs:
+        msg = f"[{partition_label}] Ground truth dataset is empty."
+        logger.warning(msg)
+        if strict:
+            raise GroundTruthViolationError(msg, invalid_ids=[])
+        return [], [msg]
+
+    eligible: List[RequirementPair] = []
+    warnings_found: List[str] = []
+    synthetic_ids: List[str] = []
+    unlabeled_ids: List[str] = []
+    unverified_ids: List[str] = []
+    legacy_ids: List[str] = []
+
+    for pair in pairs:
+        # Check synthetic guardrail
+        if is_synthetic(pair):
+            synthetic_ids.append(pair.id)
+            warnings_found.append(
+                f"[{partition_label}] REJECTED pair {pair.id}: Synthetic record detected. "
+                "Synthetic data must never enter benchmark evaluation."
+            )
+            continue
+
+        # Check unlabeled guardrail
+        if pair.dependency_type is None:
+            unlabeled_ids.append(pair.id)
+            warnings_found.append(
+                f"[{partition_label}] Pair {pair.id} has dependency_type=None (unlabeled)."
+            )
+            continue
+
+        # Check verification provenance
+        if pair.provenance is not None:
+            status = pair.provenance.status
+            if status != VerificationStatus.VERIFIED:
+                unverified_ids.append(pair.id)
+                warnings_found.append(
+                    f"[{partition_label}] REJECTED pair {pair.id}: VerificationStatus={status.value if status else None}. "
+                    "Only verified pairs (VerificationStatus.VERIFIED) are eligible as ground truth."
+                )
+                continue
+            warnings_found.append(
+                f"[{partition_label}] Pair {pair.id} provenance status={status.value} — accepted."
+            )
+        else:
+            # Legacy record without provenance
+            if not allow_legacy:
+                legacy_ids.append(pair.id)
+                warnings_found.append(
+                    f"[{partition_label}] REJECTED pair {pair.id}: Legacy record with no provenance "
+                    "rejected under strict verification mode (allow_legacy=False)."
+                )
+                continue
+            warnings_found.append(
+                f"[{partition_label}] Pair {pair.id} has NO provenance metadata "
+                "(legacy annotated record). Accepted conditionally."
+            )
+
+        eligible.append(pair)
+
+    # In strict mode, raise if violations occurred
+    if strict:
+        if synthetic_ids:
+            raise GroundTruthViolationError(
+                f"[{partition_label}] Synthetic records rejected from ground truth ({len(synthetic_ids)} pairs): {synthetic_ids}",
+                invalid_ids=synthetic_ids,
+            )
+        if reject_unlabeled and unlabeled_ids:
+            raise GroundTruthViolationError(
+                f"[{partition_label}] Unlabeled pairs rejected from ground truth ({len(unlabeled_ids)} pairs): {unlabeled_ids}",
+                invalid_ids=unlabeled_ids,
+            )
+        if unverified_ids:
+            raise GroundTruthViolationError(
+                f"[{partition_label}] Unverified pairs rejected from ground truth ({len(unverified_ids)} pairs): {unverified_ids}",
+                invalid_ids=unverified_ids,
+            )
+        if legacy_ids:
+            raise GroundTruthViolationError(
+                f"[{partition_label}] Legacy pairs without provenance rejected ({len(legacy_ids)} pairs): {legacy_ids}",
+                invalid_ids=legacy_ids,
+            )
+
+    return eligible, warnings_found
+
+
+def check_ground_truth_eligibility(
+    pairs: List[RequirementPair],
+    partition_label: str = "EVAL",
+    strict: bool = True,
+    allow_legacy: bool = True,
+    reject_unlabeled: bool = False,
+) -> Tuple[List[RequirementPair], List[str]]:
+    """Legacy compatibility wrapper for validate_ground_truth.
+
+    Matches legacy behavior where unlabeled pairs are skipped with warning when reject_unlabeled=False.
+    """
+    return validate_ground_truth(
+        pairs=pairs,
+        partition_label=partition_label,
+        strict=strict,
+        allow_legacy=allow_legacy,
+        reject_unlabeled=reject_unlabeled,
+    )
+
+
+def validate_predictions(
+    ground_truth: List[RequirementPair],
+    predictions: List[Prediction],
+) -> None:
+    """Validate that predictions cover all ground truth pairs with no duplicates.
+
+    Raises:
+        PredictionAlignmentError: if duplicate prediction IDs are found or
+                                  if predictions do not cover all ground truth IDs.
+    """
+    seen_ids: Set[str] = set()
+    duplicate_ids: List[str] = []
+    for pred in predictions:
+        if pred.pair_id in seen_ids:
+            duplicate_ids.append(pred.pair_id)
+        seen_ids.add(pred.pair_id)
+
+    if duplicate_ids:
+        unique_dups = sorted(set(duplicate_ids))
+        raise PredictionAlignmentError(
+            f"Duplicate prediction IDs detected ({len(unique_dups)}): {unique_dups}",
+            invalid_ids=unique_dups,
+        )
+
+    gt_ids = {pair.id for pair in ground_truth}
+    missing_ids = sorted(gt_ids - seen_ids)
+    if missing_ids:
+        raise PredictionAlignmentError(
+            f"Missing prediction coverage for ground truth pair IDs ({len(missing_ids)}): {missing_ids}",
+            invalid_ids=missing_ids,
+        )
+
+
+def validate_system_disjoint_splits(
+    train_pairs: List[RequirementPair],
+    test_pairs: List[RequirementPair],
+    dev_pairs: Optional[List[RequirementPair]] = None,
+) -> Dict[str, Any]:
+    """Verify that train, test, and optional dev partitions are strictly disjoint.
+
+    Checks:
+      1. Disjoint system identities.
+      2. Disjoint requirement IDs.
+      3. Disjoint pair IDs.
+
+    Returns:
+        Audit report dict.
+
+    Raises:
+        SplitOverlapError: with invalid_ids if any overlap is detected across partitions.
+    """
+    dev_list = dev_pairs or []
+
+    def get_systems(pairs: List[RequirementPair]) -> Set[str]:
+        systems = set()
+        for p in pairs:
+            if p.req_a.system:
+                systems.add(p.req_a.system)
+            if p.req_b.system:
+                systems.add(p.req_b.system)
+        return systems
+
+    def get_req_ids(pairs: List[RequirementPair]) -> Set[str]:
+        req_ids = set()
+        for p in pairs:
+            req_ids.add(p.req_a.id)
+            req_ids.add(p.req_b.id)
+        return req_ids
+
+    def get_pair_ids(pairs: List[RequirementPair]) -> Set[str]:
+        return {p.id for p in pairs}
+
+    train_systems = get_systems(train_pairs)
+    test_systems = get_systems(test_pairs)
+    dev_systems = get_systems(dev_list)
+
+    train_reqs = get_req_ids(train_pairs)
+    test_reqs = get_req_ids(test_pairs)
+    dev_reqs = get_req_ids(dev_list)
+
+    train_pairs_ids = get_pair_ids(train_pairs)
+    test_pairs_ids = get_pair_ids(test_pairs)
+    dev_pairs_ids = get_pair_ids(dev_list)
+
+    overlap_systems = (train_systems & test_systems) | (train_systems & dev_systems) | (test_systems & dev_systems)
+    overlap_reqs = (train_reqs & test_reqs) | (train_reqs & dev_reqs) | (test_reqs & dev_reqs)
+    overlap_pairs = (train_pairs_ids & test_pairs_ids) | (train_pairs_ids & dev_pairs_ids) | (test_pairs_ids & dev_pairs_ids)
+
+    audit_report = {
+        "train_size": len(train_pairs),
+        "test_size": len(test_pairs),
+        "dev_size": len(dev_list),
+        "train_systems": sorted(train_systems),
+        "test_systems": sorted(test_systems),
+        "dev_systems": sorted(dev_systems),
+        "overlapping_systems": sorted(overlap_systems),
+        "overlapping_req_ids": sorted(overlap_reqs),
+        "overlapping_pair_ids": sorted(overlap_pairs),
+        "is_disjoint": not (overlap_systems or overlap_reqs or overlap_pairs),
+    }
+
+    if overlap_systems or overlap_reqs or overlap_pairs:
+        invalid_ids = sorted(overlap_systems | overlap_reqs | overlap_pairs)
+        details = []
+        if overlap_systems:
+            details.append(f"systems: {sorted(overlap_systems)}")
+        if overlap_reqs:
+            details.append(f"req_ids: {sorted(overlap_reqs)}")
+        if overlap_pairs:
+            details.append(f"pair_ids: {sorted(overlap_pairs)}")
+        msg = f"System-disjoint split violation detected ({', '.join(details)})."
+        logger.warning(msg)
+        raise SplitOverlapError(msg, invalid_ids=invalid_ids)
+
+    return audit_report
+
+
+def build_safe_retrieval_pool(
+    train_pairs: List[RequirementPair],
+    test_pairs: List[RequirementPair],
+    dev_pairs: Optional[List[RequirementPair]] = None,
+    strict: bool = True,
+) -> Tuple[List[RequirementPair], Dict[str, Any]]:
+    """Build a retrieval pool strictly isolated from test and dev requirement IDs.
+
+    Returns (safe_pool, leakage_audit_report).
+    Raises ContaminationError if leakage is detected and strict=True.
+    """
+    excluded_req_ids: Set[str] = set()
+    excluded_pair_ids: Set[str] = set()
+
+    for pair in test_pairs:
+        excluded_req_ids.add(pair.req_a.id)
+        excluded_req_ids.add(pair.req_b.id)
+        excluded_pair_ids.add(pair.id)
+
+    for pair in (dev_pairs or []):
+        excluded_req_ids.add(pair.req_a.id)
+        excluded_req_ids.add(pair.req_b.id)
+        excluded_pair_ids.add(pair.id)
+
+    contaminated_pairs: List[str] = []
+    safe_pool: List[RequirementPair] = []
+
+    for pair in train_pairs:
+        pair_req_ids = {pair.req_a.id, pair.req_b.id}
+        leaked_ids = pair_req_ids & excluded_req_ids
+        if leaked_ids or pair.id in excluded_pair_ids:
+            contaminated_pairs.append(
+                f"Pair {pair.id} (req_ids: {sorted(pair_req_ids)}) "
+                f"overlaps with test/dev excluded IDs: {sorted(leaked_ids or {pair.id})}"
+            )
+        else:
+            safe_pool.append(pair)
+
+    leakage_audit = {
+        "excluded_req_ids": sorted(excluded_req_ids),
+        "excluded_pair_ids": sorted(excluded_pair_ids),
+        "train_pool_size": len(train_pairs),
+        "contaminated_pairs": contaminated_pairs,
+        "contaminated_count": len(contaminated_pairs),
+        "safe_pool_size": len(safe_pool),
+        "contamination_detected": len(contaminated_pairs) > 0,
+    }
+
+    if contaminated_pairs:
+        msg = (
+            f"CONTAMINATION DETECTED: {len(contaminated_pairs)} training pair(s) "
+            f"contain requirement IDs present in test/dev set. "
+            f"Details: {contaminated_pairs}"
+        )
+        logger.warning(msg)
+        if strict:
+            raise ContaminationError(msg)
+
+    logger.info(
+        f"Contamination guard: {len(train_pairs)} train -> "
+        f"{len(contaminated_pairs)} removed -> {len(safe_pool)} safe retrieval pool."
+    )
+    return safe_pool, leakage_audit
+
+
+# ---------------------------------------------------------------------------
+# Evaluator Class
+# ---------------------------------------------------------------------------
 
 class Evaluator:
-    """Computes classification metrics and statistical tests matching paper methodology."""
+    """Computes classification metrics, guardrail validations, and statistical tests."""
+
+    validate_ground_truth = staticmethod(validate_ground_truth)
+    check_ground_truth_eligibility = staticmethod(check_ground_truth_eligibility)
+    validate_predictions = staticmethod(validate_predictions)
+    validate_system_disjoint_splits = staticmethod(validate_system_disjoint_splits)
+    build_safe_retrieval_pool = staticmethod(build_safe_retrieval_pool)
 
     @staticmethod
     def evaluate(
         ground_truth: List[RequirementPair],
         predictions: List[Prediction],
         system_name: str = "EvaluationSystem",
-        model_name: str = "LEREDD"
+        model_name: str = "LEREDD",
+        strict_ground_truth: bool = True,
+        allow_legacy: bool = True,
+        validate_alignment: bool = True,
     ) -> EvaluationReport:
-        """Compute Accuracy, Precision, Recall, F1 (per-class & macro/weighted) and confusion matrix."""
+        """Compute Accuracy, Precision, Recall, F1 (per-class & macro/weighted) and confusion matrix.
+
+        Applies fail-closed ground-truth validation and prediction alignment checks before metrics calculation.
+        """
+        eligible_gt, _ = validate_ground_truth(
+            ground_truth,
+            partition_label=system_name,
+            strict=strict_ground_truth,
+            allow_legacy=allow_legacy,
+            reject_unlabeled=True,
+        )
+
+        if validate_alignment:
+            validate_predictions(eligible_gt, predictions)
+
         # Align predictions by pair_id
         pred_map = {p.pair_id: p.dependency_type for p in predictions}
 
         y_true: List[str] = []
         y_pred: List[str] = []
 
-        for pair in ground_truth:
+        for pair in eligible_gt:
             gt_type = pair.dependency_type.value if pair.dependency_type else DependencyType.NO_DEPENDENCY.value
             pred_type = pred_map.get(pair.id, DependencyType.NO_DEPENDENCY).value
             y_true.append(gt_type)
@@ -39,8 +425,7 @@ class Evaluator:
 
         labels = [dt.value for dt in DependencyType]
 
-        # Compute scikit-learn precision, recall, f1
-        acc = float(accuracy_score(y_true, y_pred))
+        acc = float(accuracy_score(y_true, y_pred)) if y_true else 0.0
         p_per, r_per, f1_per, supp_per = precision_recall_fscore_support(
             y_true, y_pred, labels=labels, zero_division=0
         )
@@ -58,10 +443,9 @@ class Evaluator:
                 precision=float(p_per[idx]),
                 recall=float(r_per[idx]),
                 f1_score=float(f1_per[idx]),
-                support=int(supp_per[idx])
+                support=int(supp_per[idx]),
             )
 
-        # Compute confusion matrix mapping
         cm = confusion_matrix(y_true, y_pred, labels=labels)
         cm_dict: Dict[str, Dict[str, int]] = {}
         for i, label_true in enumerate(labels):
@@ -76,14 +460,14 @@ class Evaluator:
             macro_f1=float(f1_macro),
             weighted_f1=float(f1_weight),
             per_class_metrics=per_class_metrics,
-            confusion_matrix=cm_dict
+            confusion_matrix=cm_dict,
         )
 
     @staticmethod
     def run_mcnemar_test(
         ground_truth: List[RequirementPair],
         preds_a: List[Prediction],
-        preds_b: List[Prediction]
+        preds_b: List[Prediction],
     ) -> Tuple[float, float]:
         """Perform McNemar's test comparing overall predictive accuracy of two models.
 
@@ -92,9 +476,6 @@ class Evaluator:
         map_a = {p.pair_id: p.dependency_type for p in preds_a}
         map_b = {p.pair_id: p.dependency_type for p in preds_b}
 
-        # Contingency table:
-        # both_correct, a_correct_b_wrong
-        # a_wrong_b_correct, both_wrong
         n00 = n01 = n10 = n11 = 0
 
         for pair in ground_truth:
@@ -119,19 +500,19 @@ class Evaluator:
             result = mcnemar(table, exact=True)
             return float(result.statistic), float(result.pvalue)
         except Exception:
-            # Manual McNemar formula fallback
             b, c = n10, n01
             if b + c == 0:
                 return 0.0, 1.0
             stat = ((abs(b - c) - 1.0) ** 2) / (b + c)
-            # Rough p-value approximation or default threshold
             p_val = 1.0 if stat == 0 else max(0.001, 1.0 / (1.0 + stat))
             return float(stat), float(p_val)
 
     @staticmethod
     def run_fishers_exact_test(
-        tp_a: int, fp_a: int,
-        tp_b: int, fp_b: int
+        tp_a: int,
+        fp_a: int,
+        tp_b: int,
+        fp_b: int,
     ) -> Tuple[float, float]:
         """Perform Fisher's Exact test comparing precision/recall contingency tables.
 
@@ -143,12 +524,15 @@ class Evaluator:
 
     @staticmethod
     def compute_wilson_score_interval(
-        k: int, n: int, confidence: float = 0.95
+        k: int,
+        n: int,
+        confidence: float = 0.95,
     ) -> Dict[str, float]:
         """Compute Wilson score confidence interval for binomial proportion k/n."""
         if n == 0:
             return {"point_estimate": 0.0, "lower_bound": 0.0, "upper_bound": 0.0, "margin_pp": 0.0}
         import scipy.stats as stats
+
         p_hat = k / n
         z = float(stats.norm.ppf(1 - (1 - confidence) / 2))
         denom = 1 + z**2 / n
@@ -167,8 +551,8 @@ class Evaluator:
     def analyze_mcnemar(
         ground_truth: List[RequirementPair],
         preds_a: List[Prediction],
-        preds_b: List[Prediction]
-    ) -> Dict:
+        preds_b: List[Prediction],
+    ) -> Dict[str, Any]:
         """Perform McNemar's test and return complete contingency table & discordant details."""
         map_a = {p.pair_id: p.dependency_type for p in preds_a}
         map_b = {p.pair_id: p.dependency_type for p in preds_b}

@@ -1,6 +1,7 @@
 """Data models for SRS Requirements, Pairs, LLM Predictions, and Evaluation Metrics."""
 
 from enum import Enum
+import re
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
@@ -54,7 +55,7 @@ class DependencyType(str, Enum):
             return cls.DETAILS
         elif "Similar" in clean:
             return cls.IS_SIMILAR
-        elif "No" in clean or "None" in clean or "Independent" in clean:
+        elif bool(re.search(r"\bno\b", clean, re.IGNORECASE)) or "None" in clean or "Independent" in clean:
             return cls.NO_DEPENDENCY
         
         # Fallback exact string match
@@ -143,6 +144,14 @@ class AnnotationProvenance(BaseModel):
         default=None,
         description="Dataset version identifier (e.g. 'v1.0', 'v2.0-provisional')"
     )
+    synthetic: bool = Field(
+        default=False,
+        description="Whether this annotation is synthetic test data"
+    )
+    source_identity: str | None = Field(
+        default=None,
+        description="Source identity for synthetic or benchmark fixtures"
+    )
 
     @field_validator("predicted_label", "accepted_label", mode="before")
     @classmethod
@@ -168,6 +177,14 @@ class RequirementPair(BaseModel):
     provenance: AnnotationProvenance | None = Field(
         default=None,
         description="Annotation provenance metadata tracking label origin and review state"
+    )
+    synthetic: bool = Field(
+        default=False,
+        description="Whether this requirement pair is synthetic test data"
+    )
+    source_identity: str | None = Field(
+        default=None,
+        description="Source identity for synthetic or benchmark fixtures"
     )
 
     @field_validator("dependency_type", mode="before")

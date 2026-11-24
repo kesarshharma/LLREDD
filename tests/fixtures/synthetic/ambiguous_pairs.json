@@ -1,0 +1,70 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "ambiguous_pairs",
+  "description": "Synthetic requirement pairs with ambiguous, underspecified, or multi-interpretation requirements needing human review.",
+  "pairs": [
+    {
+      "id": "SYNTH-AMB-001",
+      "req_a": {
+        "id": "REQ-SYNTH-AMB-01",
+        "text": "The system shall maintain acceptable response time during typical operating conditions.",
+        "system": "SyntheticSystem"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-AMB-02",
+        "text": "Latency for critical subsystem events should be reasonably minimized where feasible.",
+        "system": "SyntheticSystem"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Is similar",
+      "heuristic_prediction": null,
+      "heuristic_evidence": "No rule triggered due to underspecified terms.",
+      "llm_prediction": "Is similar",
+      "llm_confidence": 2,
+      "llm_rationale": "Requirements discuss similar general latency expectations but lack verifiable metrics.",
+      "review_reasons": ["low_confidence", "explicit_flag"],
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 2,
+        "evidence": "Ambiguous performance statements.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    },
+    {
+      "id": "SYNTH-AMB-002",
+      "req_a": {
+        "id": "REQ-SYNTH-AMB-03",
+        "text": "The controller shall optimize energy consumption while vehicle speed is moderate.",
+        "system": "SyntheticSystem"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-AMB-04",
+        "text": "Power distribution shall adhere to normal automotive economy guidelines.",
+        "system": "SyntheticSystem"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Requires",
+      "heuristic_prediction": null,
+      "heuristic_evidence": "No rule triggered.",
+      "llm_prediction": "Requires",
+      "llm_confidence": 2,
+      "llm_rationale": "Possible prerequisite relationship depending on definition of normal guidelines.",
+      "review_reasons": ["low_confidence", "explicit_flag"],
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 2,
+        "evidence": "Vague conditions.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}

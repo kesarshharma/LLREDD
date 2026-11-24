@@ -1,0 +1,40 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "parsing_failure_pairs",
+  "description": "Synthetic requirement pairs where LLM returned malformed, unparseable, or truncated response text.",
+  "pairs": [
+    {
+      "id": "SYNTH-PARSEFAIL-001",
+      "req_a": {
+        "id": "REQ-SYNTH-PF-01",
+        "text": "The battery management system shall disconnect main contactors upon overcurrent detection.",
+        "system": "SyntheticBMS"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-PF-02",
+        "text": "The pyrotechnic safety switch shall trigger within 5ms of extreme deceleration.",
+        "system": "SyntheticSafety"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Conflicts",
+      "heuristic_prediction": null,
+      "heuristic_evidence": "No rule triggered.",
+      "llm_prediction": null,
+      "llm_confidence": null,
+      "llm_rationale": "LLM response malformed: missing **Dependency_Type:** header.",
+      "llm_raw_response": "I think there is some relationship between contactors and pyrotechnic switch, but could not determine category.",
+      "review_reasons": ["llm_failure"],
+      "provenance": {
+        "source": "llm",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": null,
+        "evidence": "Malformed LLM output failed regex parser.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}
