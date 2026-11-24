@@ -1,6 +1,7 @@
 """Tests for Typer CLI commands."""
 
 import json
+from click import unstyle
 
 from typer.testing import CliRunner
 from leredd.cli import app
@@ -110,7 +111,7 @@ def test_cli_annotate_requires_explicit_annotator(tmp_path):
     pairs_file.write_text("[]", encoding="utf-8")
     result = runner.invoke(app, ["annotate", "--input", str(pairs_file)], color=False)
     assert result.exit_code != 0
-    assert "--annotator" in result.output
+    assert "--annotator" in unstyle(result.output)
 
 
 def test_cli_detect(tmp_path, monkeypatch):

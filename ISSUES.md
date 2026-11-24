@@ -537,7 +537,8 @@ The long-running 8501 process displayed an import error for `PredictionValidatio
 
 ### [ISSUE-058] Linux CI failed on platform-dependent test assertions
 - **Severity:** Medium (blocks hosted CI verification)
-- **Status:** Locally corrected; hosted rerun pending.
+- **Status:** Partially corrected; hosted rerun exposed two remaining ANSI-sensitive assertions. Awaiting verification after the current correction.
 - **Description:** The supplied Linux/Python 3.11 coverage run collected 456 tests and ended with 449 passed, 4 skipped, and 3 failed. Two CLI tests searched colored Click output for `--annotator`/`--reviewer`; ANSI sequences split the option's two leading hyphens. The independent-annotation path test inferred the project root from `tmp_path`, which resolved to `/` on Linux and triggered a filesystem permission error before the intended protected-path guard.
-- **Resolution:** The two CLI assertions invoke `CliRunner` with color disabled; the path test derives the project root from `__file__`. No application behavior or assertions were weakened.
-- **Verification:** The three focused tests pass on local Windows; the complete local suite reports **456 passed**. The GitHub Actions workflow has not rerun against this fix, so hosted CI remains unverified.
+- **Resolution:** The path test derives the project root from `__file__`. CLI assertions now strip ANSI styling with `click.unstyle()` before checking option spellings; `color=False` alone did not suppress Rich formatting in hosted Linux. No application behavior or assertions were weakened.
+- **Verification:** The hosted run for commit `1643a7840bd475f5da8bd1b00b361b48ec11ec0a` reported **450 passed, 2 failed, 4 skipped**; both failures were the remaining ANSI-sensitive CLI assertions. After normalization, both focused tests passed and the full local coverage suite reported **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0. Hosted CI remains unverified until rerun.
+- **Next action:** Publish this correction and inspect both Python matrix jobs. The Docker job remains unverified because the local Docker engine is unavailable.

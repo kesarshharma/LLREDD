@@ -38,6 +38,11 @@
 
 ## Active Environment & Project Status
 - **Environment Status (2026-11-24):** Project `.venv` uses Python 3.13.3 and pytest 9.1.1. Latest unrestricted `.venv\Scripts\python.exe -m pytest tests/`: **400 passed, no warnings in 107.33s**, exit code 0 (PowerShell duration 111.87s). `test_api_root` passed. A before/after SHA-256 manifest matched for all 312 files under `data/`. The earlier Starlette TestClient deprecation warning was removed by switching API tests to in-process ASGI transport; no packages were installed.
+
+### Current hosted CI follow-up (TASK-P58, 2026-11-24)
+- Local `main` and `origin/main` are at `1643a7840bd475f5da8bd1b00b361b48ec11ec0a`; the worktree was clean for tracked files before this test-only correction. The hosted run failed on two Linux CLI output assertions because Rich ANSI escapes split `--annotator` and `--reviewer`, despite `CliRunner(color=False)`. The protected-path regression passed.
+- Updated both assertions to normalize output with `click.unstyle()`. Focused tests: **2 passed**. Full coverage suite: **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0, **88% coverage**. New logs and coverage are under untracked `.pytest-tmp`.
+- Immediate next action: publish only this portability correction and its tracking updates, then verify Python 3.10 and 3.11 hosted results. CI and Docker remain unverified; this is not a claim of full product completion.
 - **Documentation & Artifact Alignment Status (TASK-P8-02 / P8-04):**
   - **`README.md`**: Fully aligned with project title *"Improving Automated Requirement Dependency Detection Using Large Language Models and Semi-Automated Dataset Generation"*. Documents both workflows (Dataset Generation & LEREDD Detection), 6 dependency categories, architecture Mermaid diagrams, CLI/API/UI/Docker instructions, empirical results, and honest limitations.
   - **`docs/ARCHITECTURE.md`**: Created detailed technical specifications covering candidate generation, provisional labeling, human review queue, system-disjoint splitting, dynamic ICL hybrid retrieval, confidence thresholding, and provenance schemas.

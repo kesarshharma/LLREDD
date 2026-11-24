@@ -551,3 +551,9 @@ This document records key architectural, design, and implementation decisions fo
 - **Context:** Docker CLI presence alone does not prove that image builds or Compose runtime checks are possible. The local service is stopped and cannot be opened by the current process, even in the elevated attempt.
 - **Decision:** Keep Docker image/runtime verification open until Docker Desktop and its Linux engine are running; do not infer success from Compose configuration parsing or past API/UI health checks.
 - **Verification:** `com.docker.service` reported `Stopped`/`Manual`; `docker info` timed out; elevated service start returned an access/open error. No build or container mutation was performed.
+
+## ADR-072 — Normalize CLI error output before portable assertions (2026-11-24)
+- **Status:** Accepted
+- **Context:** GitHub's Linux run showed that Typer/Rich can emit ANSI control sequences inside option names even when `CliRunner(color=False)` is used. Literal substring assertions therefore failed on Linux but passed locally on Windows.
+- **Decision:** Strip ANSI styling with Click's `unstyle()` before asserting the CLI option spelling. Preserve the checks for command failure and, for queue decisions, no queue mutation.
+- **Verification:** Both affected tests passed locally; the full local coverage run passed **453 tests**, skipped **3**, emitted **12 deprecation warnings**, and measured **88%** coverage. Hosted rerun is still required.

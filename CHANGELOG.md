@@ -651,3 +651,8 @@ All notable changes, task completions, and verification events for the Minor Pro
 - Read-only service inspection found `com.docker.service` stopped with `Manual` start type and no Docker Desktop/backend process. A bounded `docker info` probe timed out.
 - Attempted to start the service with an elevated `Start-Service`; Windows returned “Cannot open 'com.docker.service' service on computer '.'.” The service remains stopped. No image was built and no container was created or changed.
 - Docker verification remains open until a local administrator starts Docker Desktop and its Linux engine becomes available.
+
+### TASK-P58 — Normalize hosted Linux CLI error output assertions (2026-11-24)
+- The hosted run on commit `1643a7840bd475f5da8bd1b00b361b48ec11ec0a` failed two CLI tests: Rich ANSI styling split the expected option names. Updated those tests to remove ANSI styling before checking `--annotator` and `--reviewer`; application behavior and assertion intent are unchanged.
+- Verification: focused regressions **2 passed**. Full local coverage suite **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0; **88%** coverage. Test log and coverage outputs were written only to `.pytest-tmp/task-p58-coverage`.
+- Hosted workflow still needs a new run after publication. No packages were installed; no datasets or application code were changed.

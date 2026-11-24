@@ -448,3 +448,9 @@ This roadmap tracks the development phases for extending the LEREDD repository i
   - **Verification:** Focused regressions: **3 passed in 12.45s**. Full local Windows suite: **456 passed in 171.76s**, exit 0 (PowerShell duration **178.50s**). `git diff --check` passed before tracking updates.
   - **CI-equivalent verification:** `python -m pytest tests/ --cov=leredd --cov-report=xml --cov-report=term-missing` with coverage outputs directed to `.pytest-tmp/task-p57-coverage` completed **456 passed in 197.92s**, **89% coverage**, exit 0 (PowerShell duration **206.61s**). The pre-existing root `.coverage` hash was unchanged.
   - **Boundary:** This does not prove the hosted Linux job now passes; it must be rerun after the reviewed changes are published. Docker verification is still blocked by an unresponsive daemon.
+
+- [x] **TASK-P58: Normalize Rich CLI output in Linux regression assertions**
+  - **Finding:** The hosted run for commit `1643a7840bd475f5da8bd1b00b361b48ec11ec0a` reached pytest and reported **450 passed, 2 failed, 4 skipped**. Rich emitted ANSI escapes inside the option names even with `CliRunner(color=False)`; the independent-annotation protected-path regression passed.
+  - **Fix:** Strip ANSI styling with Click's `unstyle()` before asserting option spellings. Keep command-failure and queue-nonmutation assertions.
+  - **Verification:** Both regressions passed locally. Full local coverage run: **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0; coverage **88%**. Logs and coverage were isolated under `.pytest-tmp/task-p58-coverage`.
+  - **Next:** Publish the reviewed test-only correction and inspect Python 3.10/3.11 Actions results. Hosted CI is not yet verified green; Docker remains separately blocked by local daemon availability.

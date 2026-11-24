@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from leredd.cli import app
@@ -218,7 +219,7 @@ def test_cli_queue_decide_rejects_blank_reviewer_without_mutating_queue(tmp_path
     ], color=False)
 
     assert result.exit_code != 0
-    assert "--reviewer" in result.output
+    assert "--reviewer" in unstyle(result.output)
     assert queue_path.read_text(encoding="utf-8") == before
     assert ReviewQueueManager.load_queue(str(queue_path))[0].status == QueueStatus.PENDING
 
