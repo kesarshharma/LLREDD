@@ -434,3 +434,9 @@ This roadmap tracks the development phases for extending the LEREDD repository i
   - Duplicate prediction-ID errors now identify the invalid pair IDs. Updated contamination fixtures to declare pair-level strategy so they continue testing contamination filtering without claiming to be system-disjoint.
   - Verification: focused evaluation suite **45 passed in 35.98s**; full suite **428 passed in 35.96s**, exit 0. All **412** files under `data/` retained their hashes; `git diff --check` passed.
   - Remote review: Parts 2/3 artifacts are present at public `main` (`ec11351`), but local and remote histories diverge and the remote snapshot had two reproduced test failures. No Git state or remote branch was changed.
+
+- [x] **TASK-P54: Reconcile and publish the approved software checkpoint**
+  - Preserved both the three local commits and two newer `origin/main` commits with a merge; no reset, rebase, branch switch, or force push was used.
+  - Published as `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` on `origin/main`.
+  - Verification: post-merge full suite **456 passed in 106.86s**; merge-specific evaluation/synthetic tests **42 passed**; `git diff --check` passed. Remote `refs/heads/main` exactly matched the pushed hash.
+  - Kept local-only the PDF, imported replication JSON, external replication materials, generated reports, temporary logs/caches, and scratch files. Source rights and label-crosswalk blockers remain open.

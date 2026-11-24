@@ -532,3 +532,10 @@ This document records key architectural, design, and implementation decisions fo
 - **Decision:** For a declared system-disjoint strategy, validate actual system identities, requirement IDs, and pair IDs before any ground-truth filtering or model fit. Raise a typed error carrying invalid IDs; include a passing split-integrity audit in the report.
 - **Compatibility:** Pair-level fixtures remain pair-level and continue exercising retrieval contamination behavior; non-system strategies are not subjected to the system-disjoint check. Duplicate prediction errors preserve the existing ValueError compatibility while carrying IDs.
 - **Verification:** TASK-P53 focused suite 45 passed; full suite 428 passed; all 412 `data/` file hashes unchanged.
+
+## ADR-069 — Publish software checkpoint without local imported research assets (2026-11-24)
+- **Status:** Accepted for the TASK-P54 checkpoint.
+- **Context:** The worktree included substantial software changes alongside a PDF, imported replication datasets, external replication materials, generated reports, caches, and temporary outputs. Redistribution rights for the local imported package remain unresolved.
+- **Decision:** Publish reviewed application code, tests, and project documentation only. Keep `Minor_Project.pdf`, local imported replication JSON and spreadsheets, external package files, generated reports, caches, and scratch artifacts untracked. Reconcile divergent history with a merge commit; do not rewrite either side's history.
+- **Verification:** `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` is the verified `origin/main` tip; post-merge suite **456 passed**. The newer remote demo SRS and `.gitattributes` commits were already on GitHub and were preserved as remote ancestors.
+- **Consequence:** The repository's software checkpoint is published, but local replication evaluation remains blocked until rights and label semantics are documented.

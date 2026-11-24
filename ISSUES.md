@@ -529,3 +529,7 @@ The long-running 8501 process displayed an import error for `PredictionValidatio
 - **Resolution:** Revalidate actual loaded partitions before scoring and report the integrity audit. Duplicate prediction coverage errors now name invalid IDs.
 - **Verification:** Focused evaluation suite **45 passed**; full suite **428 passed**, exit 0; all 412 files under `data/` hash-identical before and after.
 - **Boundary:** The check follows the declared split strategy. It does not establish that source labels or provenance are truthful, and it does not validate research quality.
+
+### TASK-P54 checkpoint status (2026-11-24)
+- Local synthetic-data and split-integrity safeguards are now included in public `origin/main` at `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` after a non-destructive merge with the latest remote commits.
+- The post-merge local suite passed **456 tests**. This does not resolve ISSUE-056: imported replication rights and the `Implemented by` crosswalk still require authoritative evidence. Hosted CI has not yet been verified for this commit.

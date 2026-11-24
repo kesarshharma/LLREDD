@@ -320,3 +320,10 @@
 - Public `origin/main` is `ec11351c2ff027352aaa2060a1c84ebe6a65fe39`; local HEAD is `979e71dbb1fd6fc00b05d375b5d152fc40d47260`. GitHub comparison reports two remote-only commits and three local-only commits. Local `origin/main` tracking ref is stale at `979e71d`; do not treat `git status -sb` as proof of remote synchronization.
 - The pushed Part 2/3 fixture and guardrail files exist on GitHub but are absent from this local worktree. Local synthetic safeguards and evaluation tests overlap in purpose but use different APIs. The public remote task snapshot previously reproduced two test failures under Python 3.13; these changes have not been pushed or reconciled with that branch.
 - Next: review a non-destructive reconciliation plan for the diverged history, then obtain explicit approval for an exact staged file list before any commit/push. Keep `Minor_Project.pdf`, source replication files, generated reports, and temp artifacts excluded.
+
+## TASK-P54 — Checkpoint publication (2026-11-24)
+- Local software/docs/test checkpoint `41345ca` was merged with the two newer `origin/main` commits; merge commit `d419d998e8ed9c05098c4fb0bf4f6789df08c74f` is now the verified `origin/main` tip.
+- Post-merge verification completed with **456 passed in 106.86s**. `git diff --check` passed. No package installation or destructive Git operation occurred.
+- Untracked local work remains preserved: `.pytest-tmp/`, `Minor_Project.pdf`, `data/replication/`, `data/evaluation/replication/`, `data/evaluation/ui_runs/`, `docs/external/`, and `tmp/`.
+- Active blockers: dataset redistribution rights and authoritative label crosswalk; real independent human annotations/adjudication; verify hosted CI rerun and Docker management/build status.
+- Immediate next action: inspect the new GitHub Actions run for `d419d99`, then proceed with rights-cleared human review planning. Do not report research metrics from the synthetic tests or pending imported labels.

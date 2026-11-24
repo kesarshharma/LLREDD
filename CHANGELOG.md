@@ -633,3 +633,9 @@ All notable changes, task completions, and verification events for the Minor Pro
 - Added direct and runner-level regressions. Corrected two contamination fixtures to declare their actual pair-level split strategy.
 - Verification: focused evaluation tests **45 passed**; full suite **428 passed in 35.96s**, exit 0. All **412** files under `data/` retained identical SHA-256 hashes; `git diff --check` passed.
 - Reviewed the public Parts 1–3 task snapshot. Its fixture/guardrail files are pushed, but the remote branch and local worktree diverge. No staging, commit, or push was performed.
+
+### TASK-P54 — Publish reconciled software checkpoint (2026-11-24)
+- Committed the reviewed 72-file local software/documentation/test checkpoint as `41345ca`, then merged the two newer `origin/main` commits. Resolved API/guardrail conflicts while preserving strict label normalization, local verified-provenance checks, and the remote synthetic fixture workflow.
+- Corrected a remote test fixture to supply a reviewer identity required by the human-decision API; unknown dependency labels are explicitly rejected, with the supported `No` shorthand retained.
+- Verification: focused merge regression group **42 passed**; post-merge complete suite **456 passed in 106.86s**; `git diff --check` passed.
+- Pushed merge commit `d419d998e8ed9c05098c4fb0bf4f6789df08c74f`; `git ls-remote origin refs/heads/main` matched. Imported replication datasets, external package files, historical/generated reports, temp outputs, and `Minor_Project.pdf` were not added by the local checkpoint.
