@@ -3,7 +3,12 @@
 import json
 import httpx
 from unittest.mock import patch
-from leredd.llm import MockLLMClient, LLMClientFactory, OllamaLLMClient
+from leredd.llm import (
+    DiskCachedLLMClient,
+    MockLLMClient,
+    LLMClientFactory,
+    OllamaLLMClient,
+)
 from leredd.config import LEREDDConfig
 
 
@@ -22,6 +27,48 @@ def test_llm_factory():
     cfg = LEREDDConfig(llm_provider="mock")
     client = LLMClientFactory.create(cfg)
     assert client is not None
+
+
+def test_disk_cache_separates_model_ids_for_same_prompt(tmp_path):
+    class NamedClient:
+        provider = "test-provider"
+
+        def __init__(self, model):
+            self.model = model
+            self.calls = 0
+
+        def generate(self, prompt, temperature=0.2):
+            self.calls += 1
+            return self.model, {"provider": self.provider, "model": self.model}
+
+    model_a = NamedClient("model-a")
+    model_b = NamedClient("model-b")
+    cached_a = DiskCachedLLMClient(model_a, cache_dir=str(tmp_path))
+    cached_b = DiskCachedLLMClient(model_b, cache_dir=str(tmp_path))
+
+    assert cached_a.generate("same prompt")[0] == "model-a"
+    assert cached_b.generate("same prompt")[0] == "model-b"
+    assert cached_a.generate("same prompt")[0] == "model-a"
+    assert model_a.calls == 1
+    assert model_b.calls == 1
+
+
+def test_disk_cached_client_uncached_generation_bypasses_cache(tmp_path):
+    class CountingClient:
+        def __init__(self):
+            self.calls = 0
+
+        def generate(self, prompt, temperature=0.2):
+            self.calls += 1
+            return f"fresh-{self.calls}", {"cost_usd": 0.0}
+
+    inner = CountingClient()
+    client = DiskCachedLLMClient(inner, cache_dir=str(tmp_path))
+
+    assert client.generate("same prompt")[0] == "fresh-1"
+    assert client.generate_uncached("same prompt")[0] == "fresh-2"
+    assert client.generate("same prompt")[0] == "fresh-1"
+    assert inner.calls == 2
 
 
 class MockResponse:

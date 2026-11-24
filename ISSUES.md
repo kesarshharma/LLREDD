@@ -6,19 +6,150 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 
 ## Active Issues & Blockers
 
-### [ISSUE-022] CI Pytest Console Entry Point Fails to Import Repository Modules
+### [ISSUE-039] Low confidence was silently converted into `No_dependency`
+- **Severity:** High / Label integrity
+- **Status:** ✅ Resolved locally (TASK-P27, 2026-11-24)
+- **Description:** `ResponseParser` changed any non-negative prediction at or below the confidence cutoff into `No_dependency`. This conflated uncertainty with an explicit negative prediction and conflicted with the proposal's requirement to identify uncertain outputs for review.
+- **Resolution:** Predictions now preserve the parsed dependency class and separately record `validation_status` and `validation_threshold`. Low confidence is marked `requires_review`; high confidence is marked `passed_threshold`; a negative threshold is recorded as `threshold_disabled`. Streamlit displays the screening result and explains that it is not ground-truth verification or calibrated probability. Evaluation reports summarize screening coverage and review rate.
+- **Verification:** Focused parser/API/UI/ablation/evaluation tests: **72 passed, 12 warnings in 105.79s**. Full suite: **347 passed, 12 warnings in 102.35s**, exit 0. All 12 warnings are the existing tqdm UTC datetime deprecation.
+- **Boundary:** The UI offers an explicit action to add low-confidence predictions to the pending review queue (TASK-P28); it does not verify them. MockLLM always reports confidence 5, so review-rate behavior and utility require a variable-confidence controlled fixture or an authorized real provider. UI verification used AppTest rather than a fresh browser session.
+
+#### ISSUE-039 follow-up (TASK-P28, 2026-11-24)
+- A controlled Streamlit AppTest produced a low-confidence `Requires` prediction and explicitly queued it as `pending` with provisional machine provenance and a `low_confidence` reason. The label was retained and no human decision/export occurred.
+- The UI queue JSON is atomically replaced. Separately, shared queue persistence stages queue and manifest JSON in sibling temporary files and atomically replaces each. Regression: a simulated failure of the first replacement leaves both pre-existing files unchanged and removes temporary files. The pair of replacements is not a cross-file transaction; failure of the second replacement can leave the manifest stale while the queue is authoritative. The UI derives counts directly from queue items and does not depend on a sidecar manifest.
+- Full suite: **348 passed, 12 warnings in 89.15s**, exit 0 (PowerShell duration 97.71s). The remaining confidence-screening utility limitation is empirical, not a queue-routing defect.
+
+### [ISSUE-040] Confidence-cutoff copy mislabeled a maximum score as “low confidence”
+- **Severity:** Low / UI clarity
+- **Status:** ✅ Resolved locally (TASK-P30, 2026-11-24)
+- **Description:** The inclusive review rule routes scores at or below the configured cutoff. At cutoff 5, a 5/5 score was correctly routed but the UI and queue rationale described it as “low confidence,” which contradicted the displayed score.
+- **Resolution:** Detection and review pages now explain that the score is at or below the selected cutoff; queue rationale uses the same precise wording. The stored `low_confidence` enum string and inclusive behavior remain compatible.
+- **Verification:** Focused UI/queue tests **16 passed**; full suite **348 passed, 12 warnings**, exit 0.
+- **Boundary:** This only clarifies the rule. It does not establish that self-reported confidence is calibrated or that the cutoff improves review quality.
+
+### [ISSUE-041] Streamlit reloaded the dense embedding model for each detection
+- **Severity:** Medium / Repeated interaction latency
+- **Status:** ✅ Resolved locally for repeated runs within one Streamlit session (TASK-P31, 2026-11-24)
+- **Evidence:** The detection click constructed a fresh `LEREDDDetector`; with the local 10-pair annotated pool and dense retrieval, that detector lazily constructed `EmbeddingModel` each time. The session did not retain that resource.
+- **Resolution:** Keep the loaded embedder in session state keyed by embedding model and cache directory, and pass it into subsequent detectors. A regression performs two controlled UI detections and asserts the second uses the same embedder object. Full suite: **348 passed, 12 warnings**, exit 0.
+- **Boundary:** First dense use still incurs model initialization. This change establishes object reuse, not an end-to-end latency measurement; concurrency and clean-machine model download were not tested.
+
+### [ISSUE-042] Hybrid example retrieval did not use available requirement metadata
+- **Severity:** Medium (proposal alignment and retrieval experiment capability)
+- **Status:** 🟡 Software capability added locally (TASK-P32); empirical contribution remains unverified.
+- **Description:** The detection-time hybrid retriever fused dense and BM25 rankings but did not use structured component/subsystem metadata, although the proposal identifies metadata alignment as an intended hybrid signal when such values are available.
+- **Implementation:** Added optional `Requirement.component` and `Requirement.subsystem` fields and a conditional exact-overlap RRF ranking, including existing `system` metadata. It is omitted when no target metadata or candidate overlap exists. Regression tests verify a controlled ranking change and no signal for generic/missing metadata.
+- **Evidence gap:** Current legacy/imported datasets do not establish reliable component/subsystem coverage. No retrieval effectiveness, weight tuning, or ablation result is claimed. Use a rights-cleared dataset with dependable structured metadata and verified labels before making a research claim.
+- **TASK-P34 update:** The values can now be supplied explicitly through CLI sidecar JSON, API extraction, and Streamlit extraction; API/UI detection inputs also accept target metadata. Focused tests passed (50); full suite passed (364, 12 existing warnings), and 11 replication/evaluation artifact hashes were unchanged. This closes the interface-wiring gap but does not add metadata to historical datasets or establish retrieval effectiveness.
+
+### [ISSUE-043] Provisional labeling could not collect multiple LLM votes
+- **Severity:** Medium (proposal's semi-automated labeling and uncertainty review)
+- **Status:** 🟡 Software capability added locally (TASK-P33); independent model behavior and empirical value unverified.
+- **Description:** The CLI offered heuristic, single-LLM, or heuristic-plus-single-LLM labeling, so it could not collect multiple model predictions as the proposal calls for where feasible.
+- **Resolution:** Added opt-in `multi_llm` mode and `--models` support for multi-model or hybrid runs. Only unanimous valid votes yield a provisional label; disagreements and incomplete votes are unresolved and record each model vote for review. CLI and controlled-client tests pass.
+- **Remaining:** No real provider/model was invoked. The default MockLLM path is a software test, not independent model evidence. Human review and label-quality evaluation remain required.
+
+### [ISSUE-044] LLM disk cache omitted provider/model identity
+- **Severity:** High for multi-model comparison validity
+- **Status:** ✅ Resolved locally (TASK-P33).
+- **Evidence:** Cache keys previously used client class, temperature, and prompt but not the configured model ID. Same-provider models given the same prompt could therefore receive a cached response produced by another model.
+- **Resolution:** Versioned cache keys now include provider class and model ID in addition to temperature and prompt. A regression confirms separate model outputs and same-model cache reuse.
+- **Compatibility note:** Legacy keys are deliberately not read because they cannot prove which model produced a stored response; a first request may call the provider again. No real provider was called during this fix.
+
+### [ISSUE-038] Retrieval strategy cannot be selected per detection request
+- **Severity:** Medium (supported workflow access)
+- **Status:** ✅ Resolved locally (TASK-P26, 2026-11-24); fresh-browser inspection of the updated Streamlit selector remains pending.
+- **Description:** The detector supported dense, BM25, and hybrid retrieval, but API requests and the Streamlit detection form did not expose a per-request choice. Users could not select the fast sparse path through those interfaces.
+- **Resolution:** Added validated optional API request fields for single and batch detection and a Streamlit selector; omission retains the configured default. API/UI regression tests cover pass-through and invalid API values. Focused tests: **20 passed**; full suite: **346 passed, 12 existing warnings**, exit 0. A local synthetic BM25 API smoke returned 200 without SentenceTransformer initialization.
+- **Remaining verification:** Restart Streamlit and visually inspect the selector; measure dense cold-start latency separately. No retrieval-quality benchmark was run and no result is claimed.
+
+### [ISSUE-036] Zero-shot API prediction unnecessarily initialized SentenceTransformer
+- **Severity:** Medium / First-request latency
+- **Status:** ✅ Resolved locally (TASK-P24, 2026-11-24)
+- **Files:** `leredd/detector.py`, `tests/test_detector.py`
+- **Description:** Detector construction eagerly initialized the embedding model even when detection had no in-context examples and RAG was disabled. On a cold API process, this made a MockLLM zero-shot request pay model startup cost despite embeddings being unused.
+- **Resolution:** Deferred embedding and dense/RAG retriever construction until retrieval accesses them. Added a regression that fails if zero-shot detection constructs `EmbeddingModel`. Focused tests: **46 passed**; full suite: **342 passed, 12 warnings**, exit 0. Live local MockLLM `/detect` returned HTTP 200 in **164 ms**, with no model-load log. All 11 replication/evaluation artifact hashes were unchanged.
+- **Boundary:** Dense retrieval still loads the model on first use. Hosted CI and clean-cache model initialization remain separate verification work.
+
+### [ISSUE-037] Extractor truncated alphabetic requirement-ID suffixes
+- **Severity:** Medium / Requirement identity integrity
+- **Status:** ✅ Resolved locally (TASK-P25, 2026-11-24)
+- **Files:** `leredd/utils.py`, `tests/test_utils.py`
+- **Description:** The explicit identifier pattern accepted `REQ-ADB-001` but stopped at the first alphabetic segment in IDs such as `[REQ-DEMO-A]`. Multiple requirements could therefore receive the same truncated ID and candidate generation could collapse them.
+- **Resolution:** Accept complete `REQ-` identifiers containing alphanumeric segments separated by hyphens or colons. Regression checks preserve three alphabetic suffixes and produce three distinct pairs. The README CLI sequence then completed with 3 extracted requirements, 3 BM25 pairs, 3 provisional records, and 3 pending queue items. Focused tests: **21 passed**; full suite: **343 passed, 12 warnings**, exit 0.
+- **Boundary:** The pattern remains limited to `REQ-` identifiers; validate other identifier conventions against rights-cleared SRS examples before broadening further.
+
+### [ISSUE-032] Requirement Extraction Discarded Source Document and Location
+- **Severity:** Medium / Dataset traceability
+- **Status:** ✅ Resolved locally (TASK-P19, 2026-11-23)
+- **Files:** `leredd/data_models.py`, `leredd/utils.py`, `api/routes.py`, `ui/app.py`, extraction tests.
+- **Description:** Requirements extracted from files were all labeled `source=regex_extraction`; the source filename and statement line were not retained. This weakened auditability and prevented reliable document-level grouping from extracted file data.
+- **Resolution:** Added optional `Requirement.source_location`; file extraction records a basename in `source` and the extracted-text line in `source_location`. API accepts an optional `source_name`; UI uses the uploaded filename or `pasted SRS`. Legacy records without the field still load. Focused extraction/API/UI/CLI tests: **43 passed in 24.11s**; full suite: **329 passed, 12 warnings in 87.12s**, exit 0. No `data/` hashes changed.
+- **Boundary:** PDF and DOCX locations refer to line positions in extracted text, not guaranteed physical page or paragraph coordinates. API callers that omit `source_name` retain the generic `regex_extraction` source label.
+
+### [ISSUE-031] Generated Requirement IDs Could Collide With Explicit SRS IDs
+- **Severity:** Medium / Requirement identity integrity
+- **Status:** ✅ Resolved locally (TASK-P18, 2026-11-23)
+- **Files:** `leredd/utils.py`, `tests/test_utils.py`
+- **Description:** The text extractor incremented its synthetic ID counter only for requirements without explicit IDs. An explicit `REQ-<SYSTEM>-001` followed by an ID-less requirement could therefore assign the same ID to both records.
+- **Resolution:** Reserve IDs explicitly present in the input and advance the synthetic counter past occupied IDs, regardless of where the explicit ID appears. Preserve short IDs such as `[REQ-1]` and system-prefixed bracketed IDs. Full suite after related extraction changes: **329 passed, 12 warnings in 87.12s**, exit 0. Hashes of existing `data/` files were unchanged.
+
+### [ISSUE-030] Dependency Graph Node Labels Overlap in the Dashboard
+- **Severity:** Low / UI readability
+- **Status:** ✅ Resolved locally (TASK-P16, 2026-11-23)
+- **Files:** `ui/app.py`, `tests/test_ui_workflows.py`
+- **Description:** The legacy dependency graph drew all requirement IDs permanently; nearby nodes caused overlapping labels in the running dashboard.
+- **Resolution:** Removed always-visible node text and moved requirement IDs and statements into interactive hover details. Brave visual inspection confirmed the graph is legible; a regression checks the node trace exposes hover details without persistent text. UI workflow suite: **8 passed**; full suite: **326 passed**.
+
+### [ISSUE-022] Hosted CI Depends on Local-Only Replication Datasets
 - **Severity:** Medium / CI Reliability
-- **Status:** Locally mitigated; hosted matrix verification pending.
-- **File:** `.github/workflows/ci.yml`
-- **Description:** GitHub Actions run #4 failed during collection on Python 3.10 and was cancelled on Python 3.11. The console invocation `pytest tests/ --cov=...` produced `ModuleNotFoundError` for top-level `scripts` and `api` modules (six collection errors shown in the Python 3.10 log), before test execution.
-- **Mitigation:** The workflow now invokes `python -m pytest`, which places the current repository root on `sys.path`. Local coverage suite passed **264 tests, 38 warnings**, exit 0. Keep this issue open until the hosted matrix rerun completes successfully.
+- **Status:** Local tests pass; latest hosted run failed on `ec11351` (run `45328417724`). Keep open.
+- **Files:** `tests/test_replication_loader.py`, `tests/test_replication_dataset.py`, `tests/test_replication_evaluation_runner.py`.
+- **Description:** The pushed `python -m pytest` workflow collected 264 tests, but 17 failed because `data/replication/*.json` are local untracked assets absent from GitHub checkout. The Python 3.10 job failed and the Python 3.11 job was canceled; Docker was skipped.
+- **Resolution in local worktree:** Loader and runner behavior tests now use synthetic expected-count records; source-data-specific count checks run only when the private files are present. Full local suite: **310 passed, 12 warnings**, exit 0. The exact coverage command in a complete tracked-file checkout without replication assets passed **309 tests with 1 intentional skip and 12 warnings**, exit 0. Keep open until the updated hosted matrix and Docker step complete successfully.
+- **Latest hosted evidence (2026-11-24):** Run `45328417724` on `ec11351c2ff027352aaa2060a1c84ebe6a65fe39` completed with failure. Python 3.11 failed at “Run Pytest with Coverage”; Python 3.10 was canceled during dependency installation; Docker was skipped. See [run 45328417724](https://github.com/kesarshharma/LLREDD/actions/runs/45328417724). The local 428-pass suite does not resolve hosted CI.
+
+### [ISSUE-029] Evaluation Reports Hard-Coded Legacy Split Metadata
+- **Severity:** Medium / Evaluation Integrity
+- **Status:** Resolved locally (TASK-P12; regression and full suite passed).
+- **Files:** `scripts/run_full_evaluation.py`, `tests/test_safe_evaluation.py`.
+- **Description:** Per-model notes and limitations stated ADB/APA/TJA systems, fixed sample counts, and provenance-free labels even when the runner was given a different split. This could misdescribe a report and its evidence.
+- **Resolution:** Derive system names, partition counts, provenance-free counts, label coverage, and small-sample wording from the supplied split and eligibility results. Regression uses differently named synthetic systems and checks the generated report. No checked-in evaluation report was changed.
+
+### [ISSUE-025] Candidate Retrieval Strategy and Exhaustiveness Were Misreported
+- **Severity:** Medium / Candidate Integrity
+- **Status:** Resolved (TASK-P10, 2026-10-14; full suite 298 passed).
+- **Files:** `leredd/candidate_generator.py`, `leredd/retrieval.py`, `leredd/embeddings.py`, candidate/retrieval tests.
+- **Description:** DENSE candidate generation used pair-oriented example retrieval rather than ranking Requirements, HYBRID generation did not fuse the intended dense and lexical requirement rankings, and retrieval output could be marked exhaustive merely because it was not truncated. The fitted TF-IDF fallback also learned incompatible feature spaces when query and corpus were encoded in separate calls.
+- **Resolution:** Added `RequirementRetriever`, fused DENSE and BM25 rankings with RRF for HYBRID, checked generated unique pairs against n(n-1)/2, and used stable hashing fallback features. Added controlled regression coverage for strategy ranking, feature-space consistency, and manifest semantics.
+
+### [ISSUE-026] Queue CLI Could Corrupt or Misstate Verified Exports
+- **Severity:** High / Annotation Integrity
+- **Status:** Resolved (TASK-P10, 2026-10-14; full suite 298 passed).
+- **Files:** `leredd/cli.py`, `tests/test_ui_and_queue_integration.py`.
+- **Description:** `queue-create` could ignore an unreadable existing queue and overwrite it. `queue-decide` could ignore malformed verified output and replace it, export rejected/non-verified records, duplicate a record on retry, or leave a partially written JSON file.
+- **Resolution:** Validate existing JSON before mutation, export only explicitly verified labeled decisions, replace matching pair IDs idempotently, and publish through a sibling temporary file followed by atomic replace. Failure regressions verify the previous export and queue are preserved where applicable.
+
+### [ISSUE-027] Verified Status Could Contradict Annotation Provenance
+- **Severity:** High / Evaluation Integrity
+- **Status:** Resolved (TASK-P11; full suite 309 passed, 12 warnings, exit 0).
+- **Files:** `leredd/evaluation.py`, `scripts/run_full_evaluation.py`, `leredd/cli.py`, `leredd/review_queue.py`, `ui/app.py`, `tests/test_safe_evaluation.py`, `tests/test_cli.py`, `tests/test_review_queue.py`, `tests/test_ui_and_queue_integration.py`, `tests/test_system_verification.py`.
+- **Description:** Evaluation previously trusted `VerificationStatus.VERIFIED` alone, accepting provenance that named an LLM as the source, lacked a human actor or accepted label, or recorded a final label different from the scored dependency label.
+- **Resolution:** Shared eligibility validation now requires a matching verified human annotation with an annotator/reviewer identity and matching `accepted_label`, and rejects generic placeholder identities. CLI and queue-manager decisions require an explicit nonblank reviewer/annotator; Streamlit starts new decisions with a blank identity and clears historical placeholders for re-review. Provenance-free legacy records retain the warning-based compatibility path.
+
+### [ISSUE-028] Default System Split Could Leave Development Empty With Three Systems
+- **Severity:** Medium / Evaluation Readiness
+- **Status:** Resolved (TASK-P11; full suite 309 passed, 12 warnings, exit 0).
+- **Files:** `leredd/dataset_splitter.py`, `tests/test_dataset_splitter.py`.
+- **Description:** Independent rounding allocated two of three systems to training and the remaining one to test under default 60/20/20 ratios, producing an empty development partition despite three available systems.
+- **Resolution:** System allocation reserves one system for each requested partition that fits, then assigns remaining systems by largest remainder. Explicit mappings and single-system behavior remain unchanged.
 
 ### [ISSUE-018] MEDIUM: Generated Pair Labels Must Not Masquerade as Verified Ground Truth
 - **Severity:** Medium / Data Semantics
 - **Status:** Resolved (TASK-P9-13, 2026-10-12)
 - **Files:** `leredd/utils.py`, `leredd/candidate_generator.py`, `leredd/data_models.py`, `leredd/cli.py`, `leredd/evaluation.py`, `scripts/run_full_evaluation.py`, downstream loaders/retrievers and regression tests
 - **Description:** Generated candidates previously could receive `No_dependency` before annotation, making an unknown relation indistinguishable from an explicit negative label. Label handling also accepted ambiguous unknown text, and some consumers defaulted missing labels to `No_dependency`.
-- **Resolution:** Both generation paths now preserve unknown labels as `None` and provisional provenance. Unknown explicit labels fail validation. Evaluation requires complete prediction coverage and rejects provenance-bearing ground truth unless status is exactly `VERIFIED`; retrieval and supervised fitting ignore unlabeled/unverified examples. The legacy pairs command's interactive annotation stores an explicit human VERIFIED decision. Regression coverage and the full suite pass (**236 passed**, 40 warnings).
+- **Resolution:** Both generation paths now preserve unknown labels as `None` and provisional provenance. Unknown explicit labels fail validation. Evaluation requires complete prediction coverage and rejects provenance-bearing ground truth unless status is verified with coherent human source/identity/final-label provenance; retrieval and supervised fitting ignore unlabeled/unverified examples. The legacy pairs command's interactive annotation stores an explicit human VERIFIED decision. Regression coverage and full suite pass.
 
 ### [ISSUE-019] HIGH: API Configuration Endpoint Could Return the OpenAI Secret
 - **Severity:** High / Credential Exposure
@@ -74,11 +205,13 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 - **Severity:** High / Verification Gap
 - **Status:** Resolved (TASK-P9-12, 2026-10-12)
 - **Description:** Earlier complete-suite attempts were interrupted. A later attempt in the restricted sandbox stalled because Windows asyncio's socket-pair fallback waited on local TCP `accept()` during Starlette TestClient portal startup.
-- **Resolution:** Reconfirmed outside the restricted sandbox on 2026-10-13: latest `python -m pytest tests/` completed with **264 passed, 38 warnings in 170.21s**, exit code 0 (173.83s outer duration). All API tests, including `test_api_root`, passed. The Windows TCP socket-pair fallback stall recurred in the sandbox and did not recur outside it; no API code change was needed.
+- **Resolution:** Reconfirmed outside the restricted sandbox on 2026-11-24: current `.venv\Scripts\python.exe -m pytest tests/` completed with **400 passed, no warnings in 107.33s**, exit 0 (PowerShell duration 111.87s). `test_api_root` passed. `tests/test_api.py` now uses HTTPX `ASGITransport` instead of Starlette TestClient; the full run exercised the replacement and removed the deprecation warning. A SHA-256 manifest confirmed all 312 `data/` files were unchanged.
+- **Execution boundary:** A focused run with the replacement transport still did not finish in the restricted Windows sandbox; the prior stack evidence attributes this to asyncio Proactor socket-pair startup being denied there. The focused test and full suite passed outside that boundary. This is not evidence of an application route defect.
+- **TASK-P45 follow-up:** Current `httpx2` PyPI metadata requires Python >=3.11 while `pyproject.toml` declares Python >=3.10. The in-process ASGI transport avoids adding that dependency.
 
 ### [ISSUE-009] CRITICAL: MockLLMClient Ignores Retrieved Examples — Ablation Invariance Under Mock Backend
 - **Severity:** Critical / Architectural Caveat
-- **Status:** 🟡 Open — Prompt Forwarding Verified, Mock Backend Limitation Documented (updated 2026-10-11)
+- **Status:** 🟡 Open — Reports now mark retrieval/ICL ablations non-informative under MockLLM (TASK-P17); empirical effect remains unverified.
 - **Files:** `leredd/llm.py` (`MockLLMClient.generate()`, lines 179–210), `leredd/detector.py`, `tests/test_detector.py`
 - **Verified System Behavior:**
   - `LEREDDDetector` correctly retrieves dynamic in-context examples via dense/BM25/hybrid strategies and passes them into `PromptBuilder.build()`.
@@ -93,24 +226,23 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 - **Evaluation Caveat & Recommendation:**
   - The ablation study dimensions `retrieval_strategy` and `in_context_examples` in the offline evaluation report show no signal and are not meaningful when evaluated using `MockLLMClient`.
   - Evaluating the actual empirical effect of dynamic in-context examples requires running a real LLM (`OpenAILLMClient` / `OllamaLLMClient`, which forward the full prompt without modification) or conducting a separately designed evaluation using an appropriate controlled test double.
+  - **TASK-P17 reporting correction:** New primary and ablation reports carry `ablation_validity` metadata explicitly marking both dimensions `not_informative_with_mock_backend`. This does not resolve the need for an empirical-capable backend.
 
 ### [ISSUE-010] CRITICAL: MockLLMClient Always Outputs Confidence=5 — Threshold Ablation Invariant Under Mock Backend
 - **Severity:** Critical / Architectural Caveat
-- **Status:** 🟡 Open — Threshold Mechanism Verified, Mock Backend Invariance Documented (updated 2026-10-11)
+- **Status:** 🟡 Open — Confidence screening is implemented locally (TASK-P27), but its empirical utility remains unverified because MockLLM emits fixed confidence.
 - **Files:** `leredd/llm.py` (lines 189, 193, 197, 201, 205, 209), `leredd/detector.py`, `tests/test_detector.py`, `tests/test_ablation_benchmark.py`
-- **Verified System Behavior:**
-  - `ResponseParser.parse()` threshold re-annotation logic works correctly: predictions with `confidence <= confidence_threshold` (and `confidence_threshold >= 0`) are accurately reclassified to `DependencyType.NO_DEPENDENCY`.
-  - The threshold mechanism is empirically tested and passing in existing unit and ablation tests:
-    - `test_response_parser_threshold_reannotation` in `tests/test_detector.py:7–20` verifies that raw predictions with confidence 3 are re-annotated under threshold 4 and retained under threshold 2.
-    - `test_threshold_behavior_reannotation_vs_disabled` in `tests/test_ablation_benchmark.py:91–112` uses a controlled test double (`LowConfMockLLM` returning confidence 3) to prove end-to-end re-annotation under threshold 4 versus passthrough under disabled threshold -1.
+- **Verified System Behavior (TASK-P27):**
+  - Low-confidence outputs retain their parsed label and carry `validation_status=requires_review`; outputs above the threshold carry `passed_threshold`; `-1` records `threshold_disabled`.
+  - `Prediction.validation_threshold` and evaluation report `confidence_screening` counts preserve the configured screening decision. The Streamlit page displays a human-review recommendation without presenting the prediction as verified truth.
+  - Regression tests confirm confidence changes status, never `dependency_type`, and exercise serialized screening coverage.
 - **Unresolved Mock Backend Limitation:**
   - `MockLLMClient.generate()` hardcodes `confidence = 5` across all six heuristic classification branches.
   - In `scripts/run_full_evaluation.py`, the ablation compares threshold enabled (`confidence_threshold = 4`) against threshold disabled (`confidence_threshold = -1`).
-  - Because `MockLLMClient` always outputs confidence 5, the re-annotation condition `5 <= 4` evaluates to `False` for every single test pair. Consequently, the re-annotation condition never triggers, leaving the predictions and metrics for `Threshold_On` and `Threshold_Off` 100% bit-for-bit identical.
+  - Because `MockLLMClient` always outputs confidence 5, no item is flagged for review at threshold 4. Class metrics are identical by design because screening does not rewrite the predicted class; mock runs cannot estimate review utility or risk-coverage behavior.
 - **Evaluation Caveat & Recommendation:**
-  - Offline evaluation reports declare the backend as `MockLLMClient`, but do not explicitly state that its fixed confidence score of 5 causes threshold-ablation invariance.
-  - The reported threshold-ablation results under `MockLLMClient` show no empirical signal and are not informative regarding the efficacy of real-LLM confidence thresholding.
-  - Studying the empirical effect of confidence thresholding requires evaluating a real LLM (`OpenAILLMClient` / `OllamaLLMClient`, where confidence scores vary naturally between 0 and 5) or designing a separate controlled evaluation using an appropriate test double. `MockLLMClient` should not be modified merely to produce arbitrary scores, as doing so would break deterministic test baselines.
+  - New primary and ablation reports identify the fixed-confidence limitation. Studying screening utility requires an authorized real LLM with recorded version/configuration or a separately validated variable-confidence test double. Do not modify MockLLM merely to fabricate confidence variation.
+  - The historical report artifacts still contain the previous `<=4 -> No_dependency` method description; they are preserved as historical outputs and have not been rewritten. New reports use the confidence-screening status contract.
 
 ### [ISSUE-011] CRITICAL: LEREDD_MockLLM Entry in Report is a Copy-Paste Duplicate of LEREDD_Hybrid
 - **Severity:** Critical
@@ -205,6 +337,7 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 - **Status:** 🟡 Known limitation (2026-10-10, TASK-P6-01 audit & P6-02 evaluation)
 - **Description:** 20 total pairs, no provenance metadata, annotator identity unknown. System-disjoint test set n=5 — 95% CI for accuracy is approximately ±40pp. Results are demonstrative only.
 - **Required Resolution:** Annotate 50-100+ requirement pairs per system for publication-quality evaluation.
+- **TASK-P15 update (2026-11-23):** Added a blinded two-reviewer CLI and agreement report (`scripts/annotate_independent.py`, `scripts/compare_independent_annotations.py`). Tool tests pass, but no real human vectors have been collected; sample-size and research-validity blocker remains active.
 
 ### [BLOCKER-004] CLI `evaluate` Lacks VerificationStatus Filtering
 - **Severity:** Medium (Blocks safe automated evaluation)
@@ -229,11 +362,170 @@ This log tracks bugs, technical debts, risks, and blockers discovered during pro
 - **Severity:** Medium (Research/data governance)
 - **Status:** 🔴 Active (confirmed TASK-P9-13, 2026-10-12)
 - **Files:** `docs/REPLICATION_NOTE.md`, `docs/EVALUATION_PROTOCOL.md`
-- **Evidence:** Local replication package files do not establish a separate dataset license or redistribution agreement. The paper's license is not proof that separately packaged annotation data may be redistributed.
+- **Evidence:** The arXiv record lists CC BY 4.0 for the paper, while the paper's v2 text says the replication package will be made available upon publication. The local imported package has no dataset-specific license or redistribution agreement. The paper license does not establish rights for separately packaged annotations or SRS PDFs.
 - **Required resolution:** Obtain authoritative dataset-specific permission/license terms before redistribution or publication of the imported annotation files. Do not infer permission from the paper license alone.
+
+### [BLOCKER-008] Replication Implemented by source-label mapping is undocumented
+- **Severity:** High (Blocks mapped replication metrics)
+- **Status:** 🔴 Active
+- **Evidence:** The paper defines Implements as a higher-level requirement fulfilled by a lower-level requirement (Table I / Section III). The local workbook's source label is Implemented by; the corresponding example pair appears in reverse row order from the paper's example. This suggests a relationship but does not document a normalization rule from the workbook label to the paper's class.
+- **Required resolution:** Obtain an explicit source-to-paper label crosswalk from the replication package documentation or authors. Preserve imported labels unchanged and keep mapped evaluation blocked until then.
 
 ### [ISSUE-006] Evaluation CLI Argument Ambiguity & Supervised Cross-System Terminology Alignment
 - **Severity:** Medium (Documentation & Metadata Integrity)
 - **Status:** ✅ Resolved (2026-10-10, TASK-P6-03)
 - **Description:** The `--model-type` parameter in `scripts/run_full_evaluation.py` selected the classification backend head for `BERTBaseline` (`rf` vs `lr`), but could be misconstrued as selecting which baseline model to run. Additionally, reports previously mislabeled supervised `BERTBaseline` fitting on ADB and testing on TJA as "zero-shot".
 - **Resolution:** Added `--bert-classifier-type` parameter alias (with `--model-type` fallback) and updated help strings. Updated report configuration metadata (`bert_classifier_backend: "rf"`, `bert_classifier_description`). Re-labeled `BERTBaseline` and `TFIDF_LSABaseline` notes as **Supervised Cross-System Evaluation** (trained/fitted on ADB, tested on TJA) and added exploratory notices for McNemar's test on small samples ($n=5$). Added 4 regression tests (24 total in `test_safe_evaluation.py`).
+
+### TASK-P13 demonstration status (2026-10-14)
+- Local Streamlit and FastAPI surfaces ran; synthetic extraction, provisional queue, system-disjoint split, and mock report persistence were exercised. No issue status is changed by this demonstration. Actual human annotation, replication rights/direction, and real-provider behavior remain open or unverified as recorded above.
+
+### [ISSUE-033] Manual-versus-assisted annotation effort tooling unavailable
+- **Severity:** Medium (proposal workflow support)
+- **Status:** ✅ Resolved as software capability (TASK-P20, 2026-11-23); empirical study remains unperformed.
+- **Description:** The project had a blind independent-annotation and agreement workflow, but no controlled way to compare time with versus without provisional machine suggestions.
+- **Resolution:** Added a paired counterbalanced study schedule, separate manual/assisted collection, hash-bound inputs, descriptive timing/disagreement report, and output protections against writing into project data. Focused suite: **27 passed**; full suite: **341 passed, 12 warnings**, exit 0. See ADR-034 and `docs/ANNOTATION_GUIDE.md`.
+- **Remaining evidence gap:** No real participant annotations, effort estimate, correctness comparison, or significance test has been produced. A rights-cleared real sample and two actual reviewers are required; synthetic test records do not satisfy that requirement.
+
+### [ISSUE-034] Docker image build context can include local research data
+- **Severity:** Medium (data handling / packaging)
+- **Status:** 🟡 Build and API/UI HTTP runtime verified locally (TASK-P47); post-start Docker management API inspection was unstable.
+- **Evidence:** Dockerfile copies the repository with `COPY . .`; there was no `.dockerignore`. The local working tree contains untracked replication JSON and evaluation artifacts.
+- **Mitigation:** `.dockerignore` excludes local `data/`, the project PDF, environment/secret files, repository metadata, and caches/temp. Both Docker images built using CPU-only Torch. Compose launched API/UI; API root and health returned 200, and Streamlit root and health returned 200/`ok`. No dataset-writing operation was requested.
+- **Remaining verification:** A later Docker management API probe returned 500/hung; a bounded `docker info` recheck timed out after 20 seconds. In that same check, API health and Streamlit health still returned 200/`ok`, so app responsiveness is confirmed while Docker CLI management remains unstable. Image-content inspection and a final `docker compose ps` could not be completed. Browser visual inspection was also blocked because the computer-use tool could not verify the browser URL. `docker compose config` still warns that the top-level `version` key is obsolete.
+- **Next:** Recheck Docker Desktop management commands and visually inspect `http://127.0.0.1:8501`; retain the `.dockerignore` data exclusions and do not publish mounted local research data.
+
+### [ISSUE-035] Live Streamlit page remains blank after health success
+- **Severity:** High (blocks a clean interactive demonstration)
+- **Status:** ✅ Resolved as a persistent blank-page defect (2026-11-24); cold-start latency remains a usability consideration.
+- **Evidence:** Local `/` and `/_stcore/health` returned HTTP 200, but Chrome at `http://127.0.0.1:8501` displayed only the shell and persistent `Running...` indicator, without dashboard content after 7.5 seconds. The serving process remained alive.
+- **Hypothesis only:** An older server stderr log contains repeated `ModuleNotFoundError: No module named 'torchvision'` during Streamlit's Transformers module-path inspection. Its timestamp does not correlate it to the observed browser session and it may be a nonfatal file-watcher warning.
+- **Next:** Reproduce on a separate port with fresh logs and browser console/network evidence. Fix only the identified failing layer; then rerun browser QA and UI tests.
+
+#### ISSUE-035 update (2026-11-24)
+The fresh diagnostic instance on `127.0.0.1:8502` returned HTTP 200 for `/` and `/_stcore/health`; native Chrome displayed the dashboard after six seconds. Port 8501 initially had no listener, but after launching the documented UI command, native Chrome rendered its dashboard after about 16 seconds from navigation. The synthetic annotation page generated and persisted three provisional pairs under `.pytest-tmp/`. The in-app browser websocket errors were environment-specific and did not reproduce in native Chrome. No app-code change was required. Keep only the cold-start latency as a separate usability observation, not a blank-page failure.
+
+#### TASK-P29 runtime follow-up (2026-11-24)
+The long-running 8501 process displayed an import error for `PredictionValidationStatus`, while a fresh Python import from the same checkout succeeded. A new Streamlit process rendered normally and the documented 8501 process was replaced; `/` and `/_stcore/health` returned 200 (`ok`). This is consistent with stale process module state; no source fix was warranted. A live synthetic MockLLM result was persisted as provisional and loaded by the review page as pending. It was not human-reviewed or exported. This follow-up does not establish prediction quality or resolve the external research blockers.
+
+### [ISSUE-045] Human review discarded per-requirement metadata
+- **Severity:** Medium (breaks metadata traceability and metadata-aware evaluation after review)
+- **Status:** ✅ Resolved locally (TASK-P35, 2026-11-24)
+- **Description:** Candidate pairs could contain distinct per-requirement system, component, subsystem, source-document, and source-location values, but `ReviewItem` did not store them. `record_decision()` reconstructed reviewed pairs from IDs/text and one shared system value, so verified exports silently lost the structured metadata.
+- **Resolution:** Queue items now persist the optional per-requirement values, the Streamlit review workspace displays available metadata, and verified records restore it. Regressions cover queue JSON round-trip, human decision/export reconstruction, legacy queue compatibility, and the review UI.
+- **Evidence:** Focused queue/UI suites: **41 passed**; full suite: **366 passed, 12 existing warnings**, exit 0. Eleven protected dataset/report hashes were unchanged.
+- **Boundary:** Historical queue files remain readable, but metadata absent from those files cannot be recovered except by rebuilding the queue from its original candidate pairs.
+
+### [ISSUE-046] Verified dataset snapshots had no immutable release operation
+- **Severity:** Medium (dataset provenance and reproducibility)
+- **Status:** ✅ Resolved locally (TASK-P36, 2026-11-24).
+- **Description:** Human-verified exports were plain JSON files and each review decision used a fixed `dataset_version`; there was no release operation to validate all records, assign a chosen version, hash source and released content, or preserve a non-overwritable snapshot.
+- **Resolution:** Added `leredd-cli dataset-release`. It accepts one or more verified exports, rejects empty/duplicate/unlabeled/provenance-free/unverified/incoherent data, stamps copied records with the requested version, and atomically publishes `pairs.json` and a manifest in a new release directory. Existing destinations are rejected.
+- **Focused evidence:** `tests/test_dataset_release.py tests/test_cli.py -q`: **19 passed in 9.86s**. Synthetic records only; no real reviewer data was released.
+- **Evidence:** Full suite: **374 passed, 12 existing warnings**, exit 0. Synthetic records only; no real reviewer dataset was released.
+- **Remaining evidence:** Produce releases from real reviewer-verified, rights-cleared annotations before making dataset or research claims.
+
+### [ISSUE-047] Candidate-generation coverage was not reported
+- **Severity:** Medium (candidate-pipeline auditability)
+- **Status:** ✅ Resolved locally (TASK-P37, 2026-11-24).
+- **Description:** The proposal requires estimating candidate-generation recall against the complete pair universe on a sample, but candidate manifests exposed only the generated count and an exhaustive boolean.
+- **Resolution:** Manifests and CLI report the exhaustive pair-space size, candidate-space recall, and uncovered-pair count. The metric is explicitly not gold dependency recall.
+- **Verification:** Focused generator/CLI/script tests: **42 passed**. Full suite: **374 passed, 12 existing warnings**, exit 0. All 311 files under `data/` retained their hashes; `git diff --check` passed.
+- **Evidence boundary:** This resolves the missing software coverage metric. A real strategy-coverage/positive-recall study still needs a rights-cleared SRS sample; gold dependency recall additionally requires verified labels.
+
+### [ISSUE-048] Repeated prediction consistency was unavailable
+- **Severity:** Medium (proposal's confidence-aware assessment)
+- **Status:** ✅ Resolved locally (TASK-P38, 2026-11-24).
+- **Description:** Detection returned one model response and had no supported way to identify whether repeated inferences on the same prompt vary.
+- **Resolution:** Added optional 1–5 fresh-run consistency screening to the detector, CLI, single/batch API, and Streamlit. Calls above one bypass the built-in response cache. Any label or self-reported confidence variation is recorded and routed as a human-review recommendation while retaining the first predicted class.
+- **Verification:** Focused detector/LLM/API/CLI/UI tests: **61 passed**. Full suite: **383 passed, 12 existing warnings**, exit 0. All 311 data files retained their hashes.
+- **Evidence boundary:** Controlled tests verify software behavior only. Real-provider variability, calibration, prediction quality, and review benefit remain unmeasured; no labels are verified by this screen.
+
+### [ISSUE-049] DOCX table requirements were silently omitted
+- **Severity:** Medium (SRS extraction completeness)
+- **Status:** ✅ Resolved locally (TASK-P39, 2026-11-24).
+- **Description:** The PDF/DOCX extractor read only top-level DOCX paragraphs, so requirements stored in tables were silently lost. The shared text parser also removed terminal periods, and image-only PDFs could silently produce an empty extraction result.
+- **Resolution:** DOCX extraction now traverses top-level paragraphs and table rows in body order, preserving separate cells with tabs. Requirement extraction retains terminal punctuation. PDFs with no extractable text raise an actionable message explaining that OCR is unsupported.
+- **Verification:** Synthetic DOCX table/PDF success and image-only PDF failure regressions pass. Focused tests: **25 passed**; complete suite: **386 passed, 1 existing Starlette deprecation warning**, exit 0. All 311 data files retained their hashes.
+- **Evidence boundary:** Only controlled synthetic documents were tested. This does not establish recall on real SRS layouts; OCR is unsupported, and the active base Python needs the optional `documents` extra.
+
+### [ISSUE-050] Short non-empty requirements were not routed for review
+- **Severity:** Medium (proposal uncertainty-review coverage)
+- **Status:** ✅ Resolved locally as a screening capability (TASK-P40, 2026-11-24).
+- **Description:** The proposal calls for flagging unusually short or incomplete requirement statements for human review. The queue identified empty text but did not route short non-empty statements based on length.
+- **Resolution:** Added a configurable minimum-character cue (default 20; CLI `queue-create --minimum-requirement-characters N`; `0` disables it). The queue manifest records the eligibility configuration, and the cue only recommends inspection; it does not infer incompleteness, change labels, or verify annotations.
+- **Verification:** Focused review queue/CLI/UI integration tests: **45 passed**. Full suite: **387 passed, 1 existing Starlette deprecation warning**, exit 0. All 311 `data/` files remained hash-identical; `git diff --check` passed.
+- **Boundary:** This threshold is not linguistically validated. Semantic ambiguity/incompleteness still requires human judgment; no real SRS or human review was performed.
+
+### [ISSUE-051] Invalid RAG overlap could prevent chunking from terminating
+- **Severity:** High (optional SRS-context retrieval could hang on malformed configuration)
+- **Status:** ✅ Resolved locally (TASK-P41, 2026-11-24).
+- **Description:** `chunk_document()` advanced by `chunk_size - overlap`; an overlap equal to or greater than the chunk size allowed a zero or negative step. Zero chunk sizes and malformed `k` values were also not handled explicitly.
+- **Resolution:** Validate positive integer chunk size, overlap in `[0, chunk_size)`, and non-negative integer `k`. `k=0` returns immediately without embedding.
+- **Verification:** Focused retrieval/detector tests: **31 passed**. Full suite: **398 passed, 1 existing Starlette deprecation warning**, exit 0. All 311 `data/` files remained hash-identical; `git diff --check` passed.
+- **Boundary:** The fix ensures termination and parameter behavior; retrieval relevance and classification benefit remain unmeasured.
+
+### [ISSUE-052] API accepted SRS context without a request-level RAG switch
+- **Severity:** Medium (API context retrieval path inaccessible under default configuration)
+- **Status:** ✅ Resolved locally (TASK-P42, 2026-11-24).
+- **Description:** Single and batch request schemas accepted `srs_text`, but the detector only retrieved it when global `USE_RAG` was enabled. API callers could not enable RAG per request, so the default configuration silently ignored supplied context.
+- **Resolution:** Added optional `use_rag` to both schemas and detector APIs. Explicit true/false override server config; omitted values preserve it. The API reference explains this behavior.
+- **Verification:** Focused API/detector/retrieval tests: **49 passed**; full suite: **400 passed**, each with one existing Starlette deprecation warning. Context inclusion in the actual constructed prompt is asserted; 311 `data/` files retained their hashes.
+- **Boundary:** Controlled prompt routing only; no claim of retrieval or prediction quality. Real source text and verified test labels are still needed.
+
+### [ISSUE-053] Extract CLI help omitted supported Markdown inputs
+- **Severity:** Low (CLI usability / command discoverability)
+- **Status:** ✅ Resolved locally (TASK-P48, 2026-11-24).
+- **Description:** The extractor accepted Markdown files, but `leredd-cli extract --help` listed only `.txt`, `.pdf`, and `.docx`.
+- **Resolution:** Updated the option help and command docstring to include `.md`; extended the Markdown CLI integration regression to check `.md` and `.docx` help text.
+- **Verification:** `tests/test_cli.py::test_cli_metadata_sidecar_flows_from_srs_to_candidate_pairs -q`: **1 passed in 3.33s**. The test uses temporary fixtures.
+- **Boundary:** This fixes the advertised file formats only; it does not establish extraction quality on arbitrary SRS documents.
+
+### TASK-P48 extraction-trial evidence boundary (2026-11-24)
+- NASA Trick SRS parser smoke output contained 99 unique records with source locations. A keyword scan found 97 source lines with `shall`/`should`/`must`, including two lines that emitted two records each. This does not establish precision/recall or correctness; human comparison remains open.
+- Pair generation was exhaustive over 99 extracted requirements (4,851 unordered pairs). This is pair-space exhaustiveness only, not gold dependency recall. Provisional output contained 350 heuristic suggestions and 4,501 unresolved pairs; the review queue had 4,851 pending items and no human decisions. No evaluation or release was performed.
+- The temporary source and outputs are in workspace-local untracked `.pytest-tmp`; no dataset permission, label mapping, reviewer evidence, or research result is inferred from this software smoke test.
+
+#### TASK-P49 update to ISSUE-047 evidence boundary (2026-11-24)
+- On 99 extracted requirements / 4,851 possible pairs, `top_k=5` generated 327 BM25 pairs (6.74% of pair space), 335 dense pairs (6.91%), and 325 hybrid pairs (6.70%); all-pairs generated 4,851 (100%). This is workload/space coverage, not positive dependency recall.
+- No gold labels were used. The rate of true links missed by retrieval remains unknown; do not select a strategy or claim recall based on these percentages. The next empirical step requires two independent reviewers to label a documented sample from both emitted and omitted pairs.
+- Dense encoding wrote 99 ignored cache entries to the configured `data/embeddings` location. Imported replication JSON and historical reports were not written by these runs; set `CACHE_DIR` to `.pytest-tmp` for future local embedding trials.
+
+#### TASK-P50 pilot preparation status (2026-11-24)
+- Created a 100-pair fixed-seed pilot sample: 50 hybrid top-5 candidates and 50 omitted pairs, drawn from the same 4,851-pair universe. A separate analysis map records the stratified sampling design; the reviewer file contains opaque IDs and no strata or labels.
+- Status is `prepared_not_reviewed`. The sample has no human annotations and cannot yet produce positive dependency recall, agreement, or effort results. Reviewer actions must be independent and use the same pinned input/context; the stratum map must remain blinded until both complete.
+- Full suite after the CLI correction and packet preparation: **400 passed, no warnings in 132.31s**, exit 0. This is software regression evidence only and does not resolve the gold-label or sampling-quality gap.
+
+### [ISSUE-054] Stratified candidate pilot had no weighted positive-recall analysis
+- **Severity:** Medium (proposal evaluation workflow incomplete)
+- **Status:** ✅ Resolved as software capability (TASK-P51, 2026-11-24); real estimate pending human adjudication.
+- **Description:** The project could measure the fraction of pair space emitted but had no way to estimate the proportion of verified dependency links recovered from a stratified sample of selected and omitted pairs.
+- **Resolution:** Added a hash-pinned post-stratified ratio estimator and CLI. It accepts only an exact set of coherent human `VERIFIED` adjudications, verifies sample and population identity plus stratum weights, and reports an explicitly approximate pilot interval with boundary limitations.
+- **Verification:** Final focused tests: **36 passed in 16.77s**; complete suite: **413 passed, no warnings in 38.38s**, exit 0 outside the restricted Windows socket environment (PowerShell duration 42.26s). Final review corrected the reported universe-size field and added a regression. Real pilot labels were not supplied; no positive-recall metric has been generated.
+- **Remaining evidence:** Two reviewers must label independently; disagreements must be adjudicated and exported through the verified workflow. The sample is an operational pilot, not powered or preregistered.
+
+### TASK-P44 — Live application smoke revalidation (2026-11-24)
+- `python -m leredd.cli --help` exited 0; the existing API returned HTTP 200 for `/` and `/api/v1/health` when probed outside the restricted socket sandbox. A fresh Streamlit process on port 8504 rendered and executed synthetic extraction plus BM25/MockLLM detection.
+- Three records were persisted only under `.pytest-tmp/task-final-ui-demo/candidates.json`; all remained unlabeled/provisional. The UI displayed the expected notice that Mock confidence is neither calibrated probability nor human verification.
+- A Windows asyncio `ConnectionResetError` appeared in the Streamlit log during a connection teardown; the smoke actions completed and no route failure reproduced. Track only if it recurs as a user-visible failure. No open issue is resolved by synthetic smoke evidence.
+
+### [ISSUE-055] Synthetic/demo records could be mistaken for research evidence
+- **Severity:** High (evaluation and dataset integrity)
+- **Status:** Resolved locally (TASK-P52, 2026-11-24); not committed or pushed.
+- **Description:** Synthetic demo records could be assigned human-looking provenance and pass through retrieval/evaluation/release paths without an explicit synthetic-data boundary.
+- **Resolution:** Added and propagated synthetic markers/source identities. Retrieval and verified export exclude marked records; evaluation rejects marked ground truth even when provenance claims verified status. Added regression tests across interfaces and persistence.
+- **Verification:** Focused suite **172 passed**; full local suite **424 passed**, exit 0. This verifies software guards only, not real annotation quality.
+
+### [ISSUE-056] Replication source rights and label crosswalk remain undocumented
+- **Severity:** High (dataset legality and ground-truth validity)
+- **Status:** Open; external evidence required.
+- **Description:** The imported replication data and source spreadsheet labels lack verified redistribution rights and an authoritative crosswalk to the project's six dependency labels. `Implemented by` records also require explicit mapping or exclusion.
+- **Next action:** Obtain dataset license/permission and the source codebook/crosswalk from an authoritative source; document the mapping before releasing or reporting replication metrics. Do not infer permission or semantics from the files themselves.
+
+### [ISSUE-057] Full evaluation trusted declared split metadata without checking actual partition overlap
+- **Severity:** High (evaluation leakage risk)
+- **Status:** ✅ Resolved locally (TASK-P53, 2026-11-24); not committed or pushed.
+- **Description:** A split could be labeled `system` in metadata while actual train/dev/test files shared systems, requirement IDs, or pair IDs; the runner previously proceeded to model fitting.
+- **Resolution:** Revalidate actual loaded partitions before scoring and report the integrity audit. Duplicate prediction coverage errors now name invalid IDs.
+- **Verification:** Focused evaluation suite **45 passed**; full suite **428 passed**, exit 0; all 412 files under `data/` hash-identical before and after.
+- **Boundary:** The check follows the declared split strategy. It does not establish that source labels or provenance are truthful, and it does not validate research quality.

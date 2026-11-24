@@ -1,11 +1,12 @@
 """Evaluation suite for computing metrics, confusion matrices, and statistical significance tests."""
 
 import numpy as np
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional, Any, Set
 from scipy.stats import fisher_exact
 from statsmodels.stats.contingency_tables import mcnemar
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, confusion_matrix
 from leredd.data_models import (
+    AnnotationSource,
     RequirementPair,
     Prediction,
     DependencyType,
@@ -13,6 +14,148 @@ from leredd.data_models import (
     EvaluationReport,
     VerificationStatus,
 )
+from leredd.synthetic import is_synthetic
+
+
+class EvaluationGuardrailError(ValueError):
+    """Base exception for evaluation input-integrity failures."""
+
+    def __init__(self, message: str, invalid_ids: List[str]):
+        super().__init__(message)
+        self.invalid_ids = sorted(set(invalid_ids))
+
+
+class PredictionAlignmentError(EvaluationGuardrailError):
+    """Raised when predictions do not align one-to-one with ground truth."""
+
+
+class SplitOverlapError(EvaluationGuardrailError):
+    """Raised when a declared system-disjoint split contains overlapping IDs."""
+
+
+def validate_predictions(
+    ground_truth: List[RequirementPair], predictions: List[Prediction]
+) -> None:
+    """Require unique predictions and complete ground-truth pair coverage."""
+    seen: Set[str] = set()
+    duplicates: Set[str] = set()
+    for prediction in predictions:
+        if prediction.pair_id in seen:
+            duplicates.add(prediction.pair_id)
+        seen.add(prediction.pair_id)
+
+    if duplicates:
+        ids = sorted(duplicates)
+        raise PredictionAlignmentError(
+            f"Predictions contain duplicate pair IDs: {', '.join(ids)}", ids
+        )
+
+    missing = sorted({pair.id for pair in ground_truth} - seen)
+    if missing:
+        raise PredictionAlignmentError(
+            "Predictions are missing ground-truth pair IDs: " + ", ".join(missing),
+            missing,
+        )
+
+
+def validate_system_disjoint_splits(
+    train_pairs: List[RequirementPair],
+    test_pairs: List[RequirementPair],
+    dev_pairs: Optional[List[RequirementPair]] = None,
+) -> Dict[str, Any]:
+    """Check system, requirement, and pair IDs across train/test/dev partitions.
+
+    Returns a compact audit when partitions are disjoint and raises
+    ``SplitOverlapError`` with the exact overlapping IDs otherwise.
+    """
+    partitions = {"train": train_pairs, "test": test_pairs, "dev": dev_pairs or []}
+
+    def identities(pairs: List[RequirementPair]) -> Dict[str, Set[str]]:
+        return {
+            "systems": {
+                system
+                for pair in pairs
+                for system in (pair.req_a.system, pair.req_b.system)
+                if system
+            },
+            "requirement_ids": {
+                req_id
+                for pair in pairs
+                for req_id in (pair.req_a.id, pair.req_b.id)
+                if req_id
+            },
+            "pair_ids": {pair.id for pair in pairs if pair.id},
+        }
+
+    ids_by_partition = {
+        name: identities(pairs) for name, pairs in partitions.items()
+    }
+    overlap: Dict[str, Set[str]] = {
+        category: set()
+        for category in ("systems", "requirement_ids", "pair_ids")
+    }
+    names = list(partitions)
+    for left_index, left in enumerate(names):
+        for right in names[left_index + 1:]:
+            for category in overlap:
+                overlap[category].update(
+                    ids_by_partition[left][category]
+                    & ids_by_partition[right][category]
+                )
+
+    overlap = {key: values for key, values in overlap.items() if values}
+    if overlap:
+        invalid_ids = sorted(set().union(*overlap.values()))
+        details = "; ".join(
+            f"{category}: {sorted(values)}"
+            for category, values in sorted(overlap.items())
+        )
+        raise SplitOverlapError(
+            f"System-disjoint split contains overlapping identities ({details})",
+            invalid_ids,
+        )
+
+    return {
+        "is_disjoint": True,
+        "overlapping_systems": [],
+        "overlapping_requirement_ids": [],
+        "overlapping_pair_ids": [],
+    }
+
+
+def ground_truth_provenance_problem(pair: RequirementPair) -> str | None:
+    """Describe provenance that cannot substantiate a verified ground-truth label.
+
+    Provenance-free legacy records remain a caller-level compatibility decision.
+    """
+    if is_synthetic(pair):
+        return "synthetic/demo records cannot be used as ground truth"
+    provenance = pair.provenance
+    if provenance is None:
+        return None
+    if pair.dependency_type is None:
+        return "dependency_type is missing"
+    if provenance.status != VerificationStatus.VERIFIED:
+        return f"status={provenance.status.value} (explicit VERIFIED status is required)"
+    if provenance.source != AnnotationSource.HUMAN:
+        return f"verified source={provenance.source.value!r} is not human"
+    actors = [
+        actor.strip()
+        for actor in (provenance.reviewer_id, provenance.annotator_id)
+        if actor and actor.strip()
+    ]
+    if not actors:
+        return "verified human annotation is missing reviewer_id and annotator_id"
+    if all(actor.casefold() in {"human_reviewer_1", "human_cli"} for actor in actors):
+        return "verified human annotation uses only a generic placeholder identity"
+    if provenance.accepted_label is None:
+        return "verified human annotation is missing accepted_label"
+    if provenance.accepted_label != pair.dependency_type:
+        return (
+            f"accepted_label={provenance.accepted_label.value!r} does not match "
+            f"dependency_type={pair.dependency_type.value!r}"
+        )
+    return None
 
 
 class Evaluator:
@@ -243,8 +386,10 @@ class Evaluator:
         for pair in ground_truth:
             if pair.dependency_type is None:
                 invalid.append(f"{pair.id}: unlabeled")
-            elif pair.provenance and pair.provenance.status != VerificationStatus.VERIFIED:
-                invalid.append(f"{pair.id}: status={pair.provenance.status.value}")
+            else:
+                problem = ground_truth_provenance_problem(pair)
+                if problem:
+                    invalid.append(f"{pair.id}: {problem}")
         if invalid:
             raise ValueError(
                 "Ground truth contains unlabeled or unverified pairs: "
@@ -255,12 +400,4 @@ class Evaluator:
     def _validate_prediction_coverage(
         ground_truth: List[RequirementPair], predictions: List[Prediction]
     ) -> None:
-        expected = [pair.id for pair in ground_truth]
-        actual = [prediction.pair_id for prediction in predictions]
-        if len(set(actual)) != len(actual):
-            raise ValueError("Predictions contain duplicate pair IDs")
-        missing = sorted(set(expected) - set(actual))
-        if missing:
-            raise ValueError(
-                "Predictions are missing ground-truth pair IDs: " + ", ".join(missing)
-            )
+        validate_predictions(ground_truth, predictions)

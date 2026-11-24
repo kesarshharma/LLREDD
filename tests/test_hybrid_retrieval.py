@@ -14,6 +14,7 @@ Covers:
 """
 
 import pytest
+import numpy as np
 from leredd.data_models import (
     Requirement,
     RequirementPair,
@@ -25,6 +26,20 @@ from leredd.data_models import (
 from leredd.bm25_retrieval import BM25Retriever
 from leredd.hybrid_retrieval import HybridRetriever, get_candidate_id
 from leredd.retrieval import ExampleRetriever
+
+
+class _OfflineEmbedder:
+    """Small deterministic vectors keep dense retrieval tests network-free."""
+
+    def encode(self, texts):
+        return np.asarray(
+            [[len(text), sum(map(ord, text)) % 997, text.lower().count("system")] for text in texts],
+            dtype=np.float32,
+        )
+
+
+def _offline_hybrid():
+    return HybridRetriever(dense_retriever=ExampleRetriever(embedder=_OfflineEmbedder()))
 
 
 @pytest.fixture
@@ -129,7 +144,7 @@ def test_empty_corpus_and_empty_rankings():
 def test_metadata_and_provenance_preservation(sample_pairs_pool):
     """Verify candidate metadata, labels, and provenance are preserved after RRF fusion."""
     target_pair = sample_pairs_pool[0]
-    hybrid = HybridRetriever()
+    hybrid = _offline_hybrid()
 
     fused_dict = hybrid.retrieve_example_pairs(target_pair, sample_pairs_pool, k=2)
 
@@ -146,7 +161,7 @@ def test_metadata_and_provenance_preservation(sample_pairs_pool):
 def test_target_self_exclusion(sample_pairs_pool):
     """Verify target pair cannot retrieve itself as a candidate."""
     target_pair = sample_pairs_pool[0]  # PAIR-001
-    hybrid = HybridRetriever()
+    hybrid = _offline_hybrid()
 
     fused_dict = hybrid.retrieve_example_pairs(target_pair, sample_pairs_pool, k=5)
 
@@ -161,7 +176,7 @@ def test_corpus_isolation(sample_pairs_pool):
     target_pair = sample_pairs_pool[0]
     restricted_pool = sample_pairs_pool[:2]  # Only PAIR-001 and PAIR-002
 
-    hybrid = HybridRetriever()
+    hybrid = _offline_hybrid()
     fused_dict = hybrid.retrieve_example_pairs(target_pair, restricted_pool, k=5)
 
     all_retrieved_ids = {p.id for sublist in fused_dict.values() for p in sublist}
@@ -169,11 +184,64 @@ def test_corpus_isolation(sample_pairs_pool):
     assert all_retrieved_ids.issubset({"PAIR-001", "PAIR-002"})
 
 
+def test_hybrid_uses_component_metadata_when_available():
+    target = RequirementPair(
+        id="TARGET",
+        req_a=Requirement(id="T-A", text="target a", component="braking"),
+        req_b=Requirement(id="T-B", text="target b", subsystem="control"),
+    )
+    metadata_match = RequirementPair(
+        id="PAIR-META",
+        req_a=Requirement(id="M-A", text="metadata match a", component="Braking"),
+        req_b=Requirement(id="M-B", text="metadata match b", subsystem="control"),
+        dependency_type=DependencyType.REQUIRES,
+    )
+    text_match = RequirementPair(
+        id="PAIR-TEXT",
+        req_a=Requirement(id="X-A", text="text match a", component="authentication"),
+        req_b=Requirement(id="X-B", text="text match b", subsystem="identity"),
+        dependency_type=DependencyType.REQUIRES,
+    )
+
+    class ControlledDense:
+        def retrieve(self, target_pair, candidate_pool, k):
+            return {DependencyType.REQUIRES: [text_match, metadata_match]}
+
+    class ControlledBM25:
+        def retrieve_example_pairs(self, target_pair, candidate_pool, k):
+            return {DependencyType.REQUIRES: [text_match, metadata_match]}
+
+    hybrid = HybridRetriever(
+        dense_retriever=ControlledDense(),
+        bm25_retriever=ControlledBM25(),
+        metadata_weight=100,
+    )
+    retrieved = hybrid.retrieve_example_pairs(target, [metadata_match, text_match], k=1)
+
+    assert retrieved[DependencyType.REQUIRES] == [metadata_match]
+
+
+def test_hybrid_omits_metadata_signal_when_no_values_overlap():
+    target = RequirementPair(
+        id="TARGET",
+        req_a=Requirement(id="T-A", text="target a", system="GenericSystem"),
+        req_b=Requirement(id="T-B", text="target b"),
+    )
+    candidate = RequirementPair(
+        id="PAIR",
+        req_a=Requirement(id="C-A", text="candidate a", system="GenericSystem"),
+        req_b=Requirement(id="C-B", text="candidate b"),
+        dependency_type=DependencyType.REQUIRES,
+    )
+
+    assert HybridRetriever._metadata_ranking(target, [candidate]) == []
+
+
 def test_comparative_retrieval_sanity_check(sample_pairs_pool):
     """Comparative sanity check comparing Dense (SBERT), BM25, and Hybrid (RRF) retrieval outputs."""
     target_pair = sample_pairs_pool[0]
 
-    dense = ExampleRetriever()
+    dense = ExampleRetriever(embedder=_OfflineEmbedder())
     bm25 = BM25Retriever()
     hybrid = HybridRetriever(dense_retriever=dense, bm25_retriever=bm25)
 

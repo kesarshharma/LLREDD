@@ -36,6 +36,29 @@ def test_all_dashboard_pages_render_without_uncaught_exceptions():
         assert not app.exception, f"{page}: {[str(error) for error in app.exception]}"
 
 
+def test_graph_keeps_requirement_labels_in_hover_details(monkeypatch):
+    import plotly.graph_objects as go
+
+    created_traces = []
+    original_scatter = go.Scatter
+
+    def capture_scatter(*args, **kwargs):
+        trace = original_scatter(*args, **kwargs)
+        created_traces.append(trace)
+        return trace
+
+    monkeypatch.setattr(go, "Scatter", capture_scatter)
+    app = _run_page("5. Graph Visualization")
+
+    assert not app.exception, [str(error) for error in app.exception]
+    assert len(created_traces) == 2
+    node_trace = created_traces[1]
+    assert node_trace.mode == "markers"
+    assert node_trace.text is None
+    assert len(node_trace.hovertext) == len(node_trace.x)
+    assert all("REQ-ADB-" in detail and ": " in detail for detail in node_trace.hovertext)
+
+
 def test_annotation_page_extracts_and_persists_verified_pair(tmp_path):
     app = _run_page("2. Requirement Annotation")
     candidates_file = tmp_path / "candidates.json"
@@ -46,6 +69,13 @@ def test_annotation_page_extracts_and_persists_verified_pair(tmp_path):
         "[REQ-1] The system shall provide braking.\n"
         "[REQ-2] The system shall report brake status."
     )
+    app.text_area[1].set_value(json.dumps({
+        "REQ-1": {"component": "Brake Controller", "subsystem": "Braking"},
+        "REQ-2": {"component": "Dashboard"},
+    }))
+    app.run(timeout=30)
+    assert app.checkbox[0].value is False
+    app.checkbox[0].set_value(True)
     app.text_input[1].set_value(str(candidates_file))
     app.button[0].click()
     app.run(timeout=30)
@@ -54,8 +84,17 @@ def test_annotation_page_extracts_and_persists_verified_pair(tmp_path):
     candidates = json.loads(candidates_file.read_text(encoding="utf-8"))
     assert len(candidates) == 1
     assert candidates[0]["id"] == "PAIR-E2E-0001"
+    assert candidates[0]["req_a"]["id"] == "REQ-1"
+    assert candidates[0]["req_b"]["id"] == "REQ-2"
     assert candidates[0]["dependency_type"] is None
+    assert candidates[0]["req_a"]["source"] == "pasted SRS"
+    assert candidates[0]["req_a"]["source_location"] == "line 1"
+    assert candidates[0]["req_a"]["component"] == "Brake Controller"
+    assert candidates[0]["req_a"]["subsystem"] == "Braking"
+    assert candidates[0]["req_b"]["component"] == "Dashboard"
     assert candidates[0]["provenance"]["status"] == "provisional"
+    assert candidates[0]["synthetic"] is True
+    assert candidates[0]["req_a"]["synthetic"] is True
 
     app.selectbox[0].set_value("Requires")
     app.text_input[2].set_value("ui-test-reviewer")
@@ -68,6 +107,8 @@ def test_annotation_page_extracts_and_persists_verified_pair(tmp_path):
     assert annotated[0]["dependency_type"] == "Requires"
     assert annotated[0]["provenance"]["status"] == "verified"
     assert annotated[0]["provenance"]["annotator_id"] == "ui-test-reviewer"
+    assert annotated[0]["synthetic"] is True
+    assert annotated[0]["provenance"]["synthetic"] is True
     assert json.loads(candidates_file.read_text(encoding="utf-8"))[0]["dependency_type"] is None
     assert any("second independently collected" in item.value for item in app.info)
     assert [button.label for button in app.button] == [
@@ -91,47 +132,121 @@ def test_annotation_page_accepts_uploaded_markdown(tmp_path):
 
     assert not app.exception, [str(error) for error in app.exception]
     assert output.exists()
-    assert len(json.loads(output.read_text(encoding="utf-8"))) == 1
+    records = json.loads(output.read_text(encoding="utf-8"))
+    assert len(records) == 1
+    assert records[0]["req_a"]["source"] == "requirements.md"
+    assert records[0]["req_a"]["source_location"] == "line 1"
 
 
-def test_detection_page_runs_controlled_detector(monkeypatch):
-    from leredd.data_models import DependencyType, Prediction
+def test_detection_page_runs_detector_and_queues_low_confidence_result(tmp_path, monkeypatch):
+    from leredd.data_models import (
+        DependencyType,
+        Prediction,
+        PredictionStabilityStatus,
+        PredictionValidationStatus,
+    )
     from leredd import detector as detector_module
 
     received_configs = []
+    received_retrieval_modes = []
+    received_stability_runs = []
+    received_target_metadata = []
+    supplied_embedders = []
+    shared_embedder = object()
 
     class ControlledDetector:
-        def __init__(self, config=None):
+        def __init__(self, config=None, embedder=None):
             self.config = config
             received_configs.append(config)
+            supplied_embedders.append(embedder)
+            self._loaded_embedder = embedder or shared_embedder
 
-        def detect_pair(self, target_pair, annotated_pool, srs_text):
+        @property
+        def loaded_embedder(self):
+            return self._loaded_embedder
+
+        def detect_pair(self, target_pair, annotated_pool, srs_text, retrieval_mode=None, stability_runs=1):
             assert target_pair.id == "PAIR-DEMO-001"
+            received_retrieval_modes.append(retrieval_mode)
+            received_stability_runs.append(stability_runs)
+            received_target_metadata.append((
+                target_pair.req_a.component,
+                target_pair.req_a.subsystem,
+                target_pair.req_b.component,
+            ))
             return Prediction(
                 pair_id=target_pair.id,
                 dependency_type=DependencyType.REQUIRES,
                 rationale="controlled UI test response",
-                confidence=4,
+                confidence=2,
+                validation_status=PredictionValidationStatus.REQUIRES_REVIEW,
+                validation_threshold=2,
+                stability_status=PredictionStabilityStatus.INCONSISTENT,
+                stability_run_count=2,
+                stability_labels=[DependencyType.REQUIRES, DependencyType.NO_DEPENDENCY],
+                stability_confidences=[2, 5],
+                stability_reasons=["dependency_label_disagreement", "self_reported_confidence_variation"],
                 raw_response="controlled response",
             )
 
     monkeypatch.setattr(detector_module, "LEREDDDetector", ControlledDetector)
     app = _run_page("3. LEREDD Detection")
     next(text for text in app.text_input if text.label == "Model Name").set_value("mock-ui-test")
+    next(box for box in app.selectbox if box.label == "Retrieval Mode").set_value("hybrid")
     next(slider for slider in app.slider if slider.label == "Dynamic Examples (k)").set_value(3)
     next(box for box in app.checkbox if box.label == "Enable RAG Context").check()
     next(slider for slider in app.slider if slider.label == "Confidence Threshold").set_value(2)
+    next(widget for widget in app.number_input if widget.label == "Repeated Inference Runs").set_value(2)
+    next(field for field in app.text_input if field.label == "Requirement A Component (optional)").set_value("Brake Controller")
+    next(field for field in app.text_input if field.label == "Requirement A Subsystem (optional)").set_value("Braking")
+    next(field for field in app.text_input if field.label == "Requirement B Component (optional)").set_value("Dashboard")
     app.button[0].click()
     app.run(timeout=30)
 
     assert not app.exception, [str(error) for error in app.exception]
     assert app.session_state["detection_results"][0].dependency_type.value == "Requires"
     assert any("controlled UI test response" in item.value for item in app.markdown)
+    assert any("first predicted class" in item.value for item in app.warning)
+    assert any("self-reported confidence 2/5 is at or below threshold 2" in item.value for item in app.warning)
+    assert any("repeated runs varied" in item.value for item in app.warning)
     assert received_configs[0].llm_provider == "mock"
     assert received_configs[0].llm_model == "mock-ui-test"
+    assert received_configs[0].retrieval_mode == "hybrid"
+    assert received_retrieval_modes == ["hybrid"]
+    assert received_stability_runs == [2]
+    assert received_target_metadata == [("Brake Controller", "Braking", "Dashboard")]
     assert received_configs[0].k_examples == 3
     assert received_configs[0].use_rag is True
     assert received_configs[0].confidence_threshold == 2
+
+    queue_file = tmp_path / "detection-review-queue.json"
+    next(
+        field for field in app.text_input
+        if field.label == "Review Queue JSON Destination"
+    ).set_value(str(queue_file))
+    app.run(timeout=30)
+    next(
+        button for button in app.button
+        if button.label == "Add Prediction to Human Review Queue"
+    ).click()
+    app.run(timeout=30)
+
+    assert not app.exception, [str(error) for error in app.exception]
+    queued = json.loads(queue_file.read_text(encoding="utf-8"))
+    assert len(queued) == 1
+    assert queued[0]["proposed_label"] == "Requires"
+    assert queued[0]["status"] == "pending"
+    assert "low_confidence" in queued[0]["review_reasons"]
+    assert "disagreement" in queued[0]["review_reasons"]
+    assert "at or below review cutoff 2" in queued[0]["review_notes"]
+    assert "REPEATED_RUN_DISAGREEMENT" in queued[0]["review_notes"]
+    assert queued[0]["provenance"]["status"] == "provisional"
+
+    # A second detection in the same Streamlit session must reuse the expensive embedder.
+    next(button for button in app.button if button.label == "Run LEREDD Detection").click()
+    app.run(timeout=30)
+    assert not app.exception, [str(error) for error in app.exception]
+    assert supplied_embedders == [None, shared_embedder]
 
 
 def test_detection_page_gates_external_provider_until_user_confirms(monkeypatch):
@@ -141,10 +256,15 @@ def test_detection_page_gates_external_provider_until_user_confirms(monkeypatch)
     calls = []
 
     class ControlledDetector:
-        def __init__(self, config=None):
+        def __init__(self, config=None, embedder=None):
             calls.append(config.llm_provider)
+            self._loaded_embedder = embedder
 
-        def detect_pair(self, target_pair, annotated_pool, srs_text):
+        @property
+        def loaded_embedder(self):
+            return self._loaded_embedder
+
+        def detect_pair(self, target_pair, annotated_pool, srs_text, retrieval_mode=None, stability_runs=1):
             return Prediction(
                 pair_id=target_pair.id,
                 dependency_type=DependencyType.REQUIRES,
@@ -225,8 +345,16 @@ def test_review_queue_page_records_and_exports_human_decision(tmp_path, monkeypa
     export_path = tmp_path / "verified.json"
     pair = RequirementPair(
         id="UI-QUEUE-1",
-        req_a=Requirement(id="UI-Q1", text="First requirement.", system="ADB"),
-        req_b=Requirement(id="UI-Q2", text="Second requirement.", system="ADB"),
+        req_a=Requirement(
+            id="UI-Q1", text="First requirement.", system="ADB",
+            component="Payments", subsystem="Authorization",
+            source="payments-srs.md", source_location="line 4",
+        ),
+        req_b=Requirement(
+            id="UI-Q2", text="Second requirement.", system="ADB",
+            component="Token Service", subsystem="Security",
+            source="security-srs.md", source_location="line 9",
+        ),
         dependency_type=DependencyType.REQUIRES,
         provenance=AnnotationProvenance(
             source=AnnotationSource.LLM,
@@ -250,6 +378,8 @@ def test_review_queue_page_records_and_exports_human_decision(tmp_path, monkeypa
     next(select for select in app.selectbox if select.label == "Select Queue Item to Inspect & Review").set_value(0)
     app.run(timeout=30)
     assert any("Showing **1** of **1**" in element.value for element in app.markdown)
+    assert any("Component: Payments" in element.value for element in app.caption)
+    assert any("Location: line 9" in element.value for element in app.caption)
     next(radio for radio in app.radio if radio.label == "Decision Action").set_value(
         "CORRECT (Assign Different Label)"
     )
@@ -276,3 +406,11 @@ def test_review_queue_page_records_and_exports_human_decision(tmp_path, monkeypa
     assert len(exported) == 1
     assert exported[0]["dependency_type"] == "Details"
     assert exported[0]["provenance"]["status"] == "verified"
+    assert exported[0]["req_a"]["component"] == "Payments"
+    assert exported[0]["req_a"]["subsystem"] == "Authorization"
+    assert exported[0]["req_a"]["source"] == "payments-srs.md"
+    assert exported[0]["req_a"]["source_location"] == "line 4"
+    assert exported[0]["req_b"]["component"] == "Token Service"
+    assert exported[0]["req_b"]["subsystem"] == "Security"
+    assert exported[0]["req_b"]["source"] == "security-srs.md"
+    assert exported[0]["req_b"]["source_location"] == "line 9"

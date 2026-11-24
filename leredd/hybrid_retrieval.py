@@ -43,12 +43,14 @@ class HybridRetriever:
         rrf_k: int = 60,
         dense_weight: float = 1.0,
         bm25_weight: float = 1.0,
+        metadata_weight: float = 1.0,
         config: Optional[LEREDDConfig] = None,
     ):
         self.config = config or get_config()
         self.rrf_k = rrf_k or self.config.rrf_k
         self.dense_weight = dense_weight
         self.bm25_weight = bm25_weight
+        self.metadata_weight = metadata_weight
 
         self._dense_retriever = dense_retriever
         self._bm25_retriever = bm25_retriever
@@ -168,14 +170,26 @@ class HybridRetriever:
             clean_dense = filter_self(dense_list)
             clean_bm25 = filter_self(bm25_list)
 
-            if not clean_dense and not clean_bm25:
+            metadata_ranking = self._metadata_ranking(
+                target_pair,
+                [pair for pair in annotated_pool if pair.dependency_type == dep_type],
+                filter_fn=filter_self,
+            )
+
+            if not clean_dense and not clean_bm25 and not metadata_ranking:
                 fused_examples[dep_type] = []
                 continue
 
-            # Fuse using RRF
+            rankings = [clean_dense, clean_bm25]
+            weights = [self.dense_weight, self.bm25_weight]
+            if metadata_ranking and self.metadata_weight > 0:
+                rankings.append(metadata_ranking)
+                weights.append(self.metadata_weight)
+
+            # Fuse dense, lexical, and available structured metadata rankings.
             fused_tuples = self.reciprocal_rank_fusion(
-                rankings=[clean_dense, clean_bm25],
-                weights=[self.dense_weight, self.bm25_weight],
+                rankings=rankings,
+                weights=weights,
                 rrf_k=self.rrf_k,
                 top_k=k,
                 id_fn=get_candidate_id,
@@ -184,6 +198,45 @@ class HybridRetriever:
             fused_examples[dep_type] = [item for _, item in fused_tuples]
 
         return fused_examples
+
+    @staticmethod
+    def _metadata_ranking(
+        target_pair: RequirementPair,
+        candidates: List[RequirementPair],
+        filter_fn: Optional[Callable[[List[RequirementPair]], List[RequirementPair]]] = None,
+    ) -> List[RequirementPair]:
+        """Rank pairs by exact component/subsystem/system metadata overlap.
+
+        Metadata is a supplemental ranking signal: it is omitted when the target
+        has no usable metadata or no candidate shares a value. Source document,
+        requirement identifiers, and free text are intentionally not treated as
+        metadata so they cannot leak identity or duplicate lexical retrieval.
+        """
+        fields = ("component", "subsystem", "system")
+
+        def values(pair: RequirementPair) -> set[tuple[str, str]]:
+            result = set()
+            for requirement in (pair.req_a, pair.req_b):
+                for field in fields:
+                    raw = getattr(requirement, field, None)
+                    if not isinstance(raw, str) or not raw.strip():
+                        continue
+                    value = " ".join(raw.casefold().split())
+                    if field == "system" and value == "genericsystem":
+                        continue
+                    result.add((field, value))
+            return result
+
+        target_values = values(target_pair)
+        if not target_values:
+            return []
+
+        eligible = filter_fn(candidates) if filter_fn else candidates
+        scored = [(len(target_values & values(pair)), pair) for pair in eligible]
+        if not any(score for score, _ in scored):
+            return []
+        scored.sort(key=lambda item: (-item[0], get_candidate_id(item[1])))
+        return [pair for score, pair in scored if score > 0]
 
     def retrieve(
         self,
@@ -208,9 +261,27 @@ class HybridRetriever:
             p for sub in self.bm25_retriever.retrieve_example_pairs(target_pair, candidate_pool=annotated_pool, k=len(annotated_pool)).values() for p in sub
         ]
 
+        metadata_ranking = self._metadata_ranking(
+            target_pair,
+            annotated_pool,
+            filter_fn=lambda pairs: [
+                pair for pair in pairs
+                if pair.id != target_pair.id
+                and not (
+                    pair.req_a.text == target_pair.req_a.text
+                    and pair.req_b.text == target_pair.req_b.text
+                )
+            ],
+        )
+        rankings = [dense_list, bm25_list]
+        weights = [self.dense_weight, self.bm25_weight]
+        if metadata_ranking and self.metadata_weight > 0:
+            rankings.append(metadata_ranking)
+            weights.append(self.metadata_weight)
+
         return self.reciprocal_rank_fusion(
-            rankings=[dense_list, bm25_list],
-            weights=[self.dense_weight, self.bm25_weight],
+            rankings=rankings,
+            weights=weights,
             rrf_k=self.rrf_k,
             top_k=k,
             id_fn=get_candidate_id,

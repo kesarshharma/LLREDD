@@ -13,6 +13,7 @@ import datetime
 import hashlib
 import json
 import os
+import tempfile
 import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -29,6 +30,7 @@ from leredd.data_models import (
     RequirementPair,
     VerificationStatus,
 )
+from leredd.synthetic import is_synthetic, synthetic_source_identity
 
 
 class ReviewReasonCode(str, Enum):
@@ -38,7 +40,8 @@ class ReviewReasonCode(str, Enum):
     LLM_FAILURE = "llm_failure"  # LLM execution error, timeout, or malformed response
     HEURISTIC_ONLY = "heuristic_only"  # Heuristic predicted, LLM abstained/failed
     LLM_ONLY = "llm_only"  # LLM predicted, Heuristic abstained
-    LOW_CONFIDENCE = "low_confidence"  # Model confidence below threshold
+    LOW_CONFIDENCE = "low_confidence"  # Self-reported confidence at or below the configured cutoff
+    SHORT_REQUIREMENT = "short_requirement"  # Requirement text is below the configured minimum length
     MISSING_METADATA = "missing_metadata"  # Requirement or provenance metadata incomplete
     EXPLICIT_FLAG = "explicit_flag"  # Explicitly flagged for human review
 
@@ -58,7 +61,7 @@ class ReviewPriority(int, Enum):
     """Deterministic priority levels for review items (1 = Highest, 5 = Lowest)."""
     CRITICAL = 1  # Disagreement between methods
     HIGH = 2      # LLM or execution failures
-    MEDIUM = 3    # Missing metadata or both abstained
+    MEDIUM = 3    # Missing metadata, short requirement text, or both abstained
     LOW = 4       # Single-method predictions or low confidence
     INFO = 5      # Other explicitly flagged items
 
@@ -70,7 +73,7 @@ class HumanDecision(BaseModel):
     pair_id: str = Field(description="Target requirement pair ID")
     decision_type: QueueStatus = Field(description="Decision status (accepted, corrected, rejected, deferred)")
     final_label: Optional[DependencyType] = Field(default=None, description="Final label assigned by human reviewer")
-    reviewer_id: str = Field(default="human_reviewer_1", description="Identifier of human reviewer")
+    reviewer_id: str = Field(default="", description="Identifier of human reviewer")
     reviewer_notes: str = Field(default="", description="Detailed justification or review notes")
     decided_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     previous_label: Optional[DependencyType] = Field(default=None, description="Provisional label before decision")
@@ -96,6 +99,18 @@ class ReviewItem(BaseModel):
     req_a_text: str = Field(description="Requirement A full text")
     req_b_text: str = Field(description="Requirement B full text")
     system_name: Optional[str] = Field(default=None, description="Source system/SRS identifier")
+    req_a_system: Optional[str] = Field(default=None, description="Requirement A system identifier")
+    req_b_system: Optional[str] = Field(default=None, description="Requirement B system identifier")
+    req_a_component: Optional[str] = Field(default=None, description="Requirement A component metadata")
+    req_b_component: Optional[str] = Field(default=None, description="Requirement B component metadata")
+    req_a_subsystem: Optional[str] = Field(default=None, description="Requirement A subsystem metadata")
+    req_b_subsystem: Optional[str] = Field(default=None, description="Requirement B subsystem metadata")
+    req_a_source: Optional[str] = Field(default=None, description="Requirement A source document")
+    req_b_source: Optional[str] = Field(default=None, description="Requirement B source document")
+    req_a_source_location: Optional[str] = Field(default=None, description="Requirement A source location")
+    req_b_source_location: Optional[str] = Field(default=None, description="Requirement B source location")
+    synthetic: bool = Field(default=False, description="Whether this review item is synthetic/demo data")
+    source_identity: Optional[str] = Field(default=None, description="Source identity for this review item")
     orientation: Tuple[str, str] = Field(description="Preserved directional orientation (req_a_id, req_b_id)")
     heuristic_prediction: Optional[DependencyType] = Field(default=None, description="Raw prediction from Heuristic")
     heuristic_evidence: str = Field(default="", description="Supporting evidence / rule ID from Heuristic")
@@ -132,6 +147,11 @@ class ReviewQueueConfig(BaseModel):
     include_single_method: bool = True  # Include Heuristic-only or LLM-only predictions
     include_low_confidence: bool = True
     confidence_threshold: int = 3  # Ratings <= 3 trigger review if enabled
+    minimum_requirement_characters: int = Field(
+        default=20,
+        ge=0,
+        description="Non-empty requirement text shorter than this length is routed for review; zero disables the check.",
+    )
 
 
 class ReviewQueueManifest(BaseModel):
@@ -145,6 +165,10 @@ class ReviewQueueManifest(BaseModel):
     rejected_count: int = Field(description="Items rejected by human reviewer")
     deferred_count: int = Field(description="Items deferred by human reviewer")
     reasons_breakdown: Dict[str, int] = Field(default_factory=dict, description="Item counts by primary review reason")
+    eligibility_config: ReviewQueueConfig = Field(
+        default_factory=ReviewQueueConfig,
+        description="Eligibility thresholds and switches used to build this queue.",
+    )
     created_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
 
 
@@ -226,12 +250,33 @@ class ReviewQueueManager:
 
         if l_conf is not None and l_conf <= config.confidence_threshold and config.include_low_confidence:
             reasons.append(ReviewReasonCode.LOW_CONFIDENCE)
-            explanation_parts.append(f"Low LLM confidence score ({l_conf} <= {config.confidence_threshold}).")
+            explanation_parts.append(
+                f"LLM confidence score {l_conf}/5 is at or below review cutoff {config.confidence_threshold}."
+            )
 
         # Required metadata check
         if not pair.req_a.text or not pair.req_b.text:
             reasons.append(ReviewReasonCode.MISSING_METADATA)
             explanation_parts.append("Missing requirement text or essential metadata.")
+
+        minimum_length = config.minimum_requirement_characters
+        if minimum_length:
+            short_requirements = [
+                (label, len(requirement.text.strip()))
+                for label, requirement in (("A", pair.req_a), ("B", pair.req_b))
+                if requirement.text and len(requirement.text.strip()) < minimum_length
+            ]
+            if short_requirements:
+                reasons.append(ReviewReasonCode.SHORT_REQUIREMENT)
+                short_details = ", ".join(
+                    f"Requirement {label} ({length} character{'s' if length != 1 else ''})"
+                    for label, length in short_requirements
+                )
+                explanation_parts.append(
+                    f"{short_details} {'is' if len(short_requirements) == 1 else 'are'} "
+                    f"below the configured review minimum of "
+                    f"{minimum_length} characters; inspect for incomplete or ambiguous text."
+                )
 
         # Filter against config policy
         filtered_reasons = []
@@ -246,6 +291,8 @@ class ReviewQueueManager:
                 filtered_reasons.append(r)
             elif r == ReviewReasonCode.LOW_CONFIDENCE and config.include_low_confidence:
                 filtered_reasons.append(r)
+            elif r == ReviewReasonCode.SHORT_REQUIREMENT:
+                filtered_reasons.append(r)
             elif r in (ReviewReasonCode.MISSING_METADATA, ReviewReasonCode.EXPLICIT_FLAG):
                 filtered_reasons.append(r)
 
@@ -257,7 +304,14 @@ class ReviewQueueManager:
             priority = ReviewPriority.CRITICAL
         elif ReviewReasonCode.LLM_FAILURE in filtered_reasons:
             priority = ReviewPriority.HIGH
-        elif ReviewReasonCode.BOTH_ABSTAINED in filtered_reasons or ReviewReasonCode.MISSING_METADATA in filtered_reasons:
+        elif any(
+            reason in filtered_reasons
+            for reason in (
+                ReviewReasonCode.BOTH_ABSTAINED,
+                ReviewReasonCode.MISSING_METADATA,
+                ReviewReasonCode.SHORT_REQUIREMENT,
+            )
+        ):
             priority = ReviewPriority.MEDIUM
         else:
             priority = ReviewPriority.LOW
@@ -314,6 +368,18 @@ class ReviewQueueManager:
             req_a_text=pair.req_a.text,
             req_b_text=pair.req_b.text,
             system_name=req_a_system or req_b_system,
+            req_a_system=req_a_system,
+            req_b_system=req_b_system,
+            req_a_component=pair.req_a.component,
+            req_b_component=pair.req_b.component,
+            req_a_subsystem=pair.req_a.subsystem,
+            req_b_subsystem=pair.req_b.subsystem,
+            req_a_source=pair.req_a.source,
+            req_b_source=pair.req_b.source,
+            req_a_source_location=pair.req_a.source_location,
+            req_b_source_location=pair.req_b.source_location,
+            synthetic=is_synthetic(pair),
+            source_identity=synthetic_source_identity(pair),
             orientation=(req_a_id, req_b_id),
             heuristic_prediction=h_pred,
             heuristic_evidence=h_ev,
@@ -383,7 +449,7 @@ class ReviewQueueManager:
         item: ReviewItem,
         decision_type: QueueStatus,
         final_label: Optional[Union[DependencyType, str]] = None,
-        reviewer_id: str = "human_reviewer_1",
+        reviewer_id: Optional[str] = None,
         reviewer_notes: str = "",
     ) -> Tuple[ReviewItem, RequirementPair]:
         """Record a human decision on a review item and produce a verified RequirementPair.
@@ -393,6 +459,12 @@ class ReviewQueueManager:
         - Accepts/corrects distinguish label promotion.
         - Raw heuristic and LLM predictions are preserved in audit trail.
         """
+        if not reviewer_id or not reviewer_id.strip():
+            raise ValueError("A nonblank reviewer_id is required for a human decision.")
+        reviewer_id = reviewer_id.strip()
+        if reviewer_id.casefold() in {"human_reviewer_1", "human_cli"}:
+            raise ValueError("A generic placeholder cannot identify a human reviewer.")
+
         if decision_type not in (
             QueueStatus.ACCEPTED,
             QueueStatus.CORRECTED,
@@ -448,14 +520,38 @@ class ReviewQueueManager:
             evidence=f"Human Reviewer ({reviewer_id}) decision: {decision_type.value.upper()}. Notes: {reviewer_notes}",
             review_notes=reviewer_notes,
             dataset_version="human-verified-v1.0",
+            synthetic=item.synthetic,
+            source_identity=item.source_identity,
         )
 
         verified_pair = RequirementPair(
             id=item.pair_id,
-            req_a=Requirement(id=item.req_a_id, text=item.req_a_text, system=item.system_name or "GenericSystem"),
-            req_b=Requirement(id=item.req_b_id, text=item.req_b_text, system=item.system_name or "GenericSystem"),
+            req_a=Requirement(
+                id=item.req_a_id,
+                text=item.req_a_text,
+                system=item.req_a_system or item.system_name or "GenericSystem",
+                component=item.req_a_component,
+                subsystem=item.req_a_subsystem,
+                source=item.req_a_source,
+                source_location=item.req_a_source_location,
+                synthetic=item.synthetic,
+                source_identity=item.source_identity,
+            ),
+            req_b=Requirement(
+                id=item.req_b_id,
+                text=item.req_b_text,
+                system=item.req_b_system or item.system_name or "GenericSystem",
+                component=item.req_b_component,
+                subsystem=item.req_b_subsystem,
+                source=item.req_b_source,
+                source_location=item.req_b_source_location,
+                synthetic=item.synthetic,
+                source_identity=item.source_identity,
+            ),
             dependency_type=parsed_label if new_status == VerificationStatus.VERIFIED else None,
             provenance=verified_prov,
+            synthetic=item.synthetic,
+            source_identity=item.source_identity,
         )
 
         logger.info(f"Recorded decision {decision_type.value} for item {item.queue_id} by {reviewer_id}.")
@@ -482,7 +578,11 @@ class ReviewQueueManager:
         return filtered
 
     @staticmethod
-    def create_manifest(items: List[ReviewItem], source_identity: str = "Provisional_Dataset") -> ReviewQueueManifest:
+    def create_manifest(
+        items: List[ReviewItem],
+        source_identity: str = "Provisional_Dataset",
+        config: Optional[ReviewQueueConfig] = None,
+    ) -> ReviewQueueManifest:
         """Create summary manifest audit record for the review queue."""
         reasons_breakdown: Dict[str, int] = {}
         for item in items:
@@ -498,6 +598,7 @@ class ReviewQueueManager:
             rejected_count=sum(1 for i in items if i.status == QueueStatus.REJECTED),
             deferred_count=sum(1 for i in items if i.status == QueueStatus.DEFERRED),
             reasons_breakdown=reasons_breakdown,
+            eligibility_config=config or ReviewQueueConfig(),
         )
 
     @staticmethod
@@ -507,21 +608,52 @@ class ReviewQueueManager:
         output_queue_file: str,
         output_manifest_file: Optional[str] = None,
     ) -> None:
-        """Save review queue items and manifest to JSON files."""
-        os.makedirs(os.path.dirname(os.path.abspath(output_queue_file)), exist_ok=True)
+        """Save review queue items and manifest via same-directory atomic replacements.
 
-        data = [i.model_dump(mode="json") for i in items]
-        with open(output_queue_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-
+        Each file is replaced atomically so a failed serialization or initial write
+        cannot truncate an existing queue. The two output files cannot be committed
+        as one filesystem transaction; the queue is replaced first and the manifest
+        second so the queue remains the authoritative artifact if manifest writing
+        fails.
+        """
         if output_manifest_file is None:
             base, ext = os.path.splitext(output_queue_file)
             output_manifest_file = f"{base}_manifest.json"
 
-        with open(output_manifest_file, "w", encoding="utf-8") as f:
-            json.dump(manifest.model_dump(mode="json"), f, indent=2)
+        outputs = (
+            (output_queue_file, [i.model_dump(mode="json") for i in items]),
+            (output_manifest_file, manifest.model_dump(mode="json")),
+        )
+        temporary_files: List[Tuple[str, str]] = []
+        try:
+            for output_path, payload in outputs:
+                output_path = os.fspath(output_path)
+                parent = os.path.dirname(os.path.abspath(output_path))
+                os.makedirs(parent, exist_ok=True)
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=parent,
+                    prefix=f".{os.path.basename(output_path)}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as temp_file:
+                    temporary_files.append((temp_file.name, output_path))
+                    json.dump(payload, temp_file, indent=2)
+                    temp_file.flush()
+                    os.fsync(temp_file.fileno())
 
-        logger.info(f"Saved {len(items)} review items to '{output_queue_file}'.")
+            for temporary_path, output_path in temporary_files:
+                os.replace(temporary_path, output_path)
+
+            logger.info(f"Saved {len(items)} review items to '{output_queue_file}'.")
+        finally:
+            for temporary_path, _ in temporary_files:
+                if os.path.exists(temporary_path):
+                    try:
+                        os.unlink(temporary_path)
+                    except OSError as exc:
+                        logger.warning(f"Could not remove temporary queue file '{temporary_path}': {exc}")
 
     @staticmethod
     def load_queue(queue_file: str) -> List[ReviewItem]:

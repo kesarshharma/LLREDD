@@ -9,6 +9,8 @@ from leredd.data_models import (
     RequirementPair,
     DependencyType,
     Prediction,
+    PredictionStabilityStatus,
+    PredictionValidationStatus,
 )
 from leredd.embeddings import EmbeddingModel
 from leredd.retrieval import ExampleRetriever, RAGRetriever
@@ -66,21 +68,27 @@ class ResponseParser:
         else:
             confidence = 5
 
-        # 4. Apply paper Threshold-Based Re-annotation (RQ2 optimal setting)
-        # Requirement pairs assigned a confidence score of threshold or lower are automatically reclassified as No_dependency
+        # Confidence screening is a review signal. A low self-reported score
+        # must not change the predicted taxonomy class into No_dependency.
         final_type = parsed_type
-        if confidence_threshold >= 0 and confidence <= confidence_threshold and final_type != DependencyType.NO_DEPENDENCY:
+        if confidence_threshold < 0:
+            validation_status = PredictionValidationStatus.THRESHOLD_DISABLED
+        elif confidence <= confidence_threshold:
+            validation_status = PredictionValidationStatus.REQUIRES_REVIEW
             logger.info(
-                f"Re-annotating pair {pair_id} from {final_type.value} to No_dependency "
-                f"(confidence {confidence} <= threshold {confidence_threshold})"
+                f"Flagging pair {pair_id} for review: self-reported confidence "
+                f"{confidence} <= threshold {confidence_threshold}"
             )
-            final_type = DependencyType.NO_DEPENDENCY
+        else:
+            validation_status = PredictionValidationStatus.PASSED_THRESHOLD
 
         return Prediction(
             pair_id=pair_id,
             dependency_type=final_type,
             rationale=rationale,
             confidence=confidence,
+            validation_status=validation_status,
+            validation_threshold=confidence_threshold,
             raw_response=raw_text,
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
@@ -98,13 +106,56 @@ class LEREDDDetector:
         llm: LLMClient | None = None
     ):
         self.config = config or get_config()
-        self.embedder = embedder or EmbeddingModel(self.config.embedding_model)
-        self.example_retriever = ExampleRetriever(self.embedder, self.config)
+        # Keep model startup off the prediction path unless retrieval actually
+        # needs embeddings. Zero-shot detection and BM25 retrieval do not use it.
+        self._embedder = embedder
+        self._example_retriever: ExampleRetriever | None = None
         self._bm25_retriever = None
         self._hybrid_retriever = None
-        self.rag_retriever = RAGRetriever(self.embedder, self.config) if self.config.use_rag else None
+        self._rag_retriever: RAGRetriever | None = None
         self.prompt_builder = PromptBuilder(self.config)
         self.llm = llm or LLMClientFactory.create(self.config)
+
+    @property
+    def embedder(self) -> EmbeddingModel:
+        """Initialize dense embeddings only when a workflow first needs them."""
+        if self._embedder is None:
+            self._embedder = EmbeddingModel(self.config.embedding_model)
+        return self._embedder
+
+    @property
+    def loaded_embedder(self) -> EmbeddingModel | None:
+        """Return the initialized embedder without triggering model startup."""
+        return self._embedder
+
+    @embedder.setter
+    def embedder(self, value: EmbeddingModel) -> None:
+        self._embedder = value
+        self._example_retriever = None
+        self._hybrid_retriever = None
+        self._rag_retriever = None
+
+    @property
+    def example_retriever(self) -> ExampleRetriever:
+        if self._example_retriever is None:
+            self._example_retriever = ExampleRetriever(self.embedder, self.config)
+        return self._example_retriever
+
+    @example_retriever.setter
+    def example_retriever(self, value: ExampleRetriever) -> None:
+        self._example_retriever = value
+
+    @property
+    def rag_retriever(self) -> RAGRetriever | None:
+        if not self.config.use_rag:
+            return None
+        if self._rag_retriever is None:
+            self._rag_retriever = RAGRetriever(self.embedder, self.config)
+        return self._rag_retriever
+
+    @rag_retriever.setter
+    def rag_retriever(self, value: RAGRetriever | None) -> None:
+        self._rag_retriever = value
 
     @property
     def bm25_retriever(self):
@@ -131,8 +182,16 @@ class LEREDDDetector:
         domain: str = "automotive software engineering",
         retrieval_mode: str | None = None,
         confidence_threshold: int | None = None,
+        stability_runs: int = 1,
+        use_rag: bool | None = None,
     ) -> Prediction:
         """Execute LEREDD detection pipeline on a single requirement pair."""
+        if (
+            isinstance(stability_runs, bool)
+            or not isinstance(stability_runs, int)
+            or not 1 <= stability_runs <= 5
+        ):
+            raise ValueError("stability_runs must be an integer from 1 to 5.")
         pool = annotated_pool or []
 
         # Phase 1: Knowledge Retrieval
@@ -155,8 +214,13 @@ class LEREDDDetector:
 
         # 2. Contextual Retrieval (RAG) - used for cross-system / inter-dataset setting
         context_chunks = None
-        if self.config.use_rag and srs_text and self.rag_retriever:
-            context_chunks = self.rag_retriever.retrieve(
+        rag_enabled = self.config.use_rag if use_rag is None else use_rag
+        rag_retriever = self._rag_retriever
+        if rag_enabled and srs_text:
+            if rag_retriever is None:
+                rag_retriever = RAGRetriever(self.embedder, self.config)
+                self._rag_retriever = rag_retriever
+            context_chunks = rag_retriever.retrieve(
                 target_pair=target_pair,
                 srs_text=srs_text,
                 k=self.config.rag_k_chunks
@@ -171,7 +235,19 @@ class LEREDDDetector:
             system_name=target_pair.req_a.system
         )
 
-        response_text, usage = self.llm.generate(prompt, temperature=self.config.temperature)
+        generator = self.llm.generate
+        if stability_runs > 1:
+            generator = getattr(self.llm, "generate_uncached", generator)
+        responses = [
+            generator(prompt, temperature=self.config.temperature)
+            for _ in range(stability_runs)
+        ]
+        response_text = responses[0][0]
+        usage = {
+            "prompt_tokens": sum(int(item.get("prompt_tokens", 0) or 0) for _, item in responses),
+            "completion_tokens": sum(int(item.get("completion_tokens", 0) or 0) for _, item in responses),
+            "cost_usd": sum(float(item.get("cost_usd", 0.0) or 0.0) for _, item in responses),
+        }
 
         threshold = (
             confidence_threshold
@@ -186,7 +262,36 @@ class LEREDDDetector:
             usage_info=usage
         )
 
-        return prediction
+        if stability_runs == 1:
+            return prediction
+
+        repeated = [
+            ResponseParser.parse(
+                raw_text=raw_text,
+                pair_id=target_pair.id,
+                confidence_threshold=threshold,
+            )
+            for raw_text, _ in responses
+        ]
+        labels = [item.dependency_type for item in repeated]
+        confidences = [item.confidence for item in repeated]
+        reasons = []
+        if len(set(labels)) > 1:
+            reasons.append("dependency_label_disagreement")
+        if len(set(confidences)) > 1:
+            reasons.append("self_reported_confidence_variation")
+
+        return prediction.model_copy(update={
+            "stability_status": (
+                PredictionStabilityStatus.INCONSISTENT
+                if reasons
+                else PredictionStabilityStatus.CONSISTENT
+            ),
+            "stability_run_count": stability_runs,
+            "stability_labels": labels,
+            "stability_confidences": confidences,
+            "stability_reasons": reasons,
+        })
 
     def detect_batch(
         self,
@@ -196,6 +301,8 @@ class LEREDDDetector:
         max_workers: int = 4,
         retrieval_mode: str | None = None,
         confidence_threshold: int | None = None,
+        stability_runs: int = 1,
+        use_rag: bool | None = None,
     ) -> List[Prediction]:
         """Execute batch detection across a list of requirement pairs."""
         if not pairs:
@@ -208,7 +315,15 @@ class LEREDDDetector:
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_pair = {
                 executor.submit(
-                    self.detect_pair, pair, annotated_pool, srs_text, "automotive software engineering", retrieval_mode, confidence_threshold
+                    self.detect_pair,
+                    pair,
+                    annotated_pool,
+                    srs_text,
+                    "automotive software engineering",
+                    retrieval_mode,
+                    confidence_threshold,
+                    stability_runs,
+                    use_rag,
                 ): pair
                 for pair in pairs
             }

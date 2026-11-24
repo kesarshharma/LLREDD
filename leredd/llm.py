@@ -20,6 +20,12 @@ class LLMClient(ABC):
         """Generate response string from prompt. Returns (response_text, usage_info)."""
         pass
 
+    def generate_uncached(
+        self, prompt: str, temperature: float = 0.2
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Generate a fresh response; cache-aware clients can override this method."""
+        return self.generate(prompt, temperature)
+
 
 class DiskCachedLLMClient(LLMClient):
     """Decorator or mixin wrapper adding response caching to any LLM client."""
@@ -31,7 +37,9 @@ class DiskCachedLLMClient(LLMClient):
         os.makedirs(self.cache_dir, exist_ok=True)
 
     def _get_cache_key(self, prompt: str, temperature: float) -> str:
-        content = f"{self.inner_client.__class__.__name__}:{temperature}:{prompt}"
+        provider = getattr(self.inner_client, "provider", self.inner_client.__class__.__name__)
+        model = getattr(self.inner_client, "model", "")
+        content = f"v2:{provider}:{model}:{temperature}:{prompt}"
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
     def generate(self, prompt: str, temperature: float = 0.2) -> Tuple[str, Dict[str, Any]]:
@@ -55,6 +63,12 @@ class DiskCachedLLMClient(LLMClient):
             logger.debug(f"Cache write error: {e}")
 
         return response_text, usage
+
+    def generate_uncached(
+        self, prompt: str, temperature: float = 0.2
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Bypass this wrapper's cache so repeated-run checks receive fresh outputs."""
+        return self.inner_client.generate(prompt, temperature)
 
 
 class OpenAILLMClient(LLMClient):

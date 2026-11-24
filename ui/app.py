@@ -2,6 +2,7 @@
 
 import os
 import json
+import hashlib
 import datetime
 import tempfile
 import uuid
@@ -15,15 +16,18 @@ import networkx as nx
 from leredd.config import get_config
 from leredd.data_models import (
     AnnotationProvenance, AnnotationSource, Requirement, RequirementPair,
-    DependencyType, Prediction, VerificationStatus,
+    DependencyType, Prediction, PredictionStabilityStatus,
+    PredictionValidationStatus, VerificationStatus,
 )
 from leredd.utils import (
+    apply_requirement_metadata,
     extract_requirements_from_text,
     generate_requirement_pairs,
     load_pairs_json,
     save_pairs_json,
 )
 from leredd.detector import LEREDDDetector
+from leredd.synthetic import is_synthetic
 from scripts.run_full_evaluation import run_evaluation
 from leredd.review_queue import (
     ReviewQueueManager,
@@ -69,6 +73,12 @@ st.markdown("""
         padding: 24px;
         margin-bottom: 20px;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    /* Streamlit renders each Markdown block separately, leaving the legacy
+       opening/closing card blocks empty between real content sections. */
+    .glass-card:empty {
+        display: none;
     }
 
     .metric-badge {
@@ -122,6 +132,14 @@ def render_badge(dep_type: str) -> str:
         return f'<span class="metric-badge badge-nodep">No Dependency</span>'
 
 
+def format_review_reason(reason) -> str:
+    """Render stable queue reason codes with user-facing wording."""
+    value = reason.value if isinstance(reason, ReviewReasonCode) else str(reason)
+    if value == ReviewReasonCode.LOW_CONFIDENCE.value:
+        return "Confidence at/below cutoff"
+    return value.replace("_", " ").title()
+
+
 def validate_ui_output_path(output_path: str, overwrite: bool = False) -> Path:
     """Resolve an output path while protecting source datasets and existing files."""
     target = Path(output_path).expanduser().resolve()
@@ -146,6 +164,30 @@ def persist_ui_pairs(pairs, target: Path) -> None:
         ) as temp_file:
             temp_name = temp_file.name
         save_pairs_json(pairs, temp_name)
+        os.replace(temp_name, target)
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
+
+
+def persist_ui_review_queue(items, target: Path) -> None:
+    """Atomically replace the queue JSON so failed writes preserve prior review work."""
+    target = validate_ui_output_path(str(target), overwrite=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_name = temp_file.name
+            json.dump([item.model_dump(mode="json") for item in items], temp_file, indent=2)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
         os.replace(temp_name, target)
     finally:
         if temp_name and os.path.exists(temp_name):
@@ -191,6 +233,10 @@ if "annotated_pairs" not in st.session_state:
     st.session_state.annotated_pairs = []
 if "detection_results" not in st.session_state:
     st.session_state.detection_results = []
+if "last_detection_prediction" not in st.session_state:
+    st.session_state.last_detection_prediction = None
+if "last_detection_review_pair" not in st.session_state:
+    st.session_state.last_detection_review_pair = None
 
 
 # Sidebar Navigation
@@ -256,31 +302,60 @@ elif page == "2. Requirement Annotation":
     with tab1:
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.subheader("Upload SRS Document")
-        system_name = st.text_input("System Identifier", value="ADB")
+        system_name = st.text_input("System Identifier", value="SYNTHETIC_DEMO")
         uploaded_srs = st.file_uploader("Upload a text SRS (.txt or .md)", type=["txt", "md"])
 
-        default_srs_file = "data/raw/adb_srs.txt"
-        default_text = ""
-        if os.path.exists(default_srs_file):
-            with open(default_srs_file, "r", encoding="utf-8") as f:
-                default_text = f.read()
-
+        default_text = (
+            "[REQ-DEMO-01] The synthetic controller shall read wheel speed sensor data.\n"
+            "[REQ-DEMO-02] The synthetic controller shall calculate braking distance "
+            "from wheel speed.\n"
+            "[REQ-DEMO-03] The synthetic dashboard shall display a warning when the "
+            "braking system detects a fault."
+        )
+        st.caption("The prefilled SRS is synthetic demo data. Upload or paste your own SRS to replace it.")
         srs_input = st.text_area("SRS Content", value=default_text, height=200)
+        source_bytes = uploaded_srs.getvalue() if uploaded_srs else srs_input.encode("utf-8")
+        source_key = hashlib.sha256(source_bytes).hexdigest()[:16]
+        synthetic_source = st.checkbox(
+            "Mark this SRS as synthetic/demo data",
+            value=uploaded_srs is None and srs_input == default_text,
+            key=f"synthetic_source_{source_key}",
+            help="Synthetic/demo records remain visibly marked and cannot be used for evaluation or dataset release.",
+        )
+        metadata_json = st.text_area(
+            "Optional component/subsystem metadata JSON by requirement ID",
+            value="{}",
+            help='Example: {"REQ-DEMO-01": {"component": "brakes", "subsystem": "control"}}. Values are attached only to exact IDs; they are never inferred.',
+        )
         candidates_output = st.text_input(
             "Generated Candidate JSON Output",
-            value="data/provisional/ui_candidates.json",
+            value=".pytest-tmp/leredd-ui/candidates.json",
         )
         replace_candidates = st.checkbox("Replace this existing candidate output file")
 
         if st.button("Extract Requirements & Generate Pairs"):
             try:
                 document_text = uploaded_srs.getvalue().decode("utf-8") if uploaded_srs else srs_input
+                source_name = uploaded_srs.name if uploaded_srs else "pasted SRS"
             except UnicodeDecodeError:
                 st.error("The uploaded document is not valid UTF-8 text.")
                 document_text = ""
             if document_text.strip():
                 try:
-                    reqs = extract_requirements_from_text(document_text, system_name=system_name)
+                    reqs = extract_requirements_from_text(
+                        document_text,
+                        system_name=system_name,
+                        source_name=source_name,
+                    )
+                    if synthetic_source:
+                        for requirement in reqs:
+                            requirement.synthetic = True
+                            requirement.source_identity = "synthetic:ui-demo"
+                    try:
+                        metadata_by_id = json.loads(metadata_json)
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(f"Metadata JSON is invalid: {exc.msg}.") from exc
+                    reqs = apply_requirement_metadata(reqs, metadata_by_id)
                     pairs = generate_requirement_pairs(reqs)
                     safe_output = validate_ui_output_path(
                         candidates_output, overwrite=replace_candidates
@@ -382,9 +457,35 @@ elif page == "3. LEREDD Detection":
 
         provider = st.selectbox("LLM Provider", ["mock", "openai", "ollama"], index=0)
         llm_model = st.text_input("Model Name", value="gpt-4" if provider == "openai" else "mock-gpt4")
+        retrieval_options = ["dense", "bm25", "hybrid"]
+        retrieval_mode = st.selectbox(
+            "Retrieval Mode",
+            retrieval_options,
+            index=retrieval_options.index(config.retrieval_mode),
+        )
         k_examples = st.slider("Dynamic Examples (k)", min_value=1, max_value=9, value=6)
         use_rag = st.checkbox("Enable RAG Context", value=False)
-        conf_thresh = st.slider("Confidence Threshold", min_value=0, max_value=5, value=4)
+        conf_thresh = st.slider(
+            "Confidence Threshold",
+            min_value=0,
+            max_value=5,
+            value=4,
+            help=(
+                "Scores at or below this self-reported Likert cutoff flag the "
+                "prediction for human review; they do not change its class."
+            ),
+        )
+        stability_runs = st.number_input(
+            "Repeated Inference Runs",
+            min_value=1,
+            max_value=5,
+            value=1,
+            step=1,
+            help=(
+                "Run the same prompt multiple times to screen label and self-reported "
+                "confidence consistency. Multiple OpenAI runs make multiple provider calls."
+            ),
+        )
         if provider == "openai":
             authorize_openai = st.checkbox(
                 "I authorize sending requirement text to the configured OpenAI service"
@@ -394,6 +495,7 @@ elif page == "3. LEREDD Detection":
 
         config.llm_provider = provider
         config.llm_model = llm_model
+        config.retrieval_mode = retrieval_mode
         config.k_examples = k_examples
         config.use_rag = use_rag
         config.confidence_threshold = conf_thresh
@@ -412,8 +514,14 @@ elif page == "3. LEREDD Detection":
             "Requirement B Text",
             value="The system shall include the Brake Control Subsystem (BCS)."
         )
+        req_a_component = st.text_input("Requirement A Component (optional)")
+        req_a_subsystem = st.text_input("Requirement A Subsystem (optional)")
+        req_b_component = st.text_input("Requirement B Component (optional)")
+        req_b_subsystem = st.text_input("Requirement B Subsystem (optional)")
 
         if st.button("Run LEREDD Detection", use_container_width=True):
+            st.session_state.last_detection_prediction = None
+            st.session_state.last_detection_review_pair = None
             if not req_a_input.strip() or not req_b_input.strip():
                 st.error("Both requirement texts must be non-empty.")
             elif provider == "openai" and not authorize_openai:
@@ -421,9 +529,26 @@ elif page == "3. LEREDD Detection":
             else:
                 try:
                     with st.spinner("Executing LEREDD Pipeline (Knowledge Retrieval + Inference)..."):
-                        detector = LEREDDDetector(config=config)
-                        req_a = Requirement(id="REQ-A", text=req_a_input, system="ADB")
-                        req_b = Requirement(id="REQ-B", text=req_b_input, system="ADB")
+                        embedding_cache_key = (
+                            config.embedding_model,
+                            str(config.cache_dir),
+                        )
+                        cached_embedder = (
+                            st.session_state.get("ui_embedding_model")
+                            if st.session_state.get("ui_embedding_model_key") == embedding_cache_key
+                            else None
+                        )
+                        detector = LEREDDDetector(config=config, embedder=cached_embedder)
+                        req_a = Requirement(
+                            id="REQ-A", text=req_a_input, system="ADB",
+                            component=req_a_component.strip() or None,
+                            subsystem=req_a_subsystem.strip() or None,
+                        )
+                        req_b = Requirement(
+                            id="REQ-B", text=req_b_input, system="ADB",
+                            component=req_b_component.strip() or None,
+                            subsystem=req_b_subsystem.strip() or None,
+                        )
                         pair = RequirementPair(id="PAIR-DEMO-001", req_a=req_a, req_b=req_b)
 
                         examples_pool = []
@@ -438,17 +563,141 @@ elif page == "3. LEREDD Detection":
                                 srs_text = f.read()
 
                         pred = detector.detect_pair(
-                            target_pair=pair, annotated_pool=examples_pool, srs_text=srs_text
+                            target_pair=pair,
+                            annotated_pool=examples_pool,
+                            srs_text=srs_text,
+                            retrieval_mode=retrieval_mode,
+                            stability_runs=int(stability_runs),
                         )
+                        loaded_embedder = detector.loaded_embedder
+                        if loaded_embedder is not None:
+                            st.session_state["ui_embedding_model_key"] = embedding_cache_key
+                            st.session_state["ui_embedding_model"] = loaded_embedder
                     st.session_state.detection_results.append(pred)
-                    st.markdown("### Detection Result")
-                    st.markdown(f"**Predicted Type:** {render_badge(pred.dependency_type.value)}", unsafe_allow_html=True)
-                    st.markdown(f"**Likert Confidence Score:** `{pred.confidence}/5`")
-                    st.markdown(f"**Generated Rationale:**\n\n_{pred.rationale}_")
-                    with st.expander("View Full Raw LLM Output"):
-                        st.code(pred.raw_response or "N/A")
+                    review_note_parts = []
+                    if pred.validation_status == PredictionValidationStatus.REQUIRES_REVIEW:
+                        review_note_parts.append(
+                            f"CONFIDENCE_SCREEN: self-reported score {pred.confidence}/5 "
+                            f"is at or below screening threshold {pred.validation_threshold}; routed for review."
+                        )
+                    if pred.stability_status == PredictionStabilityStatus.INCONSISTENT:
+                        review_note_parts.append(
+                            "REPEATED_RUN_DISAGREEMENT: "
+                            + ", ".join(pred.stability_reasons)
+                            + f"; labels={[label.value for label in pred.stability_labels]}, "
+                            + f"confidence={pred.stability_confidences}; first label retained."
+                        )
+                    review_notes = " ".join(review_note_parts) or None
+                    review_provenance = AnnotationProvenance(
+                        source=AnnotationSource.LLM,
+                        status=VerificationStatus.PROVISIONAL,
+                        annotator_id="model_prediction",
+                        model_id=config.llm_model,
+                        predicted_label=pred.dependency_type,
+                        confidence_score=pred.confidence,
+                        evidence=pred.rationale,
+                        review_notes=review_notes,
+                        dataset_version="prediction-screen-v1",
+                    )
+                    st.session_state.last_detection_prediction = pred
+                    st.session_state.last_detection_review_pair = pair.model_copy(update={
+                        "dependency_type": pred.dependency_type,
+                        "provenance": review_provenance,
+                    })
                 except Exception as exc:
                     st.error(f"Detection failed: {exc}")
+
+        last_prediction = st.session_state.last_detection_prediction
+        if last_prediction is not None:
+            st.markdown("### Detection Result")
+            st.markdown(
+                f"**Predicted Type:** {render_badge(last_prediction.dependency_type.value)}",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Likert Confidence Score:** `{last_prediction.confidence}/5`")
+            if last_prediction.stability_status != PredictionStabilityStatus.NOT_CHECKED:
+                st.caption(
+                    f"Stability check: {last_prediction.stability_status.value} across "
+                    f"{last_prediction.stability_run_count} fresh runs; "
+                    f"labels={[label.value for label in last_prediction.stability_labels]}, "
+                    f"confidence={last_prediction.stability_confidences}."
+                )
+            if last_prediction.requires_review:
+                review_reasons = []
+                if last_prediction.validation_status == PredictionValidationStatus.REQUIRES_REVIEW:
+                    review_reasons.append(
+                        f"self-reported confidence {last_prediction.confidence}/5 is at or below "
+                        f"threshold {last_prediction.validation_threshold}"
+                    )
+                if last_prediction.stability_status == PredictionStabilityStatus.INCONSISTENT:
+                    review_reasons.append(
+                        "repeated runs varied: " + ", ".join(last_prediction.stability_reasons)
+                    )
+                st.warning(
+                    "Human review is recommended because "
+                    + "; ".join(review_reasons)
+                    + f". The first predicted class ({last_prediction.dependency_type.value}) is retained; "
+                    "this output is not verified ground truth."
+                )
+                review_queue_path = st.text_input(
+                    "Review Queue JSON Destination",
+                    value=".pytest-tmp/leredd-ui/detection_review_queue.json",
+                    help="The default stays in temporary workspace storage. Choose a durable queue path when preparing real review work.",
+                )
+                queue_path_exists = Path(review_queue_path).expanduser().exists()
+                confirm_queue_overwrite = False
+                if queue_path_exists:
+                    confirm_queue_overwrite = st.checkbox(
+                        "I confirm updating this existing queue",
+                        key="confirm_detection_review_queue_overwrite",
+                    )
+                if st.button("Add Prediction to Human Review Queue"):
+                    try:
+                        target = validate_ui_output_path(
+                            review_queue_path,
+                            overwrite=confirm_queue_overwrite,
+                        )
+                        queue_threshold = last_prediction.validation_threshold
+                        queue_config = ReviewQueueConfig(
+                            confidence_threshold=(
+                                queue_threshold if queue_threshold is not None and queue_threshold >= 0 else 0
+                            )
+                        )
+                        queue_manager = ReviewQueueManager(config=queue_config)
+                        existing_items = (
+                            queue_manager.load_queue(str(target))
+                            if target.exists()
+                            else []
+                        )
+                        candidate_pair = st.session_state.last_detection_review_pair
+                        queue_items = (
+                            queue_manager.refresh_queue(existing_items, [candidate_pair])
+                            if existing_items
+                            else queue_manager.build_queue([candidate_pair])
+                        )
+                        queued_item = next(
+                            (item for item in queue_items if item.pair_id == candidate_pair.id),
+                            None,
+                        )
+                        if queued_item is None:
+                            raise ValueError("Prediction was not eligible for human review.")
+                        persist_ui_review_queue(queue_items, target)
+                        st.success(
+                            f"Added provisional prediction to review queue `{target}`. "
+                            "The item is not verified ground truth."
+                        )
+                    except Exception as exc:
+                        st.error(f"Could not add prediction to review queue: {exc}")
+            elif last_prediction.validation_status == PredictionValidationStatus.PASSED_THRESHOLD:
+                st.success(
+                    "Passed the configured confidence screen. This is not a "
+                    "calibrated probability or human verification."
+                )
+            elif last_prediction.validation_status == PredictionValidationStatus.THRESHOLD_DISABLED:
+                st.info("Confidence screening is disabled for this prediction.")
+            st.markdown(f"**Generated Rationale:**\n\n_{last_prediction.rationale}_")
+            with st.expander("View Full Raw LLM Output"):
+                st.code(last_prediction.raw_response or "N/A")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -560,10 +809,10 @@ elif page == "5. Graph Visualization":
 
         node_trace = go.Scatter(
             x=node_x, y=node_y,
-            mode='markers+text',
+            mode='markers',
             hoverinfo='text',
-            text=[node for node in G.nodes()],
-            textposition="top center",
+            hovertext=node_text,
+            hovertemplate="%{hovertext}<extra></extra>",
             marker=dict(
                 showscale=True,
                 colorscale='YlGnBu',
@@ -640,7 +889,7 @@ elif page == "6. Human Review Queue":
                 rb_cols = st.columns(len(manifest.reasons_breakdown))
                 for idx, (code_name, count) in enumerate(manifest.reasons_breakdown.items()):
                     with rb_cols[idx]:
-                        st.info(f"**{code_name.upper()}**: {count}")
+                        st.info(f"**{format_review_reason(code_name)}**: {count}")
             st.markdown('</div>', unsafe_allow_html=True)
 
             # Section B: Review Queue Browser & Filters
@@ -652,7 +901,9 @@ elif page == "6. Human Review Queue":
                 sel_status = st.selectbox("Filter Queue Status", status_opts, index=1)  # Default to PENDING (index 1)
             with f_col2:
                 reason_opts = ["ALL"] + [r.value for r in ReviewReasonCode]
-                sel_reason = st.selectbox("Filter Review Reason Code", reason_opts)
+                sel_reason = st.selectbox(
+                    "Filter Review Reason Code", reason_opts, format_func=format_review_reason
+                )
             with f_col3:
                 prio_opts = ["ALL", "1 - CRITICAL", "2 - HIGH", "3 - MEDIUM", "4 - LOW", "5 - INFO"]
                 sel_prio = st.selectbox("Filter Priority Rank", prio_opts)
@@ -677,7 +928,7 @@ elif page == "6. Human Review Queue":
                 st.info("No review queue items match the selected filter criteria.")
             else:
                 item_labels = [
-                    f"[{i.queue_id}] P{i.priority} | {i.pair_id} ({i.req_a_id} → {i.req_b_id}) | Reasons: {','.join(r.value for r in i.review_reasons)} | Status: {i.status.value.upper()}"
+                    f"[{i.queue_id}] P{i.priority} | {i.pair_id} ({i.req_a_id} → {i.req_b_id}) | Reasons: {', '.join(format_review_reason(r) for r in i.review_reasons)} | Status: {i.status.value.upper()}"
                     for i in filtered_items
                 ]
                 selected_idx = st.selectbox("Select Queue Item to Inspect & Review", range(len(item_labels)), format_func=lambda idx: item_labels[idx])
@@ -693,7 +944,10 @@ elif page == "6. Human Review Queue":
                 det_c3.write(f"**Preserved Orientation:** `{selected_item.orientation[0]} → {selected_item.orientation[1]}`")
                 det_c4.write(f"**Source System:** `{selected_item.system_name or 'GenericSystem'}`")
 
-                st.warning(f"⚠️ **Review Reasons:** {', '.join(r.value.upper() for r in selected_item.review_reasons)} | **Machine Notes:** {selected_item.review_notes}")
+                st.warning(
+                    f"⚠️ **Review Reasons:** {', '.join(format_review_reason(r) for r in selected_item.review_reasons)} "
+                    f"| **Machine Notes:** {selected_item.review_notes}"
+                )
 
                 st.markdown("---")
                 # Side-by-side Requirements Display
@@ -701,9 +955,35 @@ elif page == "6. Human Review Queue":
                 with req_c1:
                     st.markdown(f"#### 📄 Requirement A (`{selected_item.req_a_id}`)")
                     st.info(selected_item.req_a_text)
+                    req_a_details = [
+                        f"{label}: {value}"
+                        for label, value in (
+                            ("System", selected_item.req_a_system),
+                            ("Component", selected_item.req_a_component),
+                            ("Subsystem", selected_item.req_a_subsystem),
+                            ("Source", selected_item.req_a_source),
+                            ("Location", selected_item.req_a_source_location),
+                        )
+                        if value
+                    ]
+                    if req_a_details:
+                        st.caption(" · ".join(req_a_details))
                 with req_c2:
                     st.markdown(f"#### 📄 Requirement B (`{selected_item.req_b_id}`)")
                     st.info(selected_item.req_b_text)
+                    req_b_details = [
+                        f"{label}: {value}"
+                        for label, value in (
+                            ("System", selected_item.req_b_system),
+                            ("Component", selected_item.req_b_component),
+                            ("Subsystem", selected_item.req_b_subsystem),
+                            ("Source", selected_item.req_b_source),
+                            ("Location", selected_item.req_b_source_location),
+                        )
+                        if value
+                    ]
+                    if req_b_details:
+                        st.caption(" · ".join(req_b_details))
 
                 st.markdown("---")
                 # Model Comparison View
@@ -759,7 +1039,10 @@ elif page == "6. Human Review Queue":
 
                 user_c1, user_c2 = st.columns(2)
                 with user_c1:
-                    reviewer_id_in = st.text_input("Reviewer Identifier", value=selected_item.human_decision.reviewer_id if selected_item.human_decision else "human_reviewer_1")
+                    previous_reviewer_id = selected_item.human_decision.reviewer_id if selected_item.human_decision else ""
+                    if previous_reviewer_id.strip().casefold() in {"human_reviewer_1", "human_cli"}:
+                        previous_reviewer_id = ""
+                    reviewer_id_in = st.text_input("Reviewer Identifier", value=previous_reviewer_id)
                 with user_c2:
                     reviewer_notes_in = st.text_area("Reviewer Decision Justification & Notes", value=selected_item.human_decision.reviewer_notes if selected_item.human_decision else "")
 
@@ -803,26 +1086,45 @@ elif page == "6. Human Review Queue":
             export_path = st.text_input("Verified Dataset Output File Path", value="data/verified/adb_verified.json")
             overwrite_export = st.checkbox("Replace this existing verified export file")
 
-            verified_count = sum(1 for i in items if i.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED) and i.human_decision and i.human_decision.final_label is not None)
-            st.write(f"Ready to export **{verified_count}** human-verified annotations (provisional, deferred, rejected, and unresolved items are excluded).")
+            verified_items = [
+                item for item in items
+                if item.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED)
+                and item.human_decision
+                and item.human_decision.final_label is not None
+            ]
+            verified_pairs = [
+                item for item in verified_items if not is_synthetic(item)
+            ]
+            excluded_synthetic_count = len(verified_items) - len(verified_pairs)
+            st.write(
+                f"Ready to export **{len(verified_pairs)}** eligible human-reviewed annotations "
+                "(provisional, deferred, rejected, unresolved, and synthetic/demo items are excluded)."
+            )
 
             if st.button("🚀 Export Verified Dataset"):
-                if verified_count == 0:
-                    st.warning("No human-verified items available in queue to export. Record ACCEPTED or CORRECTED decisions first.")
+                if not verified_pairs:
+                    st.warning("No eligible human-reviewed items are available to export. Synthetic/demo items cannot be released as ground truth.")
                 else:
                     try:
-                        verified_pairs = []
+                        export_pairs = []
                         for i in items:
-                            if i.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED) and i.human_decision and i.human_decision.final_label:
+                            if (
+                                i.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED)
+                                and i.human_decision
+                                and i.human_decision.final_label
+                                and not is_synthetic(i)
+                            ):
                                 _, v_pair = manager.record_decision(i, i.status, final_label=i.human_decision.final_label, reviewer_id=i.human_decision.reviewer_id, reviewer_notes=i.human_decision.reviewer_notes)
-                                verified_pairs.append(v_pair)
+                                export_pairs.append(v_pair)
 
                         safe_export_path = validate_ui_output_path(
                             export_path, overwrite=overwrite_export
                         )
                         safe_export_path.parent.mkdir(parents=True, exist_ok=True)
-                        save_pairs_json(verified_pairs, str(safe_export_path))
-                        st.success(f"Successfully exported {len(verified_pairs)} verified requirement pairs to '{safe_export_path}'.")
+                        save_pairs_json(export_pairs, str(safe_export_path))
+                        st.success(f"Successfully exported {len(export_pairs)} eligible human-reviewed requirement pairs to '{safe_export_path}'.")
+                        if excluded_synthetic_count:
+                            st.warning(f"Excluded {excluded_synthetic_count} synthetic/demo item(s) from this export.")
                     except Exception as e:
                         st.error(f"Error exporting verified dataset: {e}")
             st.markdown('</div>', unsafe_allow_html=True)

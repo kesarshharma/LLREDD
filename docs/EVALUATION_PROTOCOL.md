@@ -1,6 +1,6 @@
 === LEREDD Replication Evaluation Protocol Design ===
 Status: PROPOSED — not executed; current imported packages are not eligible for metrics until local verification is completed.
-Paper: arXiv:2602.22456 / CC BY 4.0
+Paper: arXiv:2602.22456 (paper record lists CC BY 4.0; dataset rights are separate)
 
 1. Verified datasets (data/replication/*.json via integrate_replication.py loader):
    - adb_evaluation_annotation.json: 313 records (ADB Evaluation)
@@ -11,10 +11,11 @@ Paper: arXiv:2602.22456 / CC BY 4.0
 2. Label semantics (preserved, not remapped):
    - Original spreadsheet label: Implemented by
    - Internal schema: Requires / Implements / Conflicts / Details / Is similar / No dependency
-   - Direction convention: Implemented by = higher-level fulfilled by lower-level (Eq 1/2) — unresolved without full paper text verification
-   - Recommendation: Preserve original Implemented by; do not silently map to Implements until Eq direction confirmed.
+   - Paper definition confirmed: Implements means the higher-level requirement is fulfilled by a lower-level requirement (Table I and Section III of arXiv v2).
+   - Source-label crosswalk remains unresolved: the local source workbooks label the class Implemented by, while the paper scores Implements. A workbook example uses the same two requirements as the paper's example, but with the row order reversed; this is suggestive, not an explicit mapping rule.
+   - Recommendation: Preserve the original Implemented by label and do not map it to Implements for metrics or release until the dataset source or authors provide an explicit crosswalk. The relation's semantic definition is known; the source-to-paper label mapping is not.
 
-   - Evaluation eligibility: records with provenance are ground truth only when local status is exactly `verified`. The loader's `pending_review` records remain excluded. The replication runner is expected to fail closed with an empty eligible test set and write no report in the current data state. Do not edit imported JSON provenance to bypass this gate; use the human review/export workflow to create verified annotations.
+   - Evaluation eligibility: provenance-bearing records require local `verified` status, human source, a reviewer or annotator identity, and an `accepted_label` matching the scored `dependency_type`. The loader's `pending_review` records remain excluded. The replication runner is expected to fail closed with an empty eligible test set and write no report in the current data state. Do not edit imported JSON provenance to bypass this gate; use the human review/export workflow to create verified annotations.
 
 3. Proposed staged evaluation (pending approval):
    - Stage 1 (tuning/config): ADB Pilot (100) only — not primary evaluation ground truth.
@@ -31,13 +32,13 @@ Paper: arXiv:2602.22456 / CC BY 4.0
    - No random 813 merge; keep datasets independent.
 
 7. Unresolved blockers:
-   - Implemented by Eq direction confirmation needed from paper definitions.
-   - No openpyxl cell-level open duplicate audit completed (structurally 0 exact/reversed duplicates verified).
-   - No independent replication URL / dataset-specific redistribution agreement found locally; paper CC BY 4.0 applies but dataset redistribution should include attribution.
+   - Explicit source-to-paper mapping for Implemented by → Implements is still needed; paper definition alone does not specify how the imported workbook label should be normalized.
+   - A read-only openpyxl audit found no exact or reversed duplicate requirement pairs in any of the four source workbooks after whitespace normalization and case-folding (ADB evaluation 313, ADB pilot 100, APA 200, TJA 200); all rows had both requirements and a label. This is a structural duplicate check, not human label verification.
+   - The paper's arXiv record lists CC BY 4.0 for the paper. Its v2 text says the replication package will be made available upon publication, but the local imported package contains no dataset-specific license or redistribution agreement. Paper licensing is not evidence of separate dataset rights.
    - Local imported annotations have status `pending_review`, no annotator IDs, and have not completed this repository's independent local review. Source spreadsheet labels are not locally verified ground truth.
 
 8. Definition of done (before benchmark):
    - Protocol approved (stages, metrics, split design).
-   - Label direction either confirmed or handled explicitly (flagged unresolved).
+   - Source-to-paper label mapping confirmed by an authoritative source or handled explicitly as unresolved and excluded from mapped metrics.
    - All JSON data loaded with provenance; loader tests pass; no existing fixtures/reports altered.
-   - No claim of exact paper reproduction until full Eq verification and benchmark execution completed.
+   - No claim of exact paper reproduction until source-label mapping, dataset rights, protocol approval, independent human verification, and benchmark execution are complete.

@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
@@ -37,6 +38,13 @@ def test_ui_module_import():
     assert module is not None
 
 
+def test_empty_glass_card_shells_are_hidden():
+    """Keep Streamlit's empty legacy Markdown card wrappers out of the layout."""
+    app_source = (Path(__file__).parents[1] / "ui" / "app.py").read_text(encoding="utf-8")
+    assert ".glass-card:empty" in app_source
+    assert "display: none;" in app_source
+
+
 def test_operational_queue_counts_from_manifest(tmp_path):
     """Verify queue statistics are computed accurately from actual loaded queue items."""
     manager = ReviewQueueManager()
@@ -48,7 +56,7 @@ def test_operational_queue_counts_from_manifest(tmp_path):
     queue = manager.build_queue([pair1, pair2])
 
     # Accept pair1
-    manager.record_decision(queue[0], decision_type=QueueStatus.ACCEPTED, final_label=DependencyType.REQUIRES)
+    manager.record_decision(queue[0], decision_type=QueueStatus.ACCEPTED, final_label=DependencyType.REQUIRES, reviewer_id="fixture-reviewer")
 
     manifest = manager.create_manifest(queue)
 
@@ -89,7 +97,7 @@ def test_invalid_decision_submision_rejected():
 
     # Accepting an unresolved item without proposed or final label must raise ValueError
     with pytest.raises(ValueError, match="Cannot ACCEPT an item with no proposed"):
-        manager.record_decision(item=item, decision_type=QueueStatus.ACCEPTED, final_label=None)
+        manager.record_decision(item=item, decision_type=QueueStatus.ACCEPTED, final_label=None, reviewer_id="fixture-reviewer")
 
 
 def test_verified_export_filters_provisional_and_deferred(tmp_path):
@@ -107,15 +115,15 @@ def test_verified_export_filters_provisional_and_deferred(tmp_path):
     item_rej = next(i for i in queue if i.pair_id == "P-REJ")
 
     # Record ACCEPT on p_acc, DEFER on p_def, REJECT on p_rej
-    manager.record_decision(item_acc, decision_type=QueueStatus.ACCEPTED)
-    manager.record_decision(item_def, decision_type=QueueStatus.DEFERRED)
-    manager.record_decision(item_rej, decision_type=QueueStatus.REJECTED)
+    manager.record_decision(item_acc, decision_type=QueueStatus.ACCEPTED, reviewer_id="fixture-reviewer")
+    manager.record_decision(item_def, decision_type=QueueStatus.DEFERRED, reviewer_id="fixture-reviewer")
+    manager.record_decision(item_rej, decision_type=QueueStatus.REJECTED, reviewer_id="fixture-reviewer")
 
     # Filter export list: only ACCEPTED or CORRECTED with valid final_label
     export_pairs = []
     for item in queue:
         if item.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED) and item.human_decision and item.human_decision.final_label:
-            _, v_pair = manager.record_decision(item, item.status, final_label=item.human_decision.final_label)
+            _, v_pair = manager.record_decision(item, item.status, final_label=item.human_decision.final_label, reviewer_id="fixture-reviewer")
             export_pairs.append(v_pair)
 
     assert len(export_pairs) == 1
@@ -163,6 +171,173 @@ def test_cli_queue_create_list_decide_export_compatibility(tmp_path):
     assert len(v_data) == 1
     assert v_data[0]["dependency_type"] == "Implements"
     assert v_data[0]["provenance"]["status"] == "verified"
+
+
+def _create_cli_queue(tmp_path, queue_name="queue.json"):
+    pair = RequirementPair(
+        id="CLI-SAFE-DECISION",
+        req_a=Requirement(id="CLI-SAFE-A", text="Requirement A."),
+        req_b=Requirement(id="CLI-SAFE-B", text="Requirement B."),
+        dependency_type=DependencyType.REQUIRES,
+        provenance=AnnotationProvenance(
+            source=AnnotationSource.LLM,
+            status=VerificationStatus.PROVISIONAL,
+        ),
+    )
+    manager = ReviewQueueManager()
+    items = manager.build_queue([pair])
+    queue_path = tmp_path / queue_name
+    manager.save_queue(items, manager.create_manifest(items), str(queue_path))
+    return queue_path, items[0].queue_id
+
+
+def test_cli_queue_decide_preserves_malformed_verified_export(tmp_path):
+    queue_path, item_id = _create_cli_queue(tmp_path)
+    verified_path = tmp_path / "verified.json"
+    verified_path.write_text("{malformed", encoding="utf-8")
+
+    result = runner.invoke(app, [
+        "queue-decide", "--queue", str(queue_path), "--item-id", item_id,
+        "--decision", "accepted", "--reviewer", "fixture-reviewer",
+        "--verified-out", str(verified_path),
+    ])
+
+    assert result.exit_code != 0
+    assert "Cannot read existing verified dataset" in result.output
+    assert verified_path.read_text(encoding="utf-8") == "{malformed"
+    assert ReviewQueueManager.load_queue(str(queue_path))[0].status == QueueStatus.PENDING
+
+
+def test_cli_queue_decide_rejects_blank_reviewer_without_mutating_queue(tmp_path):
+    queue_path, item_id = _create_cli_queue(tmp_path)
+    before = queue_path.read_text(encoding="utf-8")
+
+    result = runner.invoke(app, [
+        "queue-decide", "--queue", str(queue_path), "--item-id", item_id,
+        "--decision", "accepted", "--reviewer", "   ",
+    ])
+
+    assert result.exit_code != 0
+    assert "--reviewer" in result.output
+    assert queue_path.read_text(encoding="utf-8") == before
+    assert ReviewQueueManager.load_queue(str(queue_path))[0].status == QueueStatus.PENDING
+
+
+def test_cli_queue_decide_does_not_export_rejected_pair(tmp_path):
+    queue_path, item_id = _create_cli_queue(tmp_path)
+    verified_path = tmp_path / "verified.json"
+
+    result = runner.invoke(app, [
+        "queue-decide", "--queue", str(queue_path), "--item-id", item_id,
+        "--decision", "rejected", "--reviewer", "fixture-reviewer",
+        "--verified-out", str(verified_path),
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert not verified_path.exists()
+    assert ReviewQueueManager.load_queue(str(queue_path))[0].status == QueueStatus.REJECTED
+
+
+def test_cli_queue_decide_retry_does_not_duplicate_verified_pair(tmp_path):
+    queue_path, item_id = _create_cli_queue(tmp_path)
+    verified_path = tmp_path / "verified.json"
+    command = [
+        "queue-decide", "--queue", str(queue_path), "--item-id", item_id,
+        "--decision", "accepted", "--reviewer", "fixture-reviewer",
+        "--verified-out", str(verified_path),
+    ]
+
+    assert runner.invoke(app, command).exit_code == 0
+    assert runner.invoke(app, command).exit_code == 0
+
+    exported = json.loads(verified_path.read_text(encoding="utf-8"))
+    assert len(exported) == 1
+    assert exported[0]["id"] == "CLI-SAFE-DECISION"
+
+
+def test_cli_queue_decide_does_not_export_synthetic_pair(tmp_path):
+    pair = RequirementPair(
+        id="SYNTHETIC-CLI-PAIR",
+        req_a=Requirement(
+            id="SYNTHETIC-A", text="Synthetic requirement A.",
+            synthetic=True, source_identity="synthetic:cli-test",
+        ),
+        req_b=Requirement(
+            id="SYNTHETIC-B", text="Synthetic requirement B.",
+            synthetic=True, source_identity="synthetic:cli-test",
+        ),
+        dependency_type=DependencyType.REQUIRES,
+        provenance=AnnotationProvenance(
+            source=AnnotationSource.LLM,
+            status=VerificationStatus.PROVISIONAL,
+            predicted_label=DependencyType.REQUIRES,
+            confidence_score=2,
+        ),
+    )
+    queue_path = tmp_path / "synthetic-queue.json"
+    verified_path = tmp_path / "synthetic-verified.json"
+    items = ReviewQueueManager().build_queue([pair])
+    ReviewQueueManager.save_queue(
+        items,
+        ReviewQueueManager.create_manifest(items),
+        str(queue_path),
+    )
+
+    result = runner.invoke(app, [
+        "queue-decide", "--queue", str(queue_path),
+        "--item-id", items[0].queue_id, "--decision", "accepted",
+        "--label", "Requires", "--reviewer", "real-reviewer-for-test",
+        "--verified-out", str(verified_path),
+    ])
+
+    assert result.exit_code == 0, result.stdout
+    assert "Synthetic/demo pair" in result.stdout
+    assert not verified_path.exists()
+    assert ReviewQueueManager.load_queue(str(queue_path))[0].status == QueueStatus.ACCEPTED
+
+
+def test_cli_queue_decide_write_failure_preserves_existing_export(tmp_path, monkeypatch):
+    import leredd.cli as cli
+
+    queue_path, item_id = _create_cli_queue(tmp_path)
+    verified_path = tmp_path / "verified.json"
+    verified_path.write_text("[]", encoding="utf-8")
+
+    def fail_write(*args, **kwargs):
+        raise OSError("simulated disk write failure")
+
+    monkeypatch.setattr(cli, "save_pairs_json", fail_write)
+    result = runner.invoke(app, [
+        "queue-decide", "--queue", str(queue_path), "--item-id", item_id,
+        "--decision", "accepted", "--reviewer", "fixture-reviewer",
+        "--verified-out", str(verified_path),
+    ])
+
+    assert result.exit_code != 0
+    assert verified_path.read_text(encoding="utf-8") == "[]"
+    assert not list(tmp_path.glob(".verified.json.*.tmp"))
+
+
+def test_cli_queue_create_preserves_unreadable_existing_queue(tmp_path):
+    provisional_path = tmp_path / "provisional.json"
+    pair = RequirementPair(
+        id="QUEUE-CREATE-SAFE",
+        req_a=Requirement(id="SAFE-A", text="Requirement A."),
+        req_b=Requirement(id="SAFE-B", text="Requirement B."),
+        dependency_type=DependencyType.REQUIRES,
+        provenance=AnnotationProvenance(source=AnnotationSource.LLM, status=VerificationStatus.PROVISIONAL),
+    )
+    provisional_path.write_text(json.dumps([pair.model_dump(mode="json")]), encoding="utf-8")
+    queue_path = tmp_path / "queue.json"
+    queue_path.write_text("{malformed", encoding="utf-8")
+
+    result = runner.invoke(app, [
+        "queue-create", "--input", str(provisional_path), "--output", str(queue_path),
+    ])
+
+    assert result.exit_code != 0
+    assert "Cannot read existing review queue" in result.output
+    assert queue_path.read_text(encoding="utf-8") == "{malformed"
 
 
 def test_streamlit_export_save_pairs_json_defined():

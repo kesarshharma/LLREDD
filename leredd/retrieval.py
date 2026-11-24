@@ -4,8 +4,9 @@ import numpy as np
 from typing import List, Dict
 from loguru import logger
 from leredd.config import LEREDDConfig, get_config
-from leredd.data_models import RequirementPair, DependencyType, VerificationStatus
+from leredd.data_models import Requirement, RequirementPair, DependencyType, VerificationStatus
 from leredd.embeddings import EmbeddingModel
+from leredd.synthetic import is_synthetic
 
 
 def compute_vector_similarity(
@@ -79,6 +80,7 @@ class ExampleRetriever:
             pair for pair in annotated_pool
             if pair.dependency_type is not None
             and (pair.provenance is None or pair.provenance.status == VerificationStatus.VERIFIED)
+            and not is_synthetic(pair)
         ]
         if not eligible_pool:
             logger.warning("Annotated candidate pool is empty. Returning empty examples dictionary.")
@@ -132,6 +134,59 @@ class ExampleRetriever:
         return retrieved_examples
 
 
+class RequirementRetriever:
+    """Rank a requirement corpus by dense embedding similarity.
+
+    This retriever is intentionally separate from ``ExampleRetriever``: candidate
+    generation ranks individual Requirements, while detection ranks annotated
+    RequirementPairs.
+    """
+
+    def __init__(
+        self,
+        requirements: List[Requirement],
+        embedder: EmbeddingModel | None = None,
+        config: LEREDDConfig | None = None,
+    ):
+        self.config = config or get_config()
+        self.requirements = list(requirements)
+        self.embedder = embedder or EmbeddingModel(self.config.embedding_model)
+        self._embeddings = self.embedder.encode(
+            [requirement.text for requirement in self.requirements]
+        )
+
+    def retrieve(
+        self, query: Requirement, k: int = 5
+    ) -> List[tuple[float, Requirement]]:
+        """Return the top ``k`` corpus requirements for a requirement query."""
+        if k <= 0 or not self.requirements:
+            return []
+
+        query_embedding = self.embedder.encode([query.text])[0]
+        scored = [
+            (
+                compute_vector_similarity(
+                    query_embedding,
+                    embedding,
+                    metric=self.config.similarity_metric,
+                ),
+                requirement,
+                index,
+            )
+            for index, (requirement, embedding) in enumerate(
+                zip(self.requirements, self._embeddings)
+            )
+        ]
+        scored.sort(
+            key=lambda item: (
+                -item[0],
+                str(item[1].id or item[1].text),
+                item[2],
+            )
+        )
+        return [(score, requirement) for score, requirement, _ in scored[:k]]
+
+
 class RAGRetriever:
     """Fixed-size chunking and RAG context retrieval for cross-system setting."""
 
@@ -141,8 +196,17 @@ class RAGRetriever:
 
     def chunk_document(self, text: str, chunk_size: int | None = None, overlap: int | None = None) -> List[str]:
         """Split text into fixed-size chunks with specified overlap."""
-        chunk_size = chunk_size or self.config.rag_chunk_size
-        overlap = overlap or self.config.rag_chunk_overlap
+        chunk_size = self.config.rag_chunk_size if chunk_size is None else chunk_size
+        overlap = self.config.rag_chunk_overlap if overlap is None else overlap
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer.")
+        if (
+            isinstance(overlap, bool)
+            or not isinstance(overlap, int)
+            or overlap < 0
+            or overlap >= chunk_size
+        ):
+            raise ValueError("overlap must be an integer from 0 to less than chunk_size.")
 
         if not text or len(text) <= chunk_size:
             return [text] if text else []
@@ -163,7 +227,11 @@ class RAGRetriever:
         k: int | None = None
     ) -> List[str]:
         """Retrieve top k most relevant context chunks from SRS document."""
-        k = k or self.config.rag_k_chunks
+        k = self.config.rag_k_chunks if k is None else k
+        if isinstance(k, bool) or not isinstance(k, int) or k < 0:
+            raise ValueError("k must be a non-negative integer.")
+        if k == 0:
+            return []
         chunks = self.chunk_document(srs_text)
 
         if not chunks:

@@ -37,6 +37,7 @@ class LabelingMode(str, Enum):
     """Supported provisional labeling modes."""
     HEURISTIC = "heuristic"
     LLM = "llm"
+    MULTI_LLM = "multi_llm"
     HYBRID = "hybrid"
 
 
@@ -197,6 +198,56 @@ class LLMLabeler:
             return None, None, f"LLM provider error: {str(e)}"
 
 
+class MultiModelLLMLabeler:
+    """Collect independent model labels; accept only unanimous valid votes.
+
+    Model clients are supplied by the caller so offline tests can use controlled
+    clients and real-provider use remains explicit at the CLI/configuration layer.
+    Any disagreement or failed/invalid vote returns no label for human review.
+    """
+
+    def __init__(self, labelers: List[LLMLabeler]):
+        if len(labelers) < 2:
+            raise ValueError("Multi-model labeling requires at least two model labelers.")
+        self.labelers = list(labelers)
+        self.model_ids = [labeler.config.llm_model for labeler in self.labelers]
+        if len(set(self.model_ids)) != len(self.model_ids):
+            raise ValueError("Multi-model labeling requires distinct model identifiers.")
+        self.model_id = "ensemble[" + ",".join(self.model_ids) + "]"
+
+    def label_pair(
+        self,
+        target_pair: RequirementPair,
+        examples: Optional[Dict[DependencyType, List[RequirementPair]]] = None,
+        srs_context: Optional[List[str]] = None,
+    ) -> Tuple[Optional[DependencyType], Optional[int], str]:
+        votes = []
+        for model_id, labeler in zip(self.model_ids, self.labelers):
+            label, confidence, rationale = labeler.label_pair(
+                target_pair, examples=examples, srs_context=srs_context
+            )
+            votes.append((model_id, label, confidence, rationale))
+
+        vote_evidence = "; ".join(
+            f"model={model_id}, label={label.value if label else 'ABSTAIN'}, "
+            f"confidence={confidence if confidence is not None else 'unknown'}, "
+            f"rationale={rationale}"
+            for model_id, label, confidence, rationale in votes
+        )
+        labels = [label for _, label, _, _ in votes]
+        if all(label is not None for label in labels) and len(set(labels)) == 1:
+            confidences = [confidence for _, _, confidence, _ in votes if confidence is not None]
+            # The minimum self-reported score is conservative; it is not a calibrated
+            # probability and is retained only as a screening cue.
+            confidence = min(confidences) if confidences else None
+            return labels[0], confidence, f"MULTI_LLM_UNANIMOUS: {vote_evidence}"
+
+        differing_labels = {label for label in labels if label is not None}
+        if len(differing_labels) > 1:
+            return None, None, f"MULTI_LLM_DISAGREEMENT: {vote_evidence}"
+        return None, None, f"MULTI_LLM_INCOMPLETE: {vote_evidence}"
+
+
 class LabelingRunManifest(BaseModel):
     """Audit manifest for a provisional labeling run."""
     run_id: str = Field(default_factory=lambda: f"LABEL-{uuid.uuid4().hex[:8].upper()}")
@@ -244,12 +295,19 @@ class ProvisionalLabeler:
         llm_label: Optional[DependencyType] = None
         llm_conf: Optional[int] = None
         llm_rationale: str = ""
+        is_multi_model = isinstance(self.llm_labeler, MultiModelLLMLabeler)
+        if mode == LabelingMode.MULTI_LLM and not is_multi_model:
+            raise ValueError("multi_llm mode requires a MultiModelLLMLabeler.")
+        llm_needs_review = False
 
         if mode in (LabelingMode.HEURISTIC, LabelingMode.HYBRID):
             heuristic_res = self.heuristic_labeler.evaluate_pair(pair)
 
-        if mode in (LabelingMode.LLM, LabelingMode.HYBRID):
+        if mode in (LabelingMode.LLM, LabelingMode.MULTI_LLM, LabelingMode.HYBRID):
             llm_label, llm_conf, llm_rationale = self.llm_labeler.label_pair(pair, examples=examples)
+            llm_needs_review = is_multi_model and llm_rationale.startswith(
+                ("MULTI_LLM_DISAGREEMENT:", "MULTI_LLM_INCOMPLETE:")
+            )
 
         # Combine outputs and determine provisional outcome
         h_label = heuristic_res.suggested_label if heuristic_res else None
@@ -264,14 +322,26 @@ class ProvisionalLabeler:
             if heuristic_res:
                 evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
 
-        elif mode == LabelingMode.LLM:
-            final_provisional_label = llm_label
-            source = AnnotationSource.LLM
+        elif mode in (LabelingMode.LLM, LabelingMode.MULTI_LLM):
+            final_provisional_label = None if llm_needs_review else llm_label
+            source = AnnotationSource.ENSEMBLE if is_multi_model else AnnotationSource.LLM
             if llm_rationale:
                 evidence_parts.append(f"LLM Rationale: {llm_rationale}")
+            if llm_needs_review:
+                review_notes = llm_rationale
 
         else:  # HYBRID mode
-            if h_label is not None and llm_label is not None:
+            if llm_needs_review:
+                final_provisional_label = None
+                source = AnnotationSource.ENSEMBLE
+                review_notes = llm_rationale
+                if heuristic_res:
+                    evidence_parts.append(
+                        f"Heuristic [{heuristic_res.rule_id}]: "
+                        f"{h_label.value if h_label else 'ABSTAIN'}"
+                    )
+                evidence_parts.append(f"LLM Votes: {llm_rationale}")
+            elif h_label is not None and llm_label is not None:
                 if h_label == llm_label:
                     final_provisional_label = h_label
                     source = AnnotationSource.ENSEMBLE
@@ -291,7 +361,7 @@ class ProvisionalLabeler:
                 evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
             elif llm_label is not None:
                 final_provisional_label = llm_label
-                source = AnnotationSource.LLM
+                source = AnnotationSource.ENSEMBLE if is_multi_model else AnnotationSource.LLM
                 evidence_parts.append(f"LLM Rationale: {llm_rationale}")
             else:
                 final_provisional_label = None
@@ -302,7 +372,10 @@ class ProvisionalLabeler:
             source=source,
             status=VerificationStatus.PROVISIONAL,  # Always provisional!
             annotator_id=f"provisional_labeler_{mode.value}",
-            model_id=self.config.llm_model if mode != LabelingMode.HEURISTIC else None,
+            model_id=(
+                getattr(self.llm_labeler, "model_id", self.config.llm_model)
+                if mode != LabelingMode.HEURISTIC else None
+            ),
             created_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             predicted_label=llm_label or h_label,
             accepted_label=final_provisional_label,
@@ -345,7 +418,7 @@ class ProvisionalLabeler:
 
                 prov = processed.provenance
                 if prov:
-                    if "AGREEMENT" in (prov.evidence or ""):
+                    if "AGREEMENT" in (prov.evidence or "") or "MULTI_LLM_UNANIMOUS" in (prov.evidence or ""):
                         agreed_count += 1
                     elif "DISAGREEMENT" in (prov.review_notes or ""):
                         disagreed_count += 1
@@ -381,6 +454,15 @@ class ProvisionalLabeler:
             disagreed_count=disagreed_count,
             unresolved_count=unresolved_count,
             failed_count=failed_count,
+            metadata=(
+                {
+                    "llm_provider": self.config.llm_provider,
+                    "llm_models": self.llm_labeler.model_ids,
+                    "aggregation": "unanimous_only",
+                }
+                if isinstance(self.llm_labeler, MultiModelLLMLabeler)
+                else {}
+            ),
         )
 
         logger.info(

@@ -97,6 +97,32 @@ def test_system_split_zero_system_leakage(sample_pairs):
     assert train_systems.isdisjoint(test_systems)
 
 
+def test_default_system_split_reserves_train_dev_test_for_three_systems():
+    """Default ratios must not round the development partition down to empty."""
+    pairs = [
+        RequirementPair(
+            id=f"PAIR-{system}",
+            req_a=Requirement(id=f"{system}-A", text=f"{system} requirement A", system=system),
+            req_b=Requirement(id=f"{system}-B", text=f"{system} requirement B", system=system),
+            dependency_type=DependencyType.REQUIRES,
+        )
+        for system in ("ADB", "APA", "TJA")
+    ]
+
+    split = DatasetSplitter.split(
+        pairs,
+        SplitConfig(strategy=SplitStrategy.SYSTEM, random_seed=42),
+    )
+
+    assert len(split.train_pairs) == 1
+    assert len(split.dev_pairs) == 1
+    assert len(split.test_pairs) == 1
+    assert not DatasetSplitter.check_leakage(split).has_leakage
+    assert set(split.metadata["system_assignments"].values()) == {
+        "train", "dev", "test",
+    }
+
+
 def test_document_split_disjoint(sample_pairs):
     """Verify DOCUMENT strategy partitions by document metadata."""
     config = SplitConfig(
@@ -150,6 +176,50 @@ def test_ratio_validation():
         config.validate_ratios()
 
 
+@pytest.mark.parametrize("name,value", [
+    ("train_ratio", -0.1),
+    ("dev_ratio", 1.1),
+    ("test_ratio", float("nan")),
+])
+def test_split_config_rejects_out_of_range_or_nonfinite_ratios(name, value):
+    with pytest.raises(ValueError):
+        SplitConfig(**{name: value})
+
+
+def test_system_split_rejects_cross_system_pairs(sample_pairs):
+    cross_system = sample_pairs[0].model_copy(update={
+        "id": "PAIR-CROSS-SYSTEM",
+        "req_b": sample_pairs[10].req_b,
+    })
+    with pytest.raises(ValueError, match="spans"):
+        DatasetSplitter.split([cross_system], SplitConfig(strategy=SplitStrategy.SYSTEM))
+
+
+def test_system_leakage_detected_for_single_overlapping_system():
+    train_pair = RequirementPair(
+        id="TRAIN-SYS-1",
+        req_a=Requirement(id="A1", text="Train A", system="SYS1"),
+        req_b=Requirement(id="A2", text="Train B", system="SYS1"),
+        dependency_type=DependencyType.REQUIRES,
+    )
+    test_pair = RequirementPair(
+        id="TEST-SYS-1",
+        req_a=Requirement(id="T1", text="Test A", system="SYS1"),
+        req_b=Requirement(id="T2", text="Test B", system="SYS1"),
+        dependency_type=DependencyType.REQUIRES,
+    )
+    split = DatasetSplit(
+        train_pairs=[train_pair],
+        test_pairs=[test_pair],
+        config=SplitConfig(strategy=SplitStrategy.SYSTEM),
+    )
+
+    leakage = DatasetSplitter.check_leakage(split)
+
+    assert leakage.has_leakage is True
+    assert leakage.system_overlap_train_test == {"SYS1"}
+
+
 def test_edge_case_empty_pairs():
     """Verify empty pairs list returns empty DatasetSplit without error."""
     split = DatasetSplitter.split([], SplitConfig())
@@ -184,13 +254,17 @@ def test_save_and_load_split(sample_pairs):
             assert "leakage_report" in meta
 
 
-def test_cli_split_command(tmp_path):
+def test_cli_split_command(tmp_path, sample_pairs):
     """Test CLI `leredd-cli split` command execution."""
     runner = CliRunner()
-    input_json = "data/annotated/adb_pairs.json"
+    input_json = tmp_path / "pairs.json"
+    input_json.write_text(
+        json.dumps([pair.model_dump(mode="json") for pair in sample_pairs]),
+        encoding="utf-8",
+    )
     out_dir = str(tmp_path / "cli_splits")
 
-    result = runner.invoke(app, ["split", "--input", input_json, "--output-dir", out_dir, "--strategy", "requirement", "--seed", "42"])
+    result = runner.invoke(app, ["split", "--input", str(input_json), "--output-dir", out_dir, "--strategy", "requirement", "--seed", "42"])
     assert result.exit_code == 0, f"CLI output: {result.output}"
     assert "DATASET SPLIT SUMMARY" in result.output
     assert os.path.exists(os.path.join(out_dir, "train_pairs.json"))

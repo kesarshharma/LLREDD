@@ -1,0 +1,25 @@
+# Repository metadata and local environments
+.git/
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.pytest-tmp/
+tmp/
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+
+# Local research data and generated outputs are mounted at runtime by Compose.
+# Do not bake source datasets or historical/generated reports into the image.
+data/
+
+# Local project document and editor/OS noise
+Minor_Project.pdf
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

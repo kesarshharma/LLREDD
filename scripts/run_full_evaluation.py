@@ -1,16 +1,11 @@
 """
 scripts/run_full_evaluation.py
 ==============================
-Safe, reproducible evaluation script for the LEREDD project.
+Safe, reproducible evaluation script for a supplied leakage-checked split.
 
-IMPORTANT LIMITATIONS (MUST READ BEFORE INTERPRETING RESULTS):
-  - Ground truth: 20 pairs from data/annotated/ — no provenance metadata.
-    Annotation process, annotator identity, and IAA are unknown.
-  - Test set (system-disjoint): 5 pairs from TJA only. n=5 yields ~+-40pp 95% CI.
-    Results are DEMONSTRATIVE ONLY — not statistically conclusive.
-  - LEREDD is run with MockLLMClient (llm_provider="mock"), NOT a real LLM.
-    Results do NOT represent real-LLM system performance.
-  - Requirement-disjoint split is empty and NOT evaluated here.
+Per-run reports summarize the actual input partition sizes, systems, provenance
+eligibility, configuration, and limitations. LEREDD variants in this runner use
+MockLLMClient; they are demonstrations and do not measure remote-LLM quality.
 
 Usage:
   python scripts/run_full_evaluation.py [--split-dir data/splits/system_disjoint]
@@ -42,9 +37,12 @@ from leredd.data_models import (
     DependencyType,
     Prediction,
     RequirementPair,
-    VerificationStatus,
 )
-from leredd.evaluation import Evaluator
+from leredd.evaluation import (
+    Evaluator,
+    ground_truth_provenance_problem,
+    validate_system_disjoint_splits,
+)
 from leredd.utils import load_pairs_json
 from leredd.baselines.bert_classifier import BERTBaseline
 from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline
@@ -52,9 +50,42 @@ from leredd.detector import LEREDDDetector
 from leredd.llm import MockLLMClient
 from leredd.provisional_labeler import HeuristicLabeler
 from leredd.embeddings import EmbeddingModel
+from leredd.synthetic import is_synthetic
 
 SCRIPT_VERSION = "2.0.0"
-VERIFIED_STATUS_VALUE = VerificationStatus.VERIFIED.value
+
+MOCK_ABLATION_VALIDITY = {
+    "backend": "MockLLMClient",
+    "is_empirical_model_evidence": False,
+    "retrieval_strategy": {
+        "status": "not_informative_with_mock_backend",
+        "reason": (
+            "MockLLMClient classifies the target text with fixed keyword rules and does not "
+            "interpret retrieved examples. Dense, BM25, and hybrid metrics are pipeline checks, "
+            "not evidence of retrieval strategy effects."
+        ),
+    },
+    "in_context_examples": {
+        "status": "not_informative_with_mock_backend",
+        "reason": (
+            "MockLLMClient does not interpret the prompt's retrieved-example block. "
+            "Zero-shot versus k-example metrics cannot estimate the effect of ICL."
+        ),
+    },
+    "confidence_thresholding": {
+        "status": "not_informative_with_mock_backend",
+        "reason": (
+            "MockLLMClient returns fixed confidence 5, so the configured threshold of 4 "
+            "never marks examples for review. Threshold-on/off class metrics cannot estimate "
+            "the effect of confidence-based review routing."
+        ),
+    },
+    "required_for_empirical_ablation": (
+        "Use a real authorized LLM or a separately validated controlled test double that responds "
+        "to retrieved examples and emits variable confidence. Do not interpret these mock outputs "
+        "as empirical effects."
+    ),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +113,15 @@ def check_ground_truth_eligibility(
     warnings_found: List[str] = []
 
     for pair in pairs:
+        if is_synthetic(pair):
+            msg = (
+                f"[{partition_label}] REJECTED pair {pair.id}: "
+                "synthetic/demo records cannot be used as ground truth."
+            )
+            warnings_found.append(msg)
+            if strict:
+                raise GroundTruthViolationError(msg)
+            continue
         if pair.dependency_type is None:
             warnings_found.append(
                 f"[{partition_label}] Pair {pair.id} has dependency_type=None — skipped."
@@ -89,16 +129,12 @@ def check_ground_truth_eligibility(
             continue
 
         if pair.provenance is not None:
-            status_val = (
-                pair.provenance.status.value
-                if pair.provenance.status
-                else None
-            )
-            if status_val != VERIFIED_STATUS_VALUE:
+            status_val = pair.provenance.status.value if pair.provenance.status else None
+            provenance_problem = ground_truth_provenance_problem(pair)
+            if provenance_problem:
                 msg = (
                     f"[{partition_label}] REJECTED pair {pair.id}: "
-                    f"VerificationStatus={status_val!r}; explicit VERIFIED status "
-                    f"is required for evaluation ground truth."
+                    f"{provenance_problem}."
                 )
                 warnings_found.append(msg)
                 if strict:
@@ -153,6 +189,7 @@ def build_safe_retrieval_pool(
         excluded_pair_ids.add(pair.id)
 
     contaminated_pairs: List[str] = []
+    excluded_synthetic_pair_ids: List[str] = []
     safe_pool: List[RequirementPair] = []
 
     for pair in train_pairs:
@@ -163,6 +200,8 @@ def build_safe_retrieval_pool(
                 f"Pair {pair.id} (req_ids: {sorted(pair_req_ids)}) "
                 f"overlaps with test/dev excluded IDs: {sorted(leaked_ids or {pair.id})}"
             )
+        elif is_synthetic(pair):
+            excluded_synthetic_pair_ids.append(pair.id)
         else:
             safe_pool.append(pair)
 
@@ -173,6 +212,8 @@ def build_safe_retrieval_pool(
         "contaminated_pairs": contaminated_pairs,
         "contaminated_count": len(contaminated_pairs),
         "safe_pool_size": len(safe_pool),
+        "excluded_synthetic_pair_ids": sorted(excluded_synthetic_pair_ids),
+        "excluded_synthetic_count": len(excluded_synthetic_pair_ids),
         "contamination_detected": len(contaminated_pairs) > 0,
     }
 
@@ -213,6 +254,46 @@ def _unique_systems(pairs: List[RequirementPair]) -> List[str]:
     return sorted(systems)
 
 
+def _system_description(pairs: List[RequirementPair]) -> str:
+    return ", ".join(_unique_systems(pairs)) or "unspecified systems"
+
+
+def _ground_truth_report_summary(raw_partitions, eligible_partitions) -> Dict:
+    """Build report provenance counts and wording from the supplied split."""
+    raw_counts = {name: len(pairs) for name, pairs in raw_partitions.items()}
+    eligible_counts = {name: len(pairs) for name, pairs in eligible_partitions.items()}
+    all_raw = [pair for pairs in raw_partitions.values() for pair in pairs]
+    all_eligible = [pair for pairs in eligible_partitions.values() for pair in pairs]
+    provenance_free = sum(pair.provenance is None for pair in all_raw)
+    eligible_with_provenance = sum(pair.provenance is not None for pair in all_eligible)
+    total = len(all_raw)
+    if provenance_free:
+        provenance_note = (
+            f"{provenance_free} of {total} supplied partition records have no provenance; "
+            "legacy labels are accepted conditionally only when otherwise eligible. "
+            f"{len(all_eligible)} of {total} records passed eligibility checks."
+        )
+    elif eligible_with_provenance == len(all_eligible):
+        provenance_note = (
+            f"{eligible_with_provenance} eligible records carried provenance and passed the "
+            f"configured checks ({len(all_eligible)} of {total} input records were eligible). "
+            "Actor identities are self-reported and are not authenticated."
+        )
+    else:
+        provenance_note = (
+            f"{len(all_eligible)} of {total} supplied records passed eligibility checks; "
+            f"{eligible_with_provenance} eligible records carried provenance. "
+            "Actor identities are self-reported and are not authenticated."
+        )
+    return {
+        "raw_counts": raw_counts,
+        "eligible_counts": eligible_counts,
+        "provenance_free_count": provenance_free,
+        "eligible_provenance_count": eligible_with_provenance,
+        "provenance_note": provenance_note,
+    }
+
+
 def _load_split_partition(split_dir: Path, partition: str) -> List[RequirementPair]:
     path = split_dir / f"{partition}_pairs.json"
     if not path.exists():
@@ -225,6 +306,21 @@ def _serialize_report(report, model_tag: str, note: str, predictions: List[Predi
     pred_map = {p.pair_id: p.dependency_type.value for p in predictions}
     k_correct = int(round(report.overall_accuracy * n_test))
     ci = Evaluator.compute_wilson_score_interval(k_correct, n_test)
+    review_statuses = {"passed_threshold", "requires_review"}
+    screened_predictions = [
+        prediction
+        for prediction in predictions
+        if prediction.validation_status.value in review_statuses
+    ]
+    review_required_count = sum(
+        prediction.validation_status.value == "requires_review"
+        for prediction in screened_predictions
+    )
+    threshold_values = {
+        prediction.validation_threshold
+        for prediction in predictions
+        if prediction.validation_threshold is not None
+    }
     return {
         "model": model_tag,
         "note": note,
@@ -243,6 +339,29 @@ def _serialize_report(report, model_tag: str, note: str, predictions: List[Predi
             ),
         },
         "predictions": pred_map,
+        "confidence_screening": {
+            "threshold": next(iter(threshold_values)) if len(threshold_values) == 1 else None,
+            "screened_count": len(screened_predictions),
+            "passed_threshold_count": len(screened_predictions) - review_required_count,
+            "review_required_count": review_required_count,
+            "review_required_rate": (
+                review_required_count / len(screened_predictions)
+                if screened_predictions else None
+            ),
+            "not_evaluated_count": sum(
+                prediction.validation_status.value == "not_evaluated"
+                for prediction in predictions
+            ),
+            "threshold_disabled_count": sum(
+                prediction.validation_status.value == "threshold_disabled"
+                for prediction in predictions
+            ),
+            "interpretation": (
+                "Review routing is based on self-reported Likert confidence. "
+                "It does not change predicted classes, establish annotation truth, "
+                "or represent calibrated probability."
+            ),
+        },
         "per_class_metrics": {
             cls: {
                 "precision": m.precision,
@@ -271,7 +390,10 @@ def run_heuristic_model(test_pairs: List[RequirementPair]) -> Tuple[List[Predict
             )
         )
     report = Evaluator.evaluate(
-        test_pairs, preds, system_name="TJA", model_name="HeuristicLabeler"
+        test_pairs,
+        preds,
+        system_name=_system_description(test_pairs),
+        model_name="HeuristicLabeler",
     )
     return preds, report
 
@@ -303,7 +425,10 @@ def run_leredd_variant(
         confidence_threshold=confidence_threshold,
     )
     report = Evaluator.evaluate(
-        test_pairs, preds, system_name="TJA", model_name=model_name
+        test_pairs,
+        preds,
+        system_name=_system_description(test_pairs),
+        model_name=model_name,
     )
     return preds, report
 
@@ -334,6 +459,12 @@ def run_evaluation(
     if not split_path.exists():
         raise FileNotFoundError(f"Split directory not found: {split_dir}")
 
+    meta_path = split_path / "split_metadata.json"
+    split_metadata = {}
+    if meta_path.exists():
+        with open(meta_path, "r", encoding="utf-8") as f:
+            split_metadata = json.load(f)
+
     # Step 1: Load split partitions
     logger.info("Step 1: Loading split partitions ...")
     train_pairs_raw = _load_split_partition(split_path, "train")
@@ -347,6 +478,21 @@ def run_evaluation(
         raise ValueError(
             "Test partition is empty. Ensure system-disjoint split has been generated."
         )
+
+    split_strategy = str(
+        split_metadata.get("summary", {}).get("strategy", "system")
+    ).casefold().split(".")[-1]
+    split_integrity = {"checked": False, "strategy": split_strategy}
+    if split_strategy == "system":
+        split_integrity.update(
+            validate_system_disjoint_splits(
+                train_pairs=train_pairs_raw,
+                test_pairs=test_pairs_raw,
+                dev_pairs=dev_pairs_raw,
+            )
+        )
+        split_integrity["checked"] = True
+        logger.info("  System-disjoint split integrity check passed.")
 
     # Step 2: Ground-truth eligibility
     logger.info("Step 2: Checking ground-truth eligibility ...")
@@ -385,7 +531,7 @@ def run_evaluation(
     bert.fit(train_pairs)
     bert_preds = bert.predict_batch(test_pairs)
     bert_report = Evaluator.evaluate(
-        test_pairs, bert_preds, system_name="TJA", model_name=f"BERTBaseline-{bert_model_type.upper()}"
+        test_pairs, bert_preds, system_name=_system_description(test_pairs), model_name=f"BERTBaseline-{bert_model_type.upper()}"
     )
     logger.info(f"  Accuracy={bert_report.overall_accuracy:.4f}, Macro-F1={bert_report.macro_f1:.4f}")
 
@@ -395,7 +541,7 @@ def run_evaluation(
     tfidf_lsa.fit(train_pairs)
     tfidf_preds = tfidf_lsa.predict_batch(test_pairs)
     tfidf_report = Evaluator.evaluate(
-        test_pairs, tfidf_preds, system_name="TJA", model_name="TFIDF_LSA"
+        test_pairs, tfidf_preds, system_name=_system_description(test_pairs), model_name="TFIDF_LSA"
     )
     logger.info(f"  Accuracy={tfidf_report.overall_accuracy:.4f}, Macro-F1={tfidf_report.macro_f1:.4f}")
 
@@ -444,11 +590,22 @@ def run_evaluation(
     n_test = len(test_pairs)
     mcnemar_notice = (
         f"McNemar test applied to n_test={n_test} examples. "
-        "With n=5, discordant cell frequencies (b+c) are very low, resulting in low statistical power "
-        "and asymptotic approximation limits. p-values are exploratory and demonstrative only."
+        + (
+            "This small sample has low statistical power; p-values are exploratory and demonstrative only."
+            if n_test < 10 else
+            "Interpret p-values as exploratory; they do not establish research significance by themselves."
+        )
     )
     if n_test < 10:
         logger.warning(f"  [EXPLORATORY TEST] {mcnemar_notice}")
+
+    training_systems = _system_description(train_pairs)
+    test_systems = _system_description(test_pairs)
+    provenance_summary = _ground_truth_report_summary(
+        {"train": train_pairs_raw, "dev": dev_pairs_raw, "test": test_pairs_raw},
+        {"train": train_pairs, "dev": dev_pairs, "test": test_pairs},
+    )
+    n_classes = len(_label_distribution(test_pairs))
 
     mcnemar_results: Dict = {
         "status": "exploratory",
@@ -462,13 +619,6 @@ def run_evaluation(
         "proposed_hybrid_vs_dense": Evaluator.analyze_mcnemar(test_pairs, leredd_hybrid_preds, leredd_dense_preds),
         "proposed_hybrid_vs_bm25": Evaluator.analyze_mcnemar(test_pairs, leredd_hybrid_preds, leredd_bm25_preds),
     }
-
-    # Load split metadata
-    meta_path = split_path / "split_metadata.json"
-    split_metadata = {}
-    if meta_path.exists():
-        with open(meta_path, "r", encoding="utf-8") as f:
-            split_metadata = json.load(f)
 
     # Assemble report
     report = {
@@ -485,6 +635,7 @@ def run_evaluation(
             "leredd_provider": "mock",
             "leredd_note": "MockLLMClient — deterministic keyword heuristics. NOT a real LLM evaluation.",
         },
+        "split_integrity": split_integrity,
         "split_inventory": {
             "train": {
                 "size": len(train_pairs),
@@ -504,11 +655,7 @@ def run_evaluation(
         },
         "ground_truth_eligibility": {
             "warnings": all_gt_warnings,
-            "provenance_note": (
-                "Original data/annotated/ pairs have no provenance metadata. "
-                "Annotation process, annotator identity, and IAA are unknown. "
-                "Pairs accepted conditionally as assumed expert annotations."
-            ),
+            **provenance_summary,
         },
         "leakage_audit": leakage_audit,
         "model_results": {
@@ -517,8 +664,9 @@ def run_evaluation(
                 model_tag=f"BERTBaseline-{bert_model_type.upper()}",
                 note=(
                     f"SBERT (all-MiniLM-L6-v2) + {cls_desc}. "
-                    "Supervised cross-system evaluation (trained on ADB n=10, tested on TJA n=5). "
-                    "Not a zero-shot model."
+                    "Supervised cross-system evaluation trained on "
+                    f"{training_systems} (n={len(train_pairs)}) "
+                    f"and tested on {test_systems} (n={n_test}). Not a zero-shot model."
                 ),
                 predictions=bert_preds,
                 n_test=n_test,
@@ -528,7 +676,8 @@ def run_evaluation(
                 model_tag="TFIDF_LSA",
                 note=(
                     "TF-IDF + LSA cosine similarity thresholding. "
-                    "Fitted vocabulary and SVD on ADB training set, tested on TJA. "
+                    f"Fitted vocabulary and SVD on {training_systems} training data, "
+                    f"tested on {test_systems}. "
                     "Unsupervised / fitted cross-system baseline."
                 ),
                 predictions=tfidf_preds,
@@ -558,7 +707,8 @@ def run_evaluation(
                 model_tag="LEREDD-Hybrid (Proposed System)",
                 note=(
                     "Proposed LEREDD system using Hybrid RRF retrieval (SBERT + BM25, rrf_k=60), "
-                    "k=6 dynamic example pairs, and confidence thresholding <= 4 -> No_dependency."
+                    "k=6 dynamic example pairs, and a confidence screen that flags low-confidence "
+                    "predictions for review without changing their class."
                 ),
                 predictions=leredd_hybrid_preds,
                 n_test=n_test,
@@ -607,30 +757,38 @@ def run_evaluation(
             "confidence_thresholding": {
                 "Threshold_Off": _serialize_report(
                     leredd_nothresh_report,
-                    model_tag="Thresholding Disabled (Off)",
-                    note="Raw LLM prediction used without confidence re-annotation.",
+                    model_tag="Confidence Screening Disabled (Off)",
+                    note="Raw LLM prediction; confidence review screening disabled.",
                     predictions=leredd_nothresh_preds,
                     n_test=n_test,
                 ),
                 "Threshold_On": _serialize_report(
                     leredd_hybrid_report,
-                    model_tag="Thresholding Enabled (On, <= 4 -> No_dependency)",
-                    note="Predictions with confidence <= 4 automatically set to No_dependency.",
+                    model_tag="Confidence Screening Enabled (<= 4: review cue)",
+                    note=(
+                        "Predictions with self-reported confidence <= 4 retain their class "
+                        "and are marked requires_review."
+                    ),
                     predictions=leredd_hybrid_preds,
                     n_test=n_test,
                 ),
             },
         },
+        "ablation_validity": MOCK_ABLATION_VALIDITY,
         "statistical_tests": {"mcnemar": mcnemar_results},
 
         "evaluation_limitations": [
-            f"n_test={len(test_pairs)} (TJA system only). ~+-40pp 95% CI. Results are DEMONSTRATIVE ONLY.",
-            "BERTBaseline and TFIDF_LSABaseline perform supervised/fitted cross-system evaluation (trained on ADB, tested on TJA). They are NOT zero-shot models.",
+            f"Test sample size n_test={n_test}; test systems: {test_systems}. "
+            + ("Small-sample metrics have high uncertainty. " if n_test < 10 else ""),
+            "BERTBaseline and TFIDF_LSABaseline fit on the train partition "
+            f"({training_systems}, n={len(train_pairs)}) "
+            f"and score the held-out test partition ({test_systems}); they are not zero-shot models.",
             "LEREDD evaluated with MockLLMClient — NOT a real LLM evaluation.",
-            "Ground truth has no provenance metadata — annotator identity and IAA unknown.",
-            f"Test labels cover {len(_label_distribution(test_pairs))} of 6 dependency classes.",
-            "Requirement-disjoint split not evaluated — dev and test partitions are empty with n=20 pairs.",
-            "McNemar's test results are exploratory: with n_test=5, discordant cell counts (b+c) are low, resulting in low statistical power.",
+            "MockLLMClient does not interpret retrieved examples and returns fixed confidence 5; retrieval-strategy, ICL-example, and confidence-threshold ablations are not informative about model effects.",
+            provenance_summary["provenance_note"],
+            f"Test labels cover {n_classes} of 6 dependency classes.",
+            "This report evaluates only the supplied split; a separate requirement-disjoint evaluation was not run.",
+            mcnemar_notice,
         ],
         "split_metadata": split_metadata,
     }
@@ -651,6 +809,7 @@ def run_evaluation(
                 "run_timestamp": run_start,
                 "n_test": n_test,
                 "ablation_results": report["ablation_results"],
+                "ablation_validity": report["ablation_validity"],
                 "statistical_tests": report["statistical_tests"],
             },
             f,

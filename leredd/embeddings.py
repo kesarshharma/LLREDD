@@ -19,7 +19,7 @@ class EmbeddingModel:
         os.makedirs(self.cache_dir, exist_ok=True)
         
         self._model = None
-        self._fallback_tfidf = None
+        self._fallback_hasher = None
         self._init_model()
 
     def _init_model(self) -> None:
@@ -29,13 +29,22 @@ class EmbeddingModel:
             logger.info(f"Loading SentenceTransformer model: {self.model_name}")
             self._model = SentenceTransformer(self.model_name)
         except Exception as e:
-            logger.warning(f"Failed to load SentenceTransformer ({e}). Falling back to TF-IDF vectorizer.")
-            from sklearn.feature_extraction.text import TfidfVectorizer
-            self._fallback_tfidf = TfidfVectorizer(ngram_range=(1, 2))
+            logger.warning(f"Failed to load SentenceTransformer ({e}). Falling back to hashing vectorizer.")
+            from sklearn.feature_extraction.text import HashingVectorizer
+            self._fallback_hasher = HashingVectorizer(
+                n_features=384,
+                ngram_range=(1, 2),
+                alternate_sign=False,
+                norm="l2",
+            )
 
     def _get_cache_key(self, text: str) -> str:
         """Compute MD5 hash for a string for embedding cache lookups."""
-        hash_str = f"{self.model_name}:{text}"
+        hash_str = (
+            f"{self.model_name}:{text}"
+            if self._model is not None
+            else f"hashing-v1:{self.model_name}:{text}"
+        )
         return hashlib.md5(hash_str.encode("utf-8")).hexdigest()
 
     def encode(self, texts: List[str]) -> np.ndarray:
@@ -69,25 +78,9 @@ class EmbeddingModel:
                     show_progress_bar=False,
                     convert_to_numpy=True
                 )
-            elif self._fallback_tfidf is not None:
-                # Fallback implementation
-                try:
-                    fitted = self._fallback_tfidf.fit_transform(uncached_texts).toarray()
-                    # Pad to 384 dim if necessary for vector shape consistency
-                    if fitted.shape[1] < 384:
-                        pad = np.zeros((fitted.shape[0], 384 - fitted.shape[1]), dtype=np.float32)
-                        new_vectors = np.hstack([fitted, pad])
-                    else:
-                        new_vectors = fitted[:, :384]
-                except Exception:
-                    # Deterministic hash fallback vector
-                    new_vectors = []
-                    for t in uncached_texts:
-                        seed = int(hashlib.md5(t.encode()).hexdigest(), 16) % (2**32)
-                        np.random.seed(seed)
-                        vec = np.random.randn(384).astype(np.float32)
-                        new_vectors.append(vec / (np.linalg.norm(vec) + 1e-8))
-                    new_vectors = np.array(new_vectors)
+            elif self._fallback_hasher is not None:
+                # Hashing uses the same feature mapping for each independent call.
+                new_vectors = self._fallback_hasher.transform(uncached_texts).toarray()
             else:
                 new_vectors = np.zeros((len(uncached_texts), 384), dtype=np.float32)
 

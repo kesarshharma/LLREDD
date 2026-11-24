@@ -1,116 +1,134 @@
-# REST API, CLI & SDK Technical Reference
+# REST API, CLI, and Python Interfaces
 
-This document provides complete reference documentation for the REST API, Command Line Interface (CLI), and Python SDK for **“Improving Automated Requirement Dependency Detection Using Large Language Models and Semi-Automated Dataset Generation”**.
+This reference describes the interfaces implemented in this checkout. The
+FastAPI service exposes prediction, extraction, health, and configuration
+routes. Dataset generation and human review are currently performed through
+the CLI, Python APIs, or Streamlit; there are no HTTP review-queue routes.
 
----
+## FastAPI
 
-## 1. FastAPI REST API Reference
+Start the local service with `leredd-cli serve` or
+`python -m api.main --host 127.0.0.1 --port 8000`. Interactive OpenAPI docs
+are served at `http://127.0.0.1:8000/docs`.
 
-The FastAPI server provides automated dependency detection and dataset management endpoints.
+| Method and path | Purpose |
+|---|---|
+| `GET /` | API welcome response and links |
+| `GET /api/v1/health` | Service health and version |
+| `GET /api/v1/config` | Active configuration with API key redacted |
+| `POST /api/v1/extract` | Extract `Requirement` records from text |
+| `POST /api/v1/detect` | Predict one requirement pair |
+| `POST /api/v1/batch_detect` | Predict a list of requirement pairs |
 
-- **Base URL**: `http://localhost:8000/api/v1`
-- **Interactive Swagger Documentation**: `http://localhost:8000/docs`
+The single-detection request accepts `req_a` and `req_b` strings, an optional
+`system`, optional `srs_text`, optional verified example records, and an
+optional per-request `retrieval_mode` (`dense`, `bm25`, or `hybrid`). It also
+accepts `stability_runs` from 1 to 5 (default 1). Values above one repeat the
+same prompt through fresh provider calls, bypassing the built-in response cache.
+Any label or self-reported confidence variation marks the result inconsistent
+and recommends human review; the first run's label remains the reported class.
+Set `use_rag` to `true` to retrieve relevant chunks from the supplied `srs_text`;
+if omitted, the server's RAG configuration is used. Set it to `false` to disable
+RAG for a request even when the server configuration enables it. Batch detection
+accepts the same `srs_text` and `use_rag` fields. Repeated OpenAI runs make
+multiple external calls. Example:
 
-### 1.1 System Endpoints
-
-#### `GET /api/v1/health`
-Returns system health status, version, and active LLM provider.
 ```json
 {
-  "status": "ok",
-  "version": "2.0.0",
-  "provider": "mock"
-}
-```
-
-#### `GET /api/v1/config`
-
-Returns active non-secret configuration fields. The configured OpenAI key is never included; the response contains only `openai_api_key_configured` as a boolean.
-
----
-
-### 1.2 Detection Endpoints
-
-#### `POST /api/v1/detect`
-Analyzes a single requirement pair and returns predicted dependency type, rationale, and confidence rating.
-
-**Request Body**:
-```json
-{
-  "req_a": "The BCS shall apply vehicle braking.",
-  "req_b": "The BCS shall receive obstacle distance data from the PCS.",
+  "req_a": "The brake controller shall apply braking.",
+  "req_b": "The brake controller shall use wheel speed data.",
   "system": "ADB",
-  "examples": []
+  "examples": [],
+  "retrieval_mode": "hybrid",
+  "srs_text": "The brake controller shall process wheel speed data...",
+  "use_rag": true,
+  "stability_runs": 3
 }
 ```
 
-**Response (200 OK)**:
-```json
-{
-  "pair_id": "PAIR-API-0001",
-  "dependency_type": "Requires",
-  "rationale": "Requirement A requires camera distance information from Requirement B to activate braking.",
-  "confidence": 5,
-  "raw_response": "**Dependency_Type: Requires**...",
-  "prompt_tokens": 380,
-  "completion_tokens": 42,
-  "estimated_cost_usd": 0.0012
-}
-```
+Batch detection accepts the same RAG and `stability_runs` options, for example
+`{"pairs": [...], "examples": [], "srs_text": null,
+"retrieval_mode": "bm25", "stability_runs": 2}`;
+each pair follows the `RequirementPair` schema. Extraction accepts
+`{"text": "...", "system_name": "ADB"}` with optional `metadata_by_id`, an
+object keyed by exact extracted requirement IDs. Each value may contain only
+`component` and/or `subsystem` strings. Unknown IDs or malformed metadata return
+HTTP 422. For single detection, optional `req_a_component`, `req_a_subsystem`,
+`req_b_component`, and `req_b_subsystem` fields populate the target pair. These
+values are explicit user-supplied metadata and are never inferred from text.
+Pydantic request validation returns HTTP 422 for invalid payloads. Detection
+errors are reported as HTTP 500.
+Detection responses include `validation_status`: `passed_threshold`,
+`requires_review`, `threshold_disabled`, or `not_evaluated` (for predictions
+created by another classifier). A low-confidence prediction keeps its predicted
+dependency class and signals that human review is recommended. This status does
+not make the label verified ground truth, and the model's Likert confidence is
+not a calibrated probability. Responses also report `stability_status`,
+`stability_run_count`, `stability_labels`, `stability_confidences`, and
+`stability_reasons`; stability screening is separate from annotation
+verification.
 
-#### `POST /api/v1/predict/batch`
-Performs batch dependency prediction for a list of requirement pairs.
+The config endpoint never returns `openai_api_key`; it includes only the
+`openai_api_key_configured` boolean. The detection routes use the configured
+provider. OpenAI sends requirement text to an external service and requires a
+configured key and explicit authorization in the UI. No external provider is
+needed for the default MockLLM workflow.
 
----
+## CLI
 
-### 1.3 Dataset Generation & Review Queue Endpoints
+Run commands with the installed `leredd-cli` entry point (or use the Python
+module invocation shown in the README). Available commands are:
 
-#### `GET /api/v1/queue`
-Retrieves items in the human review queue.
+| Command | Purpose |
+|---|---|
+| `extract` | Extract requirements from a text, Markdown, PDF, or DOCX input; PDF/DOCX support needs the optional documents extra |
+| `pairs` | Generate exhaustive unlabeled pairs |
+| `candidates` | Generate exhaustive, BM25, dense, or hybrid candidates |
+| `label` | Produce provisional heuristic/LLM/hybrid labels; opt-in `multi_llm` mode requires at least two distinct model IDs |
+| `queue-create`, `queue-list`, `queue-decide` | Create, inspect, and record explicit review decisions |
+| `annotate` | Interactively assign labels to pairs |
+| `split` | Write train/dev/test partitions and leakage metadata |
+| `detect` | Predict labels for input pairs; `--stability-runs 1..5` optionally checks repeated inference consistency (default 1) |
+| `evaluate` | Score predictions against eligible ground truth |
+| `train-bert` | Fit and persist the supervised BERT-feature classifier |
+| `serve` | Start the FastAPI service |
 
-#### `POST /api/v1/queue/{item_id}/approve`
-Approves a candidate pair annotation with optional human edits and provenance logging.
+Machine-labeled records remain provisional. `queue-decide --reviewer IDENTIFIER`
+and `annotate --annotator IDENTIFIER` require an explicit, nonblank,
+non-placeholder operator identity before recording human-supplied decisions as
+verified. The application records but does not authenticate that identity; do
+not use synthetic test reviewer identities as real annotation evidence. Evaluation rejects provenance-bearing
+ground truth unless status is `verified`, source is human, reviewer or annotator
+identity is present, and `accepted_label` matches the scored label. Prediction
+coverage is required for every eligible ground-truth pair.
 
----
+## Python API
 
-## 2. Command Line Interface Reference (`leredd-cli`)
-
-The Typer CLI offers full suite controls for data processing and model operations.
-
-| Command | Arguments | Description |
-| :--- | :--- | :--- |
-| `leredd-cli extract` | `--input <path> --system <name> --output <path>` | Extract requirement statements from SRS text. |
-| `leredd-cli pairs` | `--input <path> --output <path>` | Generate exhaustive unlabeled candidate pairs (`dependency_type: null`, candidate-generator provenance). |
-| `leredd-cli annotate` | `--input <path> --output <path>` | Collect an explicit human label; records the human annotation as VERIFIED. |
-| `leredd-cli detect` | `--input <path> --examples <path> --output <path>` | Execute LEREDD automated dependency detection. |
-| `leredd-cli evaluate` | `--predictions <path> --ground-truth <path>` | Compute metrics only with complete prediction coverage and labeled ground truth; provenance-bearing ground truth requires `VERIFIED` status. |
-| `leredd-cli serve` | `--host <host> --port <port>` | Start the FastAPI REST API server. |
-
----
-
-## 3. Python SDK & Core Classes
-
-### `leredd.RequirementDependencyDetector`
-Primary detection engine class.
+The package exports schema and workflow types such as `Requirement`,
+`RequirementPair`, `Prediction`, `LEREDDConfig`, `CandidateGenerator`,
+`ProvisionalLabeler`, `ReviewQueueManager`, `DatasetSplitter`,
+`BM25Retriever`, and `HybridRetriever`. The detection engine is
+`leredd.detector.LEREDDDetector` (it is not exported from `leredd`):
 
 ```python
-from leredd import RequirementDependencyDetector, LEREDDConfig, RequirementPair, Requirement
+from leredd.config import LEREDDConfig
+from leredd.data_models import Requirement, RequirementPair
+from leredd.detector import LEREDDDetector
+from leredd.llm import MockLLMClient
 
-config = LEREDDConfig(llm_provider="mock", confidence_threshold=4)
-detector = RequirementDependencyDetector(config=config)
-
+config = LEREDDConfig(llm_provider="mock", k_examples=0)
+detector = LEREDDDetector(config=config, llm=MockLLMClient())
 pair = RequirementPair(
     id="PAIR-001",
-    req_a=Requirement(id="REQ-1", text="System shall authenticate user.", system="ADB"),
-    req_b=Requirement(id="REQ-2", text="System shall check password hash.", system="ADB")
+    req_a=Requirement(id="REQ-1", text="The system shall authenticate users."),
+    req_b=Requirement(id="REQ-2", text="The system shall verify credentials."),
 )
-
-prediction = detector.detect_dependency(pair)
+prediction = detector.detect_pair(pair)
 print(prediction.dependency_type, prediction.confidence)
 ```
 
-### `leredd.candidate_generator.CandidatePairGenerator`
-Generates top-$k$ candidate pairs via hybrid retrieval filtering.
-
-### `leredd.dataset_splitter.SystemDisjointSplitter`
-Splits datasets into system-disjoint train, dev, and test partitions with zero data leakage.
+For repeatable offline calls, inject a deterministic embedder where the
+workflow uses dense retrieval and use `MockLLMClient`. Default dense model
+initialization may need locally available SentenceTransformer weights or
+network access to retrieve them; real OpenAI/Ollama calls need their respective
+services and configuration.

@@ -17,8 +17,9 @@ graph TB
         D --> E[Provisional Labeler - LLM/Rules]
         E --> F[Review Queue Engine]
         F --> G[Streamlit UI - Expert Review]
-        G --> H[Verified Ground Truth Dataset]
-        H --> I[System-Disjoint Dataset Splitter]
+        G --> H[Human-Verified Dataset]
+        H --> H1[Immutable Versioned Release + Manifest]
+        H1 --> I[System-Disjoint Dataset Splitter]
     end
 
     subgraph Dependency Detection Engine (LEREDD)
@@ -47,33 +48,42 @@ graph TB
 
 1. **SRS Extractor (`leredd/cli.py` & `leredd/utils.py`)**:
    - Parses raw Software Requirements Specification (SRS) documents.
+   - Reads text-based PDF and DOCX files when the optional `documents` extra is installed; DOCX body paragraphs and table rows are traversed in document order. Image-only PDFs require OCR, which is not provided.
    - Extracts discrete requirement statements using key term triggers (`shall`, `must`, `should`, `will`).
    - Assigns unique identifier structures (e.g., `REQ-ADB-001`).
+   - Accepts an optional explicit ID-keyed metadata sidecar/API/UI mapping for `component` and `subsystem`; unknown IDs and unsupported fields fail validation. Values are not inferred from requirement prose.
 
 2. **Candidate Pair Generator (`leredd/candidate_generator.py`)**:
-   - Reduces the $O(N^2)$ exhaustive requirement pair search space.
-   - Applies top-$k$ candidate pair selection using lexical (BM25) and semantic vector distance (SBERT `all-MiniLM-L6-v2`).
-   - Preserves high-recall candidate sets while drastically reducing human annotation overhead.
+   - Supports exhaustive `ALL_PAIRS` generation and top-$k$ `BM25`, `DENSE`, and `HYBRID` retrieval strategies.
+   - Dense generation ranks individual requirements with a requirement-level retriever; hybrid generation fuses that ranking with BM25 using reciprocal-rank fusion.
+   - Retrieval limits reduce annotation effort but can omit true dependencies; only untruncated `ALL_PAIRS` runs are marked exhaustive.
+   - Each manifest records pair-space recall against the complete unordered pair universe and the count of uncovered pairs. This is coverage of possible candidates, not recall of labeled dependency pairs.
 
 3. **Provisional Labeler (`leredd/provisional_labeler.py`)**:
    - Assigns initial provisional dependency labels and confidence ratings using zero-shot prompting or deterministic rule heuristics.
    - Attaches provenance metadata (`annotator_id`, `annotation_source`, `confidence_score`, `created_at`).
 
 4. **Review Queue Engine & UI (`leredd/review_queue.py` & `ui/app.py`)**:
-   - Implements a state-machine review queue (`pending`, `approved`, `modified`, `rejected`).
-   - Interactive Streamlit dashboard allows domain experts to rapidly review, refine, or approve candidate pair annotations.
+   - Implements `pending`, `accepted`, `corrected`, `rejected`, `deferred`, and `reviewed` queue outcomes.
+   - Accepted and corrected decisions require an explicit reviewer and create verified records; rejection/defer does not produce verified ground truth.
+   - Interactive Streamlit dashboard allows domain experts to review, refine, accept, reject, or defer candidate annotations.
 
-5. **Dataset Splitter (`leredd/dataset_splitter.py`)**:
+5. **Verified Dataset Release (`leredd/dataset_release.py`, CLI `dataset-release`)**:
+   - Validates that each record has a final label and coherent human `VERIFIED` provenance; rejects legacy provenance-free records for release.
+   - Publishes a new directory containing `pairs.json` and a manifest with the release version, input hashes, released-data hash, record count, and class counts.
+   - Updates `provenance.dataset_version` in copied release records without changing the source files. An existing version directory is never overwritten.
+
+6. **Dataset Splitter (`leredd/dataset_splitter.py`)**:
    - Splits annotated pair datasets into `train`, `dev`, and `test` subsets.
-   - Supports both `random` splitting and strict `system-disjoint` splitting (e.g., Train: *ADB*, Dev: *APA*, Test: *TJA*).
-   - Audits data leakage across software system boundaries.
+   - Supports `SYSTEM`, `DOCUMENT`, `REQUIREMENT`, and `PAIR` strategies. `PAIR` is a random pair-level split and does not prevent requirement leakage.
+   - Audits requirement overlaps among train/dev/test/retrieval partitions and system overlaps for system-disjoint splits. A system-disjoint pair must have both requirements from the same system.
 
 ---
 
 ### 2.2 LEREDD Automated Dependency Detection Engine
 
 1. **Hybrid Retriever (`leredd/hybrid_retrieval.py`)**:
-   - Combines BM25 lexical search scores with SBERT embedding cosine similarity.
+   - Fuses BM25 lexical and SBERT dense rankings with reciprocal-rank fusion. When target and candidate records contain comparable `component`, `subsystem`, or meaningful `system` values, it can add a normalized exact-overlap metadata ranking. The metadata ranking is omitted when no candidate shares a value.
    - Computes overall pair-to-pair similarity using the paper's 4-way average distance formula:
      $$Score_{avg} = \frac{sim(R_1, R_a) + sim(R_1, R_b) + sim(R_2, R_a) + sim(R_2, R_b)}{4}$$
    - Dynamically selects top $k$ (default 6) annotated examples per dependency class from the training pool.
@@ -81,14 +91,17 @@ graph TB
 2. **Dynamic Prompt Builder (`leredd/prompts.py`)**:
    - Constructs contextual prompts adhering strictly to research paper definitions.
    - Includes system instructions, taxonomy guidelines, few-shot dynamic ICL examples, and target pair statements.
+   - Optional SRS context uses fixed-size overlapping chunks ranked by dense similarity; chunk size must be positive and overlap smaller than chunk size. Requesting zero chunks returns no context without initializing embeddings.
 
 3. **LLM Engine Client (`leredd/llm.py`)**:
    - Unified interface supporting `OpenAI` (`gpt-4`, `gpt-3.5-turbo`), `Ollama` local LLMs (`llama3`), and offline `MockLLMClient`.
    - Incorporates prompt-hash caching, token usage calculation, cost estimation, and exponential backoff retry logic.
 
-4. **Confidence Threshold Filter (`leredd/detector.py`)**:
-   - Evaluates returned Likert confidence score (1 to 5).
-   - If confidence score $\le 4$, automatically overrides prediction to `No_dependency` to eliminate low-confidence false positives.
+4. **Confidence-Aware Validation (`leredd/detector.py`)**:
+   - Evaluates the model's self-reported Likert confidence against the configured review threshold.
+   - Low-confidence predictions retain their predicted dependency class and are marked `requires_review`; outputs above the threshold are marked `passed_threshold`.
+   - An optional 1–5 run consistency screen repeats the same prompt without response-cache reuse. Label or confidence variation recommends human review; the first run's label is retained. The default remains one inference.
+   - Screening status is not annotation verification, and Likert confidence is not treated as calibrated probability. Disabling the threshold is recorded explicitly.
 
 ---
 

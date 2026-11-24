@@ -13,7 +13,7 @@ A comprehensive research implementation and software framework for **Automated R
 
 Software requirements engineering frequently suffers from hidden requirement dependencies that lead to incomplete system architectures, integration bugs, and costly rework. This repository provides a complete dual-workflow platform:
 
-1. **Automated Requirement Dependency Detection**: Implements the **LEREDD** architecture, utilizing Large Language Models (LLMs) with dynamic In-Context Learning (ICL), hybrid BM25 + SBERT retrieval, confidence thresholding, and multi-class classification across six dependency categories.
+1. **Automated Requirement Dependency Detection**: Implements the **LEREDD** architecture, utilizing Large Language Models (LLMs) with dynamic In-Context Learning (ICL), hybrid BM25 + SBERT retrieval with optional component/subsystem metadata alignment, confidence screening, and multi-class classification across six dependency categories.
 2. **Semi-Automated Dataset Generation**: Provides an end-to-end pipeline to transform raw Software Requirements Specification (SRS) text into candidate datasets that remain provisional until an explicit human review decision. The pipeline features SRS parsing, candidate pair generation, hybrid retrieval filtering, provisional labeling, human review queue management via a Streamlit web interface, system-disjoint dataset splitting, and provenance tracking.
 
 ---
@@ -62,9 +62,9 @@ flowchart TD
         TestPair --> PromptEngine
         PromptEngine --> LLMClient[LLM Client Engine
 (OpenAI / Ollama / Mock)]
-        LLMClient --> PostFilter[Confidence Threshold Filter
-(Likert Score <= 4 -> No_dependency)]
-        PostFilter --> Pred[Final Dependency Prediction]
+        LLMClient --> Screen[Confidence Review Screen
+(low score -> human review cue)]
+        Screen --> Pred[Prediction + Screening Status]
     end
 ```
 
@@ -98,17 +98,11 @@ pip install -e ".[documents]"
 
 ### 2. Environment Configuration
 
-Copy `.env.example` to `.env` and adjust setup parameters:
-
-```bash
-cp .env.example .env
-```
-
-To run completely offline without external API keys (using Mock LLM & local embeddings):
-```env
-LLM_PROVIDER=mock
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-```
+The local heuristic labeling and MockLLM paths do not require provider
+credentials. The default embedding model is `all-MiniLM-L6-v2`; it must be
+cached locally or downloaded when network access is available. To force an
+offline model-cache check during a run, set `HF_HUB_OFFLINE=1`. Do not add real
+provider credentials unless you intend to call that provider.
 
 ---
 
@@ -118,43 +112,200 @@ The system provides three primary interfaces for execution:
 
 ### 1. Command-Line Interface (`leredd-cli`)
 
-```bash
-# Workflow 1: Dataset Generation Commands
-# Extract requirement statements from SRS text
-leredd-cli extract --input data/raw/adb_srs.txt --system ADB --output data/provisional/adb_reqs.json
-
-# Legacy exhaustive pair generation also writes unlabeled candidates
-leredd-cli pairs --input data/provisional/adb_reqs.json --output data/candidates/adb_pairs.json
-
-# Train and save a reusable baseline classifier artifact
-leredd-cli train-bert --train data/verified/adb_pairs.json --output model/
-
-# Generate exhaustive and BM25 candidates from an SRS (outputs are isolated by run)
-python scripts/generate_candidates.py --input data/raw/adb_srs.txt --output-dir data/candidates/runs/demo
-
-# Label candidates with the offline mock provider by default
-python scripts/label_candidates.py --input data/candidates/runs/demo/adb_candidates_bm25.json --output-dir data/provisional/runs/demo --provider mock
-
-# Create a pending queue only; this command never creates human decisions
-python scripts/build_review_queue.py --input data/provisional/runs/demo/adb_candidates_bm25_provisional_hybrid.json --output data/queue/runs/demo/review_queue.json
-
-# Split verified dataset into system-disjoint train/dev/test sets
-python scripts/split_dataset.py --input data/verified/all_annotated.json --output-dir data/split_runs/demo
-
-# Workflow 2: Dependency Detection & Evaluation
-# Run LEREDD detection on target requirement pair file
-leredd-cli detect --input data/candidates/test_pairs.json --examples data/verified/all_annotated.json --output data/evaluation/predictions.json
-
-# Run the safe system-disjoint demonstration benchmark (writes to a unique run folder)
-python scripts/run_evaluation.py
+```powershell
+# Keep generated examples separate from source datasets and historical reports.
+$run = ".pytest-tmp\leredd-demo"
+New-Item -ItemType Directory -Force $run | Out-Null
+python -m leredd.cli --help
 ```
+
+The safe end-to-end dataset workflow is shown below. Point `--input` at your
+own SRS and use a distinct `--system` value for each system. Every output here
+is disposable and stays under `.pytest-tmp`.
+
+Optional component/subsystem metadata can be supplied as a JSON sidecar keyed
+by the exact requirement IDs present in the SRS, for example:
+
+```json
+{
+  "REQ-DEMO-01": {"component": "Brake Controller", "subsystem": "Braking"},
+  "REQ-DEMO-02": {"component": "Dashboard"}
+}
+```
+
+Pass the sidecar with `--metadata-json .pytest-tmp\metadata.json` to `extract`
+or `candidates`. The same mapping is available on Streamlit page 2 and the API
+`/extract` request. Metadata is joined by exact ID; the software does not infer
+component or subsystem from requirement prose. Candidate JSON carries these
+values into pair retrieval. CLI `detect`, API batch detection, and the UI
+detection form accept metadata on the target requirements as well.
+
+```powershell
+$run = ".pytest-tmp\leredd-demo"
+New-Item -ItemType Directory -Force "$run\out" | Out-Null
+python -m leredd.cli extract --input .\my-srs.txt --system DEMO --output "$run\out\requirements.json"
+python -m leredd.cli candidates --input "$run\out\requirements.json" --strategy bm25 --top-k 5 --system DEMO --output "$run\out\candidates.json"
+python -m leredd.cli label --input "$run\out\candidates.json" --mode heuristic --output "$run\out\provisional.json"
+python -m leredd.cli queue-create --input "$run\out\provisional.json" --output "$run\out\review-queue.json"
+python -m leredd.cli queue-list --queue "$run\out\review-queue.json"
+```
+
+For an opt-in multi-model vote, use `--mode multi_llm --models model-a,model-b`
+or add `--models` to `--mode hybrid`. Each distinct model ID is called through
+the configured `LLM_PROVIDER`. Only unanimous valid model votes produce a
+provisional label; disagreement or an incomplete vote leaves the pair unlabeled
+for review. With OpenAI or Ollama this sends requirement text to the configured
+provider and can incur cost or use local compute. The default `mock` provider is
+only a software-path demonstration, not independent model evidence. All results
+remain provisional.
+
+Review the queue in Streamlit or use `queue-decide` only for an actual human
+decision. Supply a real, attributable reviewer identifier; the program records
+but cannot authenticate it. Proposals remain provisional until that decision
+is saved. A human decision can export eligible pairs with:
+
+```powershell
+python -m leredd.cli queue-decide --queue "$run\out\review-queue.json" --item-id "REPLACE_WITH_REVIEWED_ITEM_ID" --decision accepted --reviewer "REPLACE_WITH_YOUR_IDENTIFIER" --verified-out "$run\out\verified.json"
+```
+
+Do not run this example without reviewing the selected item and making the
+stated decision. For a system-disjoint dataset, repeat extraction and review
+for at least three distinct systems. Publish their verified exports as a new
+immutable release, then split that released dataset:
+
+```powershell
+python -m leredd.cli dataset-release --input "$run\verified-a.json,$run\verified-b.json,$run\verified-c.json" --version v1.0.0 --output-dir "$run\releases\v1.0.0"
+python -m leredd.cli split --input "$run\releases\v1.0.0\pairs.json" --strategy system --output-dir "$run\splits"
+```
+
+`dataset-release` accepts only labeled, provenance-bearing records whose
+provenance passes the human `VERIFIED` eligibility checks. It writes `pairs.json`
+and a `manifest.json` with source-file hashes, release hash, class counts, and
+version. The output directory must be new; releases are not overwritten. Each
+record's `provenance.dataset_version` is set to the requested version. Keep the
+source verified exports and inspect the manifest before evaluation.
+
+For single-pair detection, give the CLI a target candidate file and a separate
+verified training/example pool:
+
+```powershell
+python -m leredd.cli detect --input "$run\target-candidates.json" --examples "$run\verified-train.json" --output "$run\predictions.json"
+```
+
+Detection uses one inference by default. To screen for same-prompt run
+inconsistency, add `--stability-runs 3` (allowed range 1–5). Multiple runs make
+multiple fresh provider calls; any label or self-reported confidence variation
+recommends human review while retaining the first run's predicted class. This
+screen is not a calibrated confidence estimate or human verification.
+
+Never use test-partition labels to generate predictions or include test
+requirements in the retrieval-example pool. The evaluation runner separates
+prediction generation from scoring and checks retrieval leakage.
+
+Run the evaluation only on a reviewed, leakage-resistant split and write to a
+new report path:
+
+```powershell
+python scripts/run_full_evaluation.py --split-dir "$run\splits" --output "$run\out\report.json"
+```
+
+The runner uses MockLLM for LEREDD and writes the primary and ablation reports
+beside the specified output. Its report describes the supplied data and its
+provenance eligibility; synthetic fixture results are software evidence only,
+never human annotation or research benchmark evidence.
 
 The training command writes `model/bert_baseline.joblib`. Existing artifacts are
 preserved unless `--overwrite` is supplied. Load only artifacts from trusted
 sources; joblib uses Python pickle serialization. The artifact can be loaded with
 `BERTBaseline.load(path)` for prediction.
 
-Generated pairs are unlabeled (`dependency_type: null`) until an explicit annotation is recorded. Provenance-bearing ground-truth annotations are eligible for metrics only when their status is `verified`; imported replication records currently marked `pending_review` must pass through local human review first. The replication runner therefore does not produce metrics from the current imported annotations.
+#### Isolated, no-service walkthrough (PowerShell)
+
+This example writes its working artifacts only below `.pytest-tmp/p11-demo` and
+uses BM25 plus the heuristic labeler; it does not contact an LLM service. The
+queue is intentionally left pending until a person reviews each item.
+
+```powershell
+$run = ".pytest-tmp\p11-demo"
+New-Item -ItemType Directory -Force $run | Out-Null
+@'
+[REQ-ADB-101] The vehicle controller shall use wheel speed sensor data.
+[REQ-ADB-102] The vehicle controller shall report wheel speed sensor faults.
+[REQ-ADB-103] The dashboard shall display fault notifications from REQ-ADB-102.
+'@ | Set-Content -Encoding utf8 "$run\sample.md"
+
+leredd-cli extract --input "$run\sample.md" --system ADB --synthetic --output "$run\requirements.json"
+leredd-cli candidates --input "$run\requirements.json" --strategy bm25 --top-k 1 --system ADB --output "$run\candidates.json"
+leredd-cli label --input "$run\candidates.json" --mode heuristic --output "$run\provisional.json"
+leredd-cli queue-create --input "$run\provisional.json" --output "$run\review-queue.json"
+leredd-cli queue-list --queue "$run\review-queue.json"
+```
+
+Inspect the requirements, candidate manifest, provisional provenance, and queue
+before deciding labels. Record only decisions actually made by a human using
+`leredd-cli queue-decide --reviewer YOUR_IDENTIFIER`; `leredd-cli annotate`
+likewise requires `--annotator YOUR_IDENTIFIER`. These commands require the
+human operator to supply a non-placeholder identity explicitly; the application
+does not authenticate the supplied identifier. Do not treat the heuristic
+proposal as ground truth.
+The example input above is synthetic/demo data, so `--synthetic` marks every
+extracted requirement and generated pair. Such records remain marked after
+review and are excluded from evaluation, retrieval examples, and dataset release.
+
+Every candidate-generation manifest also reports `pair_space_recall` and
+`uncovered_pair_count`. This compares the emitted pairs with the complete set of
+unordered pairs possible for the input requirements. It measures candidate
+space coverage, **not** recall of true dependency labels; the latter requires a
+verified labeled sample.
+The checked-in legacy benchmark can be evaluated separately, with an isolated
+report destination, by running:
+
+```powershell
+python scripts/run_full_evaluation.py --split-dir data/splits/system_disjoint --output "$run\evaluation\report.json"
+```
+
+Use a new report path when reproducing the checked-in example. The checked-in
+report uses a 20-pair, provenance-free system-disjoint split and MockLLM. Its
+metrics are illustrative, not evidence about new SRS annotations or real-LLM
+performance. Provenance-bearing labels require `verified` status, human source,
+a non-placeholder reviewer identity, and matching `accepted_label`. Imported
+replication records still need local human review before evaluation.
+
+#### Independent annotation and agreement pilot
+
+The assisted review queue is not a substitute for independent annotation. For
+a controlled agreement pilot, prepare one fixed candidate sample and optional
+UTF-8 SRS context file, then have two reviewers independently run
+`scripts/annotate_independent.py` to separate output files. That tool hides
+provisional machine labels, records abstentions, short rationales, and elapsed
+time per pair, and preserves incomplete work for `--resume`. Compare completed
+vectors with `scripts/compare_independent_annotations.py`; its report measures
+agreement and time but does not adjudicate labels or mark them verified. Follow
+the [independent annotation guide](docs/ANNOTATION_GUIDE.md). Keep the inputs
+identical and write outputs to fresh paths outside `data/replication/` and
+historical evaluation reports. Synthetic fixtures demonstrate the software
+only and cannot be reported as human agreement or annotation-effort evidence.
+
+For the prepared hybrid top-5 coverage pilot, only after real reviewers finish
+and disagreements are adjudicated into an exact verified export, run
+`scripts/analyze_candidate_coverage.py` with the pinned pilot manifest, hidden
+strata map, and verified pairs. It reports a sampling-weighted estimate of
+positive dependency recall; it refuses provisional, incomplete, or inconsistent
+labels. The 100-pair pilot is exploratory and is not a powered performance claim.
+See the [annotation guide](docs/ANNOTATION_GUIDE.md) for the command and blinding
+procedure.
+
+For a paired manual-versus-assisted effort study, use the separate
+`prepare_annotation_effort_study.py`, `run_annotation_effort_study.py`, and
+`compare_annotation_effort.py` commands documented in the [annotation guide](docs/ANNOTATION_GUIDE.md).
+The fixed input must contain provisional machine suggestions. Each pair is
+reviewed in both conditions by different reviewers, with condition assignments
+balanced across the two reviewers. The manual interface hides machine labels;
+the assisted interface identifies them as provisional. The resulting comparison
+is descriptive software output only: it does not verify labels, establish
+annotation quality, or constitute a real human study until reviewers complete
+it on an appropriate, rights-cleared sample. Study artifacts are refused under
+the project's `data/` tree.
 
 ### 2. REST API (`api/main.py`)
 
@@ -201,20 +352,17 @@ Services exposed:
 
 ---
 
-## 📊 Evaluation & Empirical Benchmarks
+## 📊 Evaluation & Empirical Evidence
 
-The framework was evaluated under a strict **System-Disjoint Split Strategy** (training on *ADB*, validating on *APA*, and testing on *TJA*) to prevent data leakage between software domains.
-
-### Performance Comparison
-
-| Model Architecture | Evaluation Setting | Accuracy | Macro F1 | Weighted F1 | Primary Characteristics |
-| :--- | :--- | :---: | :---: | :---: | :--- |
-| **TF-IDF + Cosine Baseline** | System-Disjoint | 0.400 | 0.143 | 0.229 | Unsupervised TF-IDF vector similarity with SVD. |
-| **Supervised BERT (RF)** | System-Disjoint | 0.200 | 0.125 | 0.200 | Supervised SBERT + RandomForest classifier with class balancing. |
-| **LEREDD (Mock Deterministic)** | System-Disjoint | 0.400 | 0.222 | 0.333 | Keyword heuristic fallback mode without active LLM API. |
-| **LEREDD (Paper Reference GPT-4)** | System-Disjoint (Zero/Few-Shot) | **0.880** | **0.860** | **0.875** | Paper reference benchmark using live GPT-4 API (not offline MockLLM). |
-
-*Detailed benchmark metrics, per-class breakdown, and statistical significance results are available in [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) and [`data/evaluation/system_disjoint_report.json`](data/evaluation/system_disjoint_report.json).*
+The checked-in [`data/evaluation/system_disjoint_report.json`](data/evaluation/system_disjoint_report.json)
+is a historical local run with 10 ADB train pairs, 5 APA development pairs, and
+5 TJA test pairs. It has no annotation provenance and uses MockLLM for LEREDD.
+The five-pair test sample and four-of-six label coverage make its metrics
+descriptive only. It does not reproduce a live GPT-4 experiment, and no
+paper-reference score or statistical-significance claim is made here. See
+[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the recorded metrics and
+limitations. New runs must save to a new path; do not overwrite the historical
+report.
 
 ---
 
@@ -231,7 +379,7 @@ The framework was evaluated under a strict **System-Disjoint Split Strategy** (t
 Run the full automated test suite (including unit, integration, and provenance verification tests):
 
 ```bash
-pytest tests/ -v
+python -m pytest tests/
 ```
 
 ---

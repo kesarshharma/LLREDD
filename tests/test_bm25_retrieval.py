@@ -15,6 +15,7 @@ Covers:
 """
 
 import pytest
+import numpy as np
 from leredd.data_models import (
     Requirement,
     RequirementPair,
@@ -25,6 +26,16 @@ from leredd.data_models import (
 )
 from leredd.bm25_retrieval import BM25Retriever
 from leredd.retrieval import ExampleRetriever
+
+
+class _OfflineEmbedder:
+    """Small deterministic vectors keep dense retrieval tests network-free."""
+
+    def encode(self, texts):
+        return np.asarray(
+            [[len(text), sum(map(ord, text)) % 997, text.lower().count("system")] for text in texts],
+            dtype=np.float32,
+        )
 
 
 @pytest.fixture
@@ -204,6 +215,6 @@ def test_offline_execution_without_sbert_or_network():
 
 def test_existing_dense_retrieval_unaffected(mock_config, sample_pair, sample_annotated_pool):
     """Verify existing SBERT ExampleRetriever is completely unaffected by BM25 additions."""
-    dense_retriever = ExampleRetriever(config=mock_config)
+    dense_retriever = ExampleRetriever(embedder=_OfflineEmbedder(), config=mock_config)
     examples = dense_retriever.retrieve(sample_pair, sample_annotated_pool, k=2)
     assert isinstance(examples, dict)

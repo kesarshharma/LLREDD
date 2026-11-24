@@ -3,6 +3,7 @@
 import os
 import json
 import datetime
+import tempfile
 import typer
 from typing import Optional
 from loguru import logger
@@ -16,13 +17,22 @@ from leredd.utils import (
     generate_requirement_pairs,
     load_pairs_json,
     save_pairs_json,
+    apply_requirement_metadata,
+    load_requirement_metadata_json,
 )
 from leredd.detector import LEREDDDetector
 from leredd.evaluation import Evaluator
 from leredd.baselines.bert_classifier import BERTBaseline
 from leredd.dataset_splitter import DatasetSplitter, SplitConfig, SplitStrategy
 from leredd.candidate_generator import CandidateGenerator, GenerationStrategy
-from leredd.provisional_labeler import ProvisionalLabeler, LabelingMode
+from leredd.provisional_labeler import (
+    LLMLabeler,
+    MultiModelLLMLabeler,
+    ProvisionalLabeler,
+    LabelingMode,
+)
+from leredd.synthetic import is_synthetic
+from leredd.llm import LLMClientFactory
 
 app = typer.Typer(
     name="leredd-cli",
@@ -31,15 +41,54 @@ app = typer.Typer(
 )
 
 
+def _save_pairs_json_atomically(pairs, output_file: str) -> None:
+    """Publish a pair dataset only after a complete sibling temporary write."""
+    target = os.path.abspath(output_file)
+    parent = os.path.dirname(target)
+    os.makedirs(parent, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{os.path.basename(target)}.", suffix=".tmp",
+            dir=parent, delete=False,
+        ) as temporary:
+            temporary_path = temporary.name
+        save_pairs_json(pairs, temporary_path)
+        os.replace(temporary_path, target)
+        temporary_path = None
+    finally:
+        if temporary_path and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+
+
 @app.command("extract")
 def extract_cmd(
-    input_file: str = typer.Option(..., "--input", "-i", help="Path to input SRS document (.txt, .pdf, .docx)"),
+    input_file: str = typer.Option(..., "--input", "-i", help="Path to input SRS document (.txt, .md, .pdf, .docx)"),
     output_file: str = typer.Option("requirements.json", "--output", "-o", help="Output JSON file for extracted requirements"),
-    system_name: str = typer.Option("ADB", "--system", "-s", help="System name (e.g. ADB, TJA, APA)")
+    system_name: str = typer.Option("ADB", "--system", "-s", help="System name (e.g. ADB, TJA, APA)"),
+    metadata_file: Optional[str] = typer.Option(
+        None, "--metadata-json", help="Optional explicit component/subsystem mapping keyed by requirement ID"
+    ),
+    synthetic: bool = typer.Option(
+        False,
+        "--synthetic",
+        help="Mark extracted records as synthetic/demo data; evaluation and release will reject them.",
+    ),
 ):
-    """Extract natural language requirement statements from SRS document using regex."""
+    """Extract natural language requirement statements from a text, Markdown, PDF, or DOCX SRS."""
     typer.echo(f"Extracting requirements from '{input_file}' for system '{system_name}'...")
     reqs = extract_requirements_from_file(input_file, system_name=system_name)
+    if synthetic:
+        source_identity = "synthetic:cli-extract"
+        for requirement in reqs:
+            requirement.synthetic = True
+            requirement.source_identity = source_identity
+    if metadata_file:
+        try:
+            reqs = apply_requirement_metadata(reqs, load_requirement_metadata_json(metadata_file))
+        except ValueError as exc:
+            typer.secho(f"Error applying requirement metadata: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
     
     data = [req.model_dump(mode="json") for req in reqs]
     with open(output_file, "w", encoding="utf-8") as f:
@@ -67,9 +116,13 @@ def pairs_cmd(
 @app.command("annotate")
 def annotate_cmd(
     input_file: str = typer.Option(..., "--input", "-i", help="Input JSON file containing requirement pairs"),
-    output_file: str = typer.Option("annotated.json", "--output", "-o", help="Output JSON file for annotated pairs")
+    output_file: str = typer.Option("annotated.json", "--output", "-o", help="Output JSON file for annotated pairs"),
+    annotator: str = typer.Option(..., "--annotator", "-a", help="Human annotator identifier")
 ):
     """Interactive CLI tool to annotate requirement pairs with dependency types."""
+    if not annotator.strip() or annotator.strip().casefold() in {"human_reviewer_1", "human_cli"}:
+        raise typer.BadParameter("Provide a nonblank, non-placeholder annotator identifier", param_hint="--annotator")
+
     pairs = load_pairs_json(input_file)
     typer.echo(f"Loaded {len(pairs)} requirement pairs for interactive annotation.\n")
 
@@ -96,7 +149,7 @@ def annotate_cmd(
         pair.provenance = provenance.model_copy(update={
             "source": AnnotationSource.HUMAN,
             "status": VerificationStatus.VERIFIED,
-            "annotator_id": provenance.annotator_id or "human_cli",
+            "annotator_id": annotator.strip(),
             "reviewed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "predicted_label": previous_label,
             "accepted_label": pair.dependency_type,
@@ -113,7 +166,14 @@ def detect_cmd(
     examples_file: Optional[str] = typer.Option(None, "--examples", "-e", help="Optional annotated JSON file for in-context example retrieval"),
     srs_file: Optional[str] = typer.Option(None, "--srs", "-s", help="Optional SRS file for RAG contextual retrieval"),
     output_file: str = typer.Option("predictions.json", "--output", "-o", help="Output JSON file for predictions"),
-    use_rag: bool = typer.Option(False, "--use-rag", help="Enable RAG context retrieval")
+    use_rag: bool = typer.Option(False, "--use-rag", help="Enable RAG context retrieval"),
+    stability_runs: int = typer.Option(
+        1,
+        "--stability-runs",
+        min=1,
+        max=5,
+        help="Fresh repeated inferences (1-5); multiple runs bypass the response cache",
+    ),
 ):
     """Run LEREDD detection pipeline on requirement pairs."""
     config = get_config()
@@ -131,7 +191,12 @@ def detect_cmd(
     typer.echo(f"Running LEREDD detection on {len(pairs)} pairs (examples pool: {len(annotated_pool)}, RAG: {config.use_rag})...")
 
     detector = LEREDDDetector(config=config)
-    predictions = detector.detect_batch(pairs, annotated_pool=annotated_pool, srs_text=srs_text)
+    predictions = detector.detect_batch(
+        pairs,
+        annotated_pool=annotated_pool,
+        srs_text=srs_text,
+        stability_runs=stability_runs,
+    )
 
     data = [pred.model_dump(mode="json") for pred in predictions]
     with open(output_file, "w", encoding="utf-8") as f:
@@ -186,6 +251,27 @@ def train_bert_cmd(
     os.makedirs(output_dir, exist_ok=True)
     baseline.save(artifact_path, overwrite=overwrite)
     typer.secho(f"Successfully trained BERT baseline model. Saved to '{artifact_path}'.", fg=typer.colors.GREEN)
+
+
+@app.command("dataset-release")
+def dataset_release_cmd(
+    input_file: str = typer.Option(..., "--input", "-i", help="Verified pair JSON file(s), comma-separated"),
+    version: str = typer.Option(..., "--version", help="Immutable dataset version identifier"),
+    output_dir: str = typer.Option(..., "--output-dir", "-o", help="New directory for this release; must not exist"),
+):
+    """Publish a hashed, immutable release containing only verified human labels."""
+    from leredd.dataset_release import create_versioned_dataset_release
+
+    try:
+        manifest = create_versioned_dataset_release(input_file, version, output_dir)
+    except (OSError, ValueError) as exc:
+        typer.secho(f"Error creating dataset release: {exc}", fg=typer.colors.RED)
+        raise typer.Exit(code=1) from exc
+
+    typer.secho(f"Published dataset version {manifest.dataset_version}.", fg=typer.colors.GREEN)
+    typer.echo(f"Records: {manifest.record_count}")
+    typer.echo(f"Dataset SHA-256: {manifest.dataset_sha256}")
+    typer.echo(f"Release: {output_dir}")
 
 
 @app.command("split")
@@ -251,7 +337,10 @@ def candidates_cmd(
     strategy: str = typer.Option("all_pairs", "--strategy", "-s", help="Generation strategy: all_pairs, bm25, dense, hybrid"),
     top_k: int = typer.Option(5, "--top-k", "-k", help="Top-k retrieval parameter if retrieval strategy is used"),
     max_candidates: Optional[int] = typer.Option(None, "--max-candidates", "-l", help="Optional maximum candidate limit"),
-    system_name: str = typer.Option("ADB", "--system", help="System identifier name")
+    system_name: str = typer.Option("ADB", "--system", help="System identifier name"),
+    metadata_file: Optional[str] = typer.Option(
+        None, "--metadata-json", help="Optional explicit component/subsystem mapping keyed by requirement ID"
+    ),
 ):
     """Generate candidate requirement pairs for semi-automated dataset labeling."""
     typer.echo(f"Loading requirements from '{input_file}'...")
@@ -270,6 +359,13 @@ def candidates_cmd(
             reqs = [Requirement.model_validate(item) for item in data]
     else:
         reqs = extract_requirements_from_file(input_file, system_name=system_name)
+
+    if metadata_file:
+        try:
+            reqs = apply_requirement_metadata(reqs, load_requirement_metadata_json(metadata_file))
+        except ValueError as exc:
+            typer.secho(f"Error applying requirement metadata: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
 
     if not reqs:
         typer.secho("Error: No requirements extracted from input.", fg=typer.colors.RED)
@@ -295,6 +391,8 @@ def candidates_cmd(
     typer.secho(f"\n================ CANDIDATE GENERATION SUMMARY ================", fg=typer.colors.GREEN, bold=True)
     typer.echo(f"Input Requirements  : {manifest.input_requirement_count}")
     typer.echo(f"Generated Candidates: {manifest.generated_count}")
+    typer.echo(f"Pair-Space Recall   : {manifest.pair_space_recall}")
+    typer.echo(f"Uncovered Pair Space: {manifest.uncovered_pair_count}")
     typer.echo(f"Strategy Used       : {manifest.strategy.value}")
     typer.echo(f"Exhaustive Output   : {manifest.is_exhaustive}")
     typer.echo(f"Omitted Candidates  : {manifest.truncated_count}")
@@ -306,7 +404,12 @@ def label_cmd(
     input_file: str = typer.Option(..., "--input", "-i", help="Input JSON file containing candidate pairs"),
     output_file: str = typer.Option("provisional_pairs.json", "--output", "-o", help="Output JSON file for provisional labeled pairs"),
     manifest_file: Optional[str] = typer.Option(None, "--manifest", "-m", help="Optional output JSON file for labeling manifest"),
-    mode: str = typer.Option("hybrid", "--mode", "-mode", help="Labeling mode: heuristic, llm, hybrid")
+    mode: str = typer.Option("hybrid", "--mode", "-mode", help="Labeling mode: heuristic, llm, multi_llm, hybrid"),
+    models: Optional[str] = typer.Option(
+        None,
+        "--models",
+        help="Comma-separated distinct model IDs for multi_llm or hybrid voting; uses configured provider.",
+    ),
 ):
     """Run provisional dependency labeling on candidate requirement pairs."""
     typer.echo(f"Loading candidate pairs from '{input_file}'...")
@@ -315,11 +418,36 @@ def label_cmd(
     try:
         mode_enum = LabelingMode(mode.lower())
     except ValueError:
-        typer.secho(f"Error: Invalid mode '{mode}'. Must be one of: heuristic, llm, hybrid.", fg=typer.colors.RED)
+        typer.secho(f"Error: Invalid mode '{mode}'. Must be one of: heuristic, llm, multi_llm, hybrid.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    model_ids = [item.strip() for item in models.split(",") if item.strip()] if models else []
+    if models is not None and (
+        len(model_ids) < 2
+        or len(set(model_ids)) != len(model_ids)
+        or mode_enum not in (LabelingMode.MULTI_LLM, LabelingMode.HYBRID)
+    ):
+        typer.secho(
+            "Error: --models requires at least two distinct IDs and mode multi_llm or hybrid.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(code=1)
+    if mode_enum == LabelingMode.MULTI_LLM and not model_ids:
+        typer.secho("Error: multi_llm mode requires --models with at least two IDs.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
     typer.echo(f"Running provisional labeling on {len(candidates)} candidate pairs (mode='{mode_enum.value}')...")
-    labeler = ProvisionalLabeler()
+    config = get_config()
+    llm_labeler = None
+    if model_ids:
+        model_labelers = []
+        for model_id in model_ids:
+            model_config = config.model_copy(update={"llm_model": model_id})
+            model_labelers.append(
+                LLMLabeler(config=model_config, llm_client=LLMClientFactory.create(model_config))
+            )
+        llm_labeler = MultiModelLLMLabeler(model_labelers)
+    labeler = ProvisionalLabeler(config=config, llm_labeler=llm_labeler)
     labeled_pairs, manifest = labeler.process_batch(candidates, mode=mode_enum, source_identity=input_file)
 
     ProvisionalLabeler.save_provisional_dataset(labeled_pairs, manifest, output_file, manifest_file)
@@ -337,26 +465,38 @@ def label_cmd(
 def queue_create_cmd(
     input_file: str = typer.Option(..., "--input", "-i", help="Input JSON file containing provisional requirement pairs"),
     output_file: str = typer.Option("review_queue.json", "--output", "-o", help="Output JSON file for review queue"),
-    manifest_file: Optional[str] = typer.Option(None, "--manifest", "-m", help="Optional output JSON file for queue manifest")
+    manifest_file: Optional[str] = typer.Option(None, "--manifest", "-m", help="Optional output JSON file for queue manifest"),
+    minimum_requirement_characters: int = typer.Option(
+        20,
+        "--minimum-requirement-characters",
+        min=0,
+        help="Route non-empty requirement text shorter than this many characters for review; 0 disables the cue.",
+    ),
 ):
     """Build or refresh a human review queue from provisional requirement pairs."""
-    from leredd.review_queue import ReviewQueueManager
+    from leredd.review_queue import ReviewQueueConfig, ReviewQueueManager
 
     typer.echo(f"Loading provisional pairs from '{input_file}'...")
     pairs = load_pairs_json(input_file)
 
-    manager = ReviewQueueManager()
+    manager = ReviewQueueManager(
+        config=ReviewQueueConfig(minimum_requirement_characters=minimum_requirement_characters)
+    )
 
     existing_items = []
     if os.path.exists(output_file):
         try:
             existing_items = manager.load_queue(output_file)
             typer.echo(f"Loaded {len(existing_items)} existing items from '{output_file}'.")
-        except Exception:
-            pass
+        except Exception as exc:
+            typer.secho(
+                f"Error: Cannot read existing review queue '{output_file}': {exc}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1) from exc
 
     items = manager.refresh_queue(existing_items, pairs) if existing_items else manager.build_queue(pairs)
-    manifest = manager.create_manifest(items, source_identity=input_file)
+    manifest = manager.create_manifest(items, source_identity=input_file, config=manager.config)
 
     manager.save_queue(items, manifest, output_file, manifest_file)
 
@@ -402,12 +542,15 @@ def queue_decide_cmd(
     item_id: str = typer.Option(..., "--item-id", "-id", help="Queue item ID to record decision for"),
     decision: str = typer.Option(..., "--decision", "-d", help="Decision status: accepted, corrected, rejected, deferred"),
     label: Optional[str] = typer.Option(None, "--label", "-l", help="Final dependency label (required for corrected)"),
-    reviewer: str = typer.Option("human_reviewer_1", "--reviewer", "-r", help="Reviewer identifier"),
+    reviewer: str = typer.Option(..., "--reviewer", "-r", help="Human reviewer identifier"),
     notes: str = typer.Option("", "--notes", "-n", help="Reviewer notes/justification"),
     verified_output: Optional[str] = typer.Option(None, "--verified-out", "-v", help="Optional output JSON file to append verified pairs")
 ):
     """Record a human reviewer decision on a review queue item."""
     from leredd.review_queue import ReviewQueueManager, QueueStatus
+
+    if not reviewer.strip() or reviewer.strip().casefold() in {"human_reviewer_1", "human_cli"}:
+        raise typer.BadParameter("Provide a nonblank, non-placeholder reviewer identifier", param_hint="--reviewer")
 
     manager = ReviewQueueManager()
     items = manager.load_queue(queue_file)
@@ -423,11 +566,22 @@ def queue_decide_cmd(
         typer.secho(f"Error: Invalid decision '{decision}'. Must be one of: accepted, corrected, rejected, deferred.", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
+    existing_verified = []
+    if verified_output and os.path.exists(verified_output):
+        try:
+            existing_verified = load_pairs_json(verified_output)
+        except Exception as exc:
+            typer.secho(
+                f"Error: Cannot read existing verified dataset '{verified_output}': {exc}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1) from exc
+
     updated_item, verified_pair = manager.record_decision(
         target_item,
         decision_type=status_enum,
         final_label=label,
-        reviewer_id=reviewer,
+        reviewer_id=reviewer.strip(),
         reviewer_notes=notes,
     )
 
@@ -436,15 +590,33 @@ def queue_decide_cmd(
 
     typer.secho(f"Successfully recorded decision '{status_enum.value.upper()}' for item {target_item.queue_id}.", fg=typer.colors.GREEN)
 
-    if verified_output and verified_pair:
-        existing_verified = []
-        if os.path.exists(verified_output):
-            try:
-                existing_verified = load_pairs_json(verified_output)
-            except Exception:
-                pass
-        existing_verified.append(verified_pair)
-        save_pairs_json(existing_verified, verified_output)
+    if (
+        verified_output
+        and verified_pair.provenance
+        and verified_pair.provenance.status == VerificationStatus.VERIFIED
+        and verified_pair.dependency_type is not None
+    ):
+        if is_synthetic(verified_pair):
+            typer.secho(
+                "Synthetic/demo pair was marked reviewed but was not added to the verified dataset export.",
+                fg=typer.colors.YELLOW,
+            )
+            return
+        for index, existing_pair in enumerate(existing_verified):
+            if existing_pair.id == verified_pair.id:
+                existing_verified[index] = verified_pair
+                break
+        else:
+            existing_verified.append(verified_pair)
+        try:
+            _save_pairs_json_atomically(existing_verified, verified_output)
+        except OSError as exc:
+            typer.secho(
+                "Error: Queue decision was saved, but the verified export could not be written: "
+                f"{exc}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1) from exc
         typer.secho(f"Appended human-verified pair to '{verified_output}'.", fg=typer.colors.GREEN)
 
 

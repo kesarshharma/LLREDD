@@ -12,18 +12,48 @@ if str(_project_root) not in sys.path:
 
 import pytest
 from unittest.mock import patch
+import scripts.run_replication_evaluation as runner_mod
 from scripts.run_replication_evaluation import run_prototype, DATASET, build_pairs
 
 
+@pytest.fixture
+def synthetic_replication_import(monkeypatch, tmp_path):
+    """Supply imported-status records without relying on private local datasets."""
+    supported_labels = ["Requires", "Conflicts", "Details", "Is similar", "No_dependency"]
+    records = []
+    for index in range(100):
+        is_implemented_by = index < 6
+        label = "Implemented by" if is_implemented_by else supported_labels[index % len(supported_labels)]
+        records.append(
+            {
+                "pair_id": f"SYNTH_ADB_PILOT_{index + 1:04d}",
+                "req_a_text": f"Synthetic requirement A {index + 1}.",
+                "req_b_text": f"Synthetic requirement B {index + 1}.",
+                "dependency_status_original": label,
+                "normalized_internal_label": label,
+                "normalized_mapping_unresolved": is_implemented_by,
+                "provenance": {
+                    "source": "imported",
+                    "status": "pending_review",
+                    "annotator_id": None,
+                },
+            }
+        )
+
+    monkeypatch.setattr(runner_mod, "load_replication_annotation", lambda dataset: records)
+    monkeypatch.setattr(runner_mod, "OUTPUT_DIR", tmp_path / "reports")
+    return records
+
+
 class TestReplicationRunner:
-    def test_pending_imported_labels_block_evaluation(self, tmp_path):
+    def test_pending_imported_labels_block_evaluation(self, tmp_path, synthetic_replication_import):
         """Imported spreadsheet labels cannot produce metrics before local verification."""
         out_path = tmp_path / "pending.json"
         with pytest.raises(ValueError, match="eligible test set empty"):
             run_prototype(dataset="adb_pilot", output_path=str(out_path))
         assert not out_path.exists()
 
-    def test_implemented_by_preserved_not_remapped(self):
+    def test_implemented_by_preserved_not_remapped(self, synthetic_replication_import):
         pairs, implemented_by = build_pairs(DATASET)
         assert len(implemented_by) == 6
         assert all(record["original_label"] == "Implemented by" for record in implemented_by)
@@ -51,7 +81,7 @@ class TestReplicationRunner:
         )
         assert pair_bad.dependency_type is None
 
-    def test_split_is_reproducible_for_same_seed(self):
+    def test_split_is_reproducible_for_same_seed(self, synthetic_replication_import):
         # Same seed -> identical splits (after shuffle)
         from scripts.run_replication_evaluation import synthetic_split, build_pairs
         pairs, _ = build_pairs(DATASET)
@@ -81,8 +111,7 @@ class TestReplicationRunner:
         assert len(train_ids & dev_ids) == 0
         assert len(dev_ids & test_ids) == 0
 
-    def test_empty_eligible_fails_clearly(self, monkeypatch, tmp_path):
-        import scripts.run_replication_evaluation as runner_mod
+    def test_empty_eligible_fails_clearly(self, monkeypatch, tmp_path, synthetic_replication_import):
         original_build = runner_mod.build_pairs
         # Force all dependency_type None -> all excluded -> empty eligible
         def fake_build(dataset_name=DATASET):
@@ -94,7 +123,9 @@ class TestReplicationRunner:
         with pytest.raises(ValueError, match="eligible test set empty"):
             run_prototype(dataset=DATASET, output_path=str(tmp_path / "should_not_create.json"))
 
-    def test_pending_imports_fail_before_model_or_detector_initialization(self, monkeypatch, tmp_path):
+    def test_pending_imports_fail_before_model_or_detector_initialization(
+        self, monkeypatch, tmp_path, synthetic_replication_import
+    ):
         from leredd.detector import LEREDDDetector
         from leredd.embeddings import EmbeddingModel
 

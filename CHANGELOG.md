@@ -1,5 +1,141 @@
 # CHANGELOG.md — Project Activity Log
 
+## [2026-11-24] - TASK-P42: Expose RAG control on API requests
+- Added optional `use_rag` to single and batch detection requests and forwarded it through detector calls. Omission preserves configured behavior; per-request `true` enables RAG and `false` disables it. API reference and feature ledger now describe the contract.
+- Regression tests verify default fallback, both explicit overrides, batch pass-through, and SRS context inclusion in the detector prompt.
+- Focused API/detector/retrieval suite: **49 passed, 1 existing Starlette deprecation warning in 4.53s**. Full `.venv` suite: **400 passed, 1 existing Starlette deprecation warning in 99.47s**, exit 0 (PowerShell duration **105.20s**). All 311 data files retained identical paths and SHA-256 hashes; `git diff --check` passed.
+- No real provider or real SRS was used. RAG contribution to predictive quality remains unmeasured.
+
+## [2026-11-24] - TASK-P41: Validate RAG chunking and result limits
+- `RAGRetriever` now rejects invalid chunk sizes, overlaps, and result counts. An overlap equal to or larger than the chunk size can no longer create a non-advancing loop. `k=0` returns `[]` without encoding text.
+- Added invalid-parameter and zero-result regression tests; documented the contract in architecture and feature traceability.
+- Focused retrieval/detector tests: **31 passed in 1.09s**. Full `.venv` suite: **398 passed, 1 existing Starlette deprecation warning in 103.94s**, exit 0 (PowerShell duration **109.82s**). All 311 data files retained identical paths and SHA-256 hashes; `git diff --check` passed.
+- No real SRS or external model was used. Context-selection quality remains empirically unverified.
+
+## [2026-11-24] - TASK-P40: Flag short requirements for human inspection
+- Added a configurable minimum-character review cue for non-empty requirement text, defaulting to 20 characters; `queue-create --minimum-requirement-characters 0` disables it. Queue manifests retain the eligibility configuration. Labels and verification status are unchanged by the cue.
+- Added regressions for threshold boundaries, CLI default/disable behavior, and manifest policy persistence. Updated annotation guidance and feature traceability.
+- Focused review queue/CLI/UI integration tests: **45 passed in 18.06s**. Full `.venv` suite: **387 passed, 1 existing Starlette deprecation warning in 101.78s**, exit 0 (PowerShell duration **108.13s**). All 311 files under `data/` retained identical paths and SHA-256 hashes; `git diff --check` passed.
+- Only synthetic test pairs were used. The default threshold is a review heuristic, not a language-quality finding; semantic ambiguity/incompleteness remains a human judgment.
+
+## [2026-11-24] - TASK-P39: Preserve document-based SRS requirements
+- DOCX extraction now traverses paragraphs and table rows in body order; extracted requirement text retains terminal punctuation. Image-only PDFs fail with guidance that OCR is unsupported rather than silently appearing empty.
+- Added DOCX table, text-PDF, and image-only PDF regressions. Focused utility/document-script tests: **25 passed in 13.05s**. Final full `.venv` `python -m pytest tests/`: **386 passed, 1 Starlette deprecation warning in 109.83s**, exit 0 (PowerShell duration **115.85s**). All **311** data files retained identical paths and SHA-256 hashes; `git diff --check` passed.
+- Installed only the project-declared `pypdf` and `python-docx` optional dependencies into the existing `.venv` with approval (transitive `lxml`). Synthetic files only; no real SRS corpus was inspected for extraction accuracy, and no human annotation or provider call occurred.
+
+## [2026-11-24] - TASK-P38: Screen repeated-inference consistency
+- Added an opt-in 1–5 run consistency check across the Python detector, CLI, single/batch API, and Streamlit. Additional runs bypass the built-in LLM response cache; any label or self-reported confidence variation recommends human review and retains the first predicted class. Default remains one run.
+- Added detector, cache-bypass, API, CLI, and UI regression coverage. Focused suite: **61 passed in 28.25s**. Full `python -m pytest tests/`: **383 passed, 12 existing `tqdm` deprecation warnings in 108.10s**, exit 0 (PowerShell duration **116.29s**). `git diff --check` passed; all **311** data files retained identical paths and SHA-256 hashes.
+- Tests used controlled clients only. No real provider request, human verification, package installation, or Git operation occurred. A sandboxed focused attempt stalled at Windows API loopback; the unrestricted full run passed `test_api_root` and the entire API module.
+
+## [2026-11-24] - TASK-P37: Report candidate pair-space recall
+- Candidate-generation manifests now expose the size of the exhaustive unordered pair universe, coverage recall, and uncovered pair count; the `candidates` CLI displays the same figures. The denominator is explicitly all possible pairs, so the metric is not presented as recall of true dependency labels.
+- Synthetic regression assertions cover exhaustive generation, truncated generation, BM25 generation, empty input, manifest round-trip, and CLI output. Focused tests: **42 passed in 9.03s**. Full `python -m pytest tests/`: **374 passed, 12 existing `tqdm` warnings in 101.49s**, exit 0 (PowerShell duration **110.51s**). `git diff --check` passed; all 311 files under `data/` retained their SHA-256 hashes.
+
+## [2026-11-24] - TASK-P28: Persist low-confidence UI detections for human review
+- The Streamlit detection page now lets a user explicitly send a `requires_review` prediction to the existing queue. It is retained as a provisional, pending item; no verification or label promotion occurs. The UI queue writer atomically replaces the queue JSON. Separately, the shared `ReviewQueueManager.save_queue()` stages both queue and manifest files and atomically replaces each.
+- Added a regression that simulates the initial replace failure and confirms existing queue and manifest bytes remain intact and temporary files are cleaned. Focused tests: **15 passed in 19.96s**. Full suite: **348 passed, 12 existing tqdm deprecation warnings in 89.15s**, exit 0 (PowerShell duration 97.71s). `git diff --check` passed.
+- Limitation: queue and manifest are separate filesystem replacements; if manifest replacement fails after queue replacement, the manifest may lag. AppTest verified the UI journey; no fresh browser session or real reviewer/provider was used.
+
+## [2026-11-24] - TASK-P29: Verify live detection and human-review screens
+- Browser inspection found an import error in the long-running 8501 Streamlit process, although the current source imports `PredictionValidationStatus` in a fresh interpreter. Started a fresh instance, visually verified the dashboard, ran MockLLM on a synthetic pair, saved a provisional pending queue record under `.pytest-tmp`, and loaded that same record in the Human Review Queue page. It remained pending and unverified.
+- Replaced the stale 8501 process with a fresh documented-port instance. `/` and `/_stcore/health` returned HTTP 200; the latter returned `ok`. Stopped the temporary 8503 instance. No source, imported dataset, or historical report changes were made and no human decision/provider request was performed.
+- Remaining: real reviewer/rights/direction evidence and dense first-use latency diagnosis; Docker daemon unavailable, hosted CI not rerun.
+
+## [2026-11-24] - TASK-P30: Clarify inclusive confidence-screen wording
+- The UI and queue notes now say that a score at or below the configured cutoff is routed for review. The human-facing “low confidence” label no longer contradicts a 5/5 score at a cutoff of 5; the persisted `low_confidence` reason code remains unchanged.
+- Focused queue/UI tests: **16 passed**. Full suite: **348 passed, 12 existing tqdm deprecation warnings in 114.93s**, exit 0 (PowerShell duration 124.79s). AppTest verified the message and existing queue flow.
+
+## [2026-11-24] - TASK-P31: Reuse the UI's dense embedding model within a session
+- Detection now injects the session's cached embedder into newly created detectors when the configured model and cache directory match. The model is cached only after retrieval actually initialized it; zero-shot and BM25 do not load embeddings just to populate the cache. Added a test that performs two UI detections and checks that the initialized embedder object is reused.
+- Focused tests: **15 passed in 23.16s**. Full suite: **348 passed, 12 existing tqdm deprecation warnings in 114.94s**, exit 0 (PowerShell duration 126.52s). The first full run found a stale OpenAI test-double signature; it was corrected and the full rerun passed.
+- No measured latency improvement is claimed. Cold first dense use still requires the local model initialization.
+
+## [2026-11-24] - TASK-P32: Add metadata-aware hybrid example retrieval
+- Added optional requirement component/subsystem fields and a conditional metadata-overlap ranking as a third RRF signal. Updated regression tests and retrieval documentation.
+- Focused hybrid/detector/candidate/API tests: **62 passed in 11.36s**; final hybrid suite after the zero-weight guard: **11 passed in 0.27s**. Final full suite: **350 passed, 12 existing tqdm datetime deprecation warnings in 114.69s**, exit 0 (PowerShell duration 123.08s).
+- No dataset or report values were modified. This verifies software routing behavior, not retrieval effectiveness; current datasets lack sufficient structured component/subsystem metadata for an empirical comparison.
+
+## [2026-11-24] - TASK-P33: Add auditable multi-model provisional votes
+- Added opt-in `multi_llm` CLI mode and `--models` for multi-model or heuristic-plus-multi-model runs. Only unanimous valid votes produce provisional labels; disagreements/incomplete votes remain unlabeled with review notes and per-model vote evidence. Manifests identify the provider, models, and unanimous-only policy.
+- Updated `DiskCachedLLMClient` cache keys to include provider identity and model ID; the versioned key avoids collisions between models. Prior ambiguous cache entries are not reused.
+- Focused labeler/LLM/CLI tests: **35 passed in 11.46s**. Full suite: **355 passed, 12 existing tqdm datetime deprecation warnings in 115.92s**, exit 0 (PowerShell duration 124.57s). Controlled clients only; no actual provider was invoked.
+
+## [2026-11-24] - TASK-P34: Carry explicit metadata through SRS, candidate, and detection flows
+- Added strict ID-keyed component/subsystem sidecar handling for CLI extraction/candidate generation, matching API extraction and Streamlit extraction controls, and optional component/subsystem fields for API single detection and Streamlit target pairs. Generated candidate pairs serialize the metadata for the existing hybrid retriever.
+- Focused utility/CLI/API/UI tests: **50 passed in 29.85s**. Full `python -m pytest tests/`: **364 passed, 12 warnings in 95.37s**, exit 0; warnings are existing `tqdm` UTC datetime deprecations. Eleven replication/evaluation artifact SHA-256 hashes matched their pre-run baseline, and `git diff --check` passed. Unknown IDs, extra keys, malformed objects, and non-string values fail instead of being dropped. No metadata is inferred.
+
+## [2026-11-24] - TASK-P35: Preserve metadata in review queues and verified exports
+- `ReviewItem` now carries each requirement's system, component, subsystem, source, and source location. The review UI displays available values, and an accepted/corrected decision restores them in the verified `RequirementPair`. New fields are optional for old queue JSON compatibility.
+- Focused queue/UI tests: **41 passed in 30.02s**. Full `python -m pytest tests/`: **366 passed, 12 existing `tqdm` UTC datetime deprecation warnings in 109.44s**, exit 0 (PowerShell duration **119.04s**). Eleven protected replication/evaluation hashes matched; `git diff --check` passed.
+
+## [2026-11-24] - TASK-P36: Publish immutable verified dataset releases
+- Added `leredd/dataset_release.py` and the `dataset-release` CLI. It validates verified human provenance, supports combining multiple verified inputs, stamps copied records with a release version, and atomically publishes dataset and integrity/class-count manifest in a new directory. Existing release directories are never overwritten.
+- Added focused release and CLI tests; **19 passed in 9.86s**. Full `python -m pytest tests/`: **374 passed, 12 existing `tqdm` UTC datetime deprecation warnings in 105.05s**, exit 0 (PowerShell duration **112.94s**).
+- Updated the README demo, architecture, and feature traceability to include immutable release publication before splitting.
+
+## [2026-11-24] - TASK-P27: Separate confidence screening from predicted labels
+- `leredd/detector.py` no longer converts low-confidence predictions to `No_dependency`. The `Prediction` schema now carries `validation_status` and `validation_threshold`; the UI displays review guidance, and new evaluation reports summarize screening coverage. Updated API/architecture/replication/feature documentation and the threshold ablation descriptions. Historical reports were preserved.
+- Focused parser/API/UI/ablation/evaluation tests: **72 passed, 12 existing warnings in 105.79s**. Full suite: **347 passed, 12 existing warnings in 102.35s**, exit 0. Warnings are tqdm's `utcfromtimestamp()` deprecation.
+- Remaining: MockLLM confidence is fixed at 5, so review utility was not measured; detection outputs are flagged but not automatically enqueued. Fresh browser inspection of the updated low-confidence UI remains to be done.
+
+## [2026-11-24] - TASK-P26: Expose retrieval mode selection
+- API single and batch detection accept an optional validated `retrieval_mode`; Streamlit detection exposes dense, BM25, and hybrid selection. Missing API values retain configured defaults. API reference and regression tests updated.
+- Focused API/UI tests: **20 passed in 18.76s**. Full suite: **346 passed, 12 existing tqdm deprecation warnings in 91.15s**, exit 0. Synthetic local BM25 API smoke returned 200 without initializing SentenceTransformer. All 11 protected replication/evaluation hashes matched; `git diff --check` passed.
+- Live visual verification of the new selector remains pending because the browser's Streamlit process predates this change. No packages were installed and no Git state changes were made.
+
+## [2026-11-24] - TASK-P25: Preserve alphanumeric requirement IDs
+- **Files changed:** `leredd/utils.py`, `tests/test_utils.py`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`, `ISSUES.md`, `DECISIONS.md`.
+- **Finding/fix:** Source IDs with alphabetic suffixes such as `REQ-DEMO-A` were truncated to `REQ-DEMO`, producing duplicate requirement IDs. The parser now preserves all hyphen/colon-separated alphanumeric segments; regression asserts distinct IDs and pair generation.
+- **Execution:** README CLI flow on temporary synthetic Markdown extracted 3 requirements, generated 3 BM25 candidates, wrote 3 provisional results (1 heuristic suggestion and 2 abstentions), and created/listed 3 pending review items. No human decision or verified export was performed.
+- **Verification:** Focused utility/CLI tests **21 passed in 3.29s**. Full suite **343 passed, 12 existing tqdm UTC deprecation warnings in 31.11s**, exit 0. Replication/evaluation artifact hashes matched before and after.
+- **Boundary:** No packages or Git operations. The parser grammar needs comparison against actual rights-cleared SRS identifier formats.
+
+## [2026-11-24] - TASK-P24: Lazy detector embedding startup
+- **Files changed:** `leredd/detector.py`, `tests/test_detector.py`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`, `ISSUES.md`, `DECISIONS.md`.
+- **Change:** `LEREDDDetector` now defers dense embeddings and dense/RAG retrievers until a path actually needs them. Added a zero-shot regression that ensures the unused embedding model is not initialized.
+- **Verification:** Focused detector/API/embedding/dense/hybrid/BM25 tests: **46 passed in 9.24s**. Live local MockLLM API `/detect`: HTTP 200 in **164 ms** with isolated cache/data paths and no SentenceTransformer load. Full suite: **342 passed, 12 existing tqdm deprecation warnings in 128.88s**, exit 0. `git diff --check` exit 0. Hashes of all 11 replication/evaluation files matched before and after.
+- **Live UI:** Native Chrome produced 3 synthetic candidate pairs (all unlabeled/provisional) under `.pytest-tmp/`; MockLLM detection returned `REQUIRES`, confidence 5/5. First UI dense-retrieval interaction took over one minute to return. The annotation page defaults its output field to `data/verified/streamlit_annotations.json`; no annotation was submitted.
+- **Boundary:** No packages or Git operations; imported data and historical reports were not changed. First dense/RAG request still initializes the configured embedding model; cold dense latency needs separate timing.
+
+## [2026-11-24] - TASK-P23: Live UI verification
+- Inspected the live Streamlit UI in native Chrome. A diagnostic instance on port 8502 rendered the dashboard after cold startup and extracted 3 synthetic requirements, generating 3 persisted candidate pairs under `.pytest-tmp/`.
+- Verified the saved records were unlabeled and provisional. The existing candidate output was preserved after the UI refused overwrite; the run used a distinct demo filename.
+- Port 8501 had no listener and returned Chrome `ERR_CONNECTION_REFUSED`. Updated ROADMAP, CONTEXT, DECISIONS, and ISSUE-035 evidence; left the issue open. No application code, tests, datasets, or historical reports were changed. No tests were run.
+- Started the documented Streamlit and API commands without installing packages. Native Chrome rendered port 8501 after about 16 seconds from navigation; API logs recorded HTTP 200 for `/` and `/api/v1/health`. ISSUE-035 is now resolved as a persistent blank-page defect; cold-start latency remains noted.
+
+## [2026-11-23] - TASK-P19: Preserve Requirement Source and Location
+- **Files updated:** `leredd/data_models.py`, `leredd/utils.py`, `api/routes.py`, `ui/app.py`, `tests/test_utils.py`, `tests/test_api.py`, `tests/test_ui_workflows.py`, `docs/FEATURE_TRACEABILITY.md`, `ISSUES.md`, `ROADMAP.md`, `CONTEXT.md`, `DECISIONS.md`.
+- **Change:** Added optional `Requirement.source_location`; file extraction records a source basename and extracted-text line, API accepts a source name, and UI records upload/paste source labels. Kept document name separate from location to preserve document-level split grouping. Legacy JSON remains loadable. Explicit short and bracketed requirement IDs are preserved.
+- **Verification:** Focused utility/file/API/UI/CLI tests **43 passed in 24.11s**. Full `python -m pytest tests/` **329 passed, 12 warnings in 87.12s**, exit 0 (93.86s outer). All existing `data/` hashes matched before/after. CLI smoke output under `.pytest-tmp` recorded source and line locations. Warnings are the existing tqdm datetime deprecation.
+- **Boundary:** PDF/DOCX location is based on extracted-text lines, not physical page/paragraph position. API source labels remain generic when callers omit the optional field.
+
+## [2026-11-23] - TASK-P18: Prevent Generated Requirement ID Collisions
+- **Files updated:** `leredd/utils.py`, `tests/test_utils.py`, `docs/FEATURE_TRACEABILITY.md`, `ISSUES.md`, `ROADMAP.md`, `CONTEXT.md`, `DECISIONS.md`.
+- **Finding/fix:** A synthetic requirement ID could duplicate an explicit ID in the same SRS. The extractor now reserves all explicit identifiers in the input and skips them regardless of document order, preserving explicit IDs and schema behavior. Added a regression for both record orders.
+- **Verification:** `python -m pytest tests/test_utils.py -q`: **8 passed in 3.56s**. Full `python -m pytest tests/`: **327 passed, 12 warnings in 89.33s**, exit 0 (95.21s outer). The 12 warnings are the existing tqdm datetime deprecation. Hashes of every existing file under `data/` matched before/after.
+- **Boundary:** Existing explicit duplicate IDs are not repaired; no datasets, historical reports, dependencies, or Git state were changed.
+
+## [2026-11-23] - TASK-P17: Explicit Mock Ablation Validity
+- **Files updated:** `scripts/run_full_evaluation.py`, `tests/test_safe_evaluation.py`, `docs/EXPERIMENTS.md`, `docs/FEATURE_TRACEABILITY.md`, `ISSUES.md`, `ROADMAP.md`, `CONTEXT.md`, `DECISIONS.md`.
+- **Change:** Primary and dedicated ablation reports now carry structured `ablation_validity`; `evaluation_limitations` says MockLLM ignores retrieved examples and returns fixed confidence 5. Retrieval/ICL/threshold comparisons are marked non-informative as model-effect estimates. MockLLM behavior is unchanged.
+- **Verification:** Focused report-contract test **1 passed in 16.50s**; `tests/test_safe_evaluation.py` **35 passed, 12 warnings in 20.06s**; full `python -m pytest tests/` **326 passed, 12 warnings in 29.50s**, exit 0 (33.97s outer). All data-tree hashes matched across the full run.
+- **Boundary:** Reporting is safer, but ISSUE-009/010 remain open until empirical ablation uses an authorized real provider or separately validated controlled test double.
+
+## [2026-11-23] - TASK-P16: Browser QA and Graph Readability Fix
+- **Files updated:** `ui/app.py`, `tests/test_ui_workflows.py`, `docs/FEATURE_TRACEABILITY.md`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`, `ISSUES.md`, `DECISIONS.md`.
+- **Finding/fix:** Brave visual inspection showed graph requirement labels overlapping. Nodes now display requirement ID/text on hover, with no crowded permanent text. Added `test_graph_keeps_requirement_labels_in_hover_details`.
+- **Live UI evidence:** SRS extraction created 3 requirements and 3 provisional pairs under `.pytest-tmp/task-p16-ui/`; mock detection returned `REQUIRES`, confidence 5/5; evaluation generated `data/evaluation/ui_runs/20261123T094742Z-215fe692/system_disjoint_report.json`. The report identifies the 20-pair legacy provenance-free set, five-pair test partition, and MockLLM caveat. Review queue was inspected without submitting a human decision.
+- **Tests:** Focused graph regression **1 passed in 12.09s**; `tests/test_ui_workflows.py` **8 passed in 20.45s**; full `python -m pytest tests/` **326 passed, 12 warnings in 77.22s**, exit 0 (83.01s outer). Warnings are the existing tqdm datetime deprecation. All data-tree file hashes matched before/after the full suite.
+- **Boundaries:** The UI evaluation report is a newly created unique artifact; no imported dataset or historical report was modified. Browser QA was one local Brave desktop session. No human label was fabricated.
+
+## [2026-11-23] - TASK-P15: Blinded Independent Annotation Tooling
+- **Files added:** `leredd/independent_annotation.py`, `scripts/annotate_independent.py`, `scripts/compare_independent_annotations.py`, `tests/test_independent_annotation.py`, `docs/ANNOTATION_GUIDE.md`.
+- **Files updated:** `README.md`, `docs/FEATURE_TRACEABILITY.md`, `ROADMAP.md`, `CONTEXT.md`, `DECISIONS.md`.
+- **Implementation:** Added separate reviewer manifests with source/context SHA-256 binding, blind pair presentation, resumable atomic persistence, abstention/rationale/timing capture, two-reviewer agreement checks and report generation. These outputs do not adjudicate or promote labels and cannot be written under imported replication or evaluation data trees.
+- **Verification:** Focused tests: **15 passed in 1.01s**. Full `python -m pytest tests/`: **325 passed, 12 warnings in 69.69s**, exit 0. Warnings are the existing `tqdm` datetime deprecation. Imported replication hashes were unchanged; `git diff -- data` was empty.
+- **Research boundary:** No actual human annotations or effort results were collected. Identity is self-reported; replication label direction and redistribution terms remain unresolved. No package installations or Git state changes occurred.
+
 ## [2026-10-12] - TASK-P9-13: End-to-End Label Integrity and Stabilization
 - **Implementation:** Generated pairs remain unlabeled with candidate-generator provisional provenance; unknown explicit labels raise instead of being guessed; CLI human annotation marks verified provenance; ground-truth guards require `VERIFIED` for provenance-bearing annotations; evaluator rejects incomplete prediction coverage; model training and example retrieval filter out unlabeled/unverified records. Added automatic test isolation for global config. Replication-runner tests now assert pending-review imports fail closed without writing a report or initializing a model.
 - **Documentation:** Updated `ISSUES.md`, `ROADMAP.md`, `CONTEXT.md`, `DECISIONS.md`, CLI/API references, and replication/evaluation notes. Recorded that the paper license alone does not establish spreadsheet redistribution rights and that local imported labels are pending review.
@@ -386,3 +522,114 @@ All notable changes, task completions, and verification events for the Minor Pro
 - **Finding and change:** The GitHub Actions log showed six collection errors importing repository-root `api` and `scripts` modules under the `pytest` console command. Changed `.github/workflows/ci.yml` to run `python -m pytest`.
 - **Verification:** `python -m pytest tests/ --cov=leredd --cov-report=xml:.pytest-tmp/coverage.xml --cov-report=term-missing` → **264 passed, 38 warnings**, exit 0, 199.09s pytest time (wrapper elapsed 202.81s). The GitHub Actions matrix has not yet rerun.
 - **Files changed:** `.github/workflows/ci.yml`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`, `ISSUES.md`, `DECISIONS.md`.
+
+## [2026-10-14] - TASK-P10: End-to-End Stabilization and Verification
+- **Changes:** Corrected DENSE/HYBRID candidate generation and exhaustive-manifest semantics; made fallback embeddings consistent across separate encode calls; hardened split validation/leakage reporting; made CLI verified exports validated, verified-only, idempotent, and atomic; added regression cases and deterministic offline embedders; replaced the prior synthetic status-mutation smoke test with a real controlled SRS-to-report filesystem journey; aligned API/architecture/README descriptions with implemented interfaces.
+- **Files changed:** `README.md`, `docs/API.md`, `docs/ARCHITECTURE.md`, `leredd/candidate_generator.py`, `leredd/cli.py`, `leredd/dataset_splitter.py`, `leredd/embeddings.py`, `leredd/retrieval.py`, `tests/test_ablation_benchmark.py`, `tests/test_api.py`, `tests/test_bm25_retrieval.py`, `tests/test_candidate_generator.py`, `tests/test_dataset_splitter.py`, `tests/test_detector.py`, `tests/test_embeddings.py`, `tests/test_hybrid_retrieval.py`, `tests/test_retrieval.py`, `tests/test_system_verification.py`, `tests/test_ui_and_queue_integration.py`; project tracking updates: `ROADMAP.md`, `CONTEXT.md`, `ISSUES.md`, `DECISIONS.md`, `CHANGELOG.md`, `docs/FEATURE_TRACEABILITY.md`.
+- **Verification:** Focused core/retrieval suite → 120 passed in 8.02s; embedding and ground-truth prompt regressions → 12 passed in 1.91s; API module → 9 passed in 1.02s. Complete `python -m pytest tests/` (PowerShell with TEMP/TMP set to `.pytest-tmp/task-p10/temp`, unrestricted Windows loopback) → **298 passed, 12 warnings in 69.21s**, exit 0. Warnings are tqdm's `datetime.datetime.utcfromtimestamp()` deprecation. `git diff --check` passed without whitespace errors. The four imported replication JSON and two historical evaluation report SHA-256 values matched before/after; `git diff -- data` was empty.
+- **Limits:** No real OpenAI/Ollama call, Docker build, clean-cache model download, browser visual review, optional PDF/DOCX installation, hosted CI matrix rerun, human replication-label review, or dataset redistribution verification was performed. No package install or Git state mutation was performed.
+
+## [2026-10-14] - TASK-P11: Workflow Validation and Submission Readiness
+- **Changes:** Fixed default system-level ratio apportionment to produce non-empty train/dev/test partitions when at least three systems are available. Hardened evaluator and safe-runner eligibility so provenance-bearing verified labels must have human source, reviewer/annotator identity, and matching accepted/scored labels. Added regression tests and documented the no-service isolated CLI walkthrough, split behavior, and review/evaluation gates.
+- **Files changed for P11:** `leredd/dataset_splitter.py`, `leredd/evaluation.py`, `scripts/run_full_evaluation.py`, `tests/test_dataset_splitter.py`, `tests/test_safe_evaluation.py`, `tests/test_cli.py`, `README.md`, `docs/API.md`, `docs/EVALUATION_PROTOCOL.md`, `docs/FEATURE_TRACEABILITY.md`, `ROADMAP.md`, `CONTEXT.md`, `ISSUES.md`, `DECISIONS.md`, `CHANGELOG.md`.
+- **Verification:** Focused safe-workflow suite → **72 passed, 15 deselected in 7.63s**; API module → **9 passed in 0.83s**; complete `python -m pytest tests/ -q` → **305 passed, 12 warnings in 23.08s**, exit 0. The warnings are the existing `tqdm` `datetime.utcfromtimestamp()` deprecation. `git diff --check` reported no whitespace errors.
+- **Workflow evidence:** Isolated CLI Markdown fixture outputs remained in `.pytest-tmp/task-p11`; generated labels remained provisional and queue items pending. Safe legacy evaluation saved report and ablation JSON to `.pytest-tmp/task-p11/legacy-flow`, reported 10/5/5 ADB/APA/TJA partitions and zero retrieval contamination, and marked MockLLM/provenance-free labels demonstrative.
+- **Integrity and limits:** Four replication JSON and two historical report hashes matched their starting values; `git diff -- data` was empty. No human decision was made, source replication files were not modified, and no package/service/Git state operation occurred. Human review, replication label direction/rights, real providers, Docker, optional PDF/DOCX packages, and live browser review remain open.
+
+## [2026-10-14] - TASK-P11 Follow-up: Explicit Human Reviewer Identity
+- **Finding and change:** Provenance review found generic actor fallbacks in the CLI, review-queue model/manager, and Streamlit interface. CLI and queue-manager decisions now require nonblank reviewer/annotator identities and reject the known generic placeholders; new Streamlit decisions begin blank, and placeholder-only verified records fail evaluation eligibility. Legacy queue records without an identity remain readable but cannot be promoted without one.
+- **Files changed:** `leredd/cli.py`, `leredd/review_queue.py`, `leredd/evaluation.py`, `ui/app.py`, `tests/test_cli.py`, `tests/test_review_queue.py`, `tests/test_safe_evaluation.py`, `tests/test_system_verification.py`, `tests/test_ui_and_queue_integration.py`, `README.md`, `docs/API.md`, `ISSUES.md`, `DECISIONS.md`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`.
+- **Verification:** Focused CLI/queue/evaluation/provenance/UI suite → **116 passed, 12 warnings in 26.23s**. Full `python -m pytest tests/ -q` outside the restricted sandbox → **309 passed, 12 warnings in 23.02s**, exit 0. The sandbox attempt stalled at `tests/test_api.py` due the known Windows loopback restriction; the unrestricted rerun completed all API tests.
+- **Limit:** The application records but does not authenticate an operator-supplied identity. No replication JSON or historical report was modified; no package install, stage, commit, push, or other Git state change occurred.
+
+## [2026-10-14] - TASK-P12: End-to-End Product Stabilization and Evidence Alignment
+- **Finding and fix:** Evaluation reports hard-coded ADB/APA/TJA systems, counts, and provenance claims regardless of the supplied split. The runner now derives those descriptions, provenance counts, test label coverage, and small-sample notices from loaded data. Added a regression with independently named demo systems.
+- **Documentation:** Reworked README workflow commands to use workspace-local disposable output paths and explicit human-review gates. Replaced unsupported GPT-4 paper-reference, class-support, and significance claims in README and `docs/EXPERIMENTS.md` with the actual checked-in 10/5/5 legacy report scope and limits. Historical reports and datasets were not edited.
+- **Files changed for P12:** `scripts/run_full_evaluation.py`, `tests/test_safe_evaluation.py`, `README.md`, `docs/EXPERIMENTS.md`, `ISSUES.md`, `DECISIONS.md`, `ROADMAP.md`, `CONTEXT.md`, `CHANGELOG.md`.
+- **Workflow evidence:** Controlled synthetic artifacts under `.pytest-tmp/task-p12/e2e` exercised extraction, BM25 and all-pairs candidate generation, provisional labeling, queue creation, fixture-only decision/export, 3-system splitting, MockLLM detection with a separate example pool, leakage checks, and evaluation/ablation report writes. The three partitions contained 3 pairs each, with distinct systems and zero retrieval contamination. Fixture reviewer identities are explicitly synthetic and do not constitute human annotation evidence.
+- **Tests:** `python -m pytest tests/test_safe_evaluation.py -q` → **35 passed, 12 warnings in 21.69s**; `python -m pytest tests/test_api.py tests/test_ui_workflows.py tests/test_ui_and_queue_integration.py -q` → **32 passed in 6.43s**; full `python -m pytest tests/ -q` → **309 passed, 12 warnings in 23.06s**, exit 0. Warnings are tqdm's `datetime.utcfromtimestamp()` deprecation. The full suite ran with local TEMP/TMP, `HF_HUB_OFFLINE=1`, and permission for Windows loopback.
+- **Integrity / remaining limits:** `git diff --check` clean; no staged changes; `git diff -- data` empty; four replication JSON and two historical evaluation report hashes unchanged. No install, remote provider call, or Git state mutation. Actual human annotation, dataset rights/direction, real-provider requests, browser visual QA, Docker build, optional document packages, and hosted CI remain unverified.
+
+## [2026-10-14] - TASK-P13: Local Product Demonstration
+- `ui/app.py`: switched annotation-page defaults to labeled synthetic SRS data and `.pytest-tmp` output; hid empty legacy card wrappers.
+- `tests/test_ui_and_queue_integration.py`: added a focused regression for hidden empty wrappers. Browser UI, local API extraction/detection, CLI provisional queue, synthetic split, and mock report persistence were exercised. Full suite: **310 passed, 12 warnings in 92.08s**. Synthetic annotations were not treated as human verification or research evidence.
+
+## [2026-11-23] - TASK-P14: Remove CI dependence on local replication assets
+- GitHub Actions run `38442446610` failed 17 tests because the imported replication JSON files are not in the repository checkout. Loader and runner tests now exercise the same expected counts, labels, provenance, and failure behavior using temporary synthetic data; source-package integrity checks are skipped only when those local-only files are absent.
+- Focused replication tests: **35 passed in 29.21s**. Full local suite: **310 passed, 12 warnings in 131.43s**, exit 0. Tracked-data-only checkout without replication files: **34 passed, 1 skipped in 4.34s**, exit 0. No source datasets or historical reports were edited.
+- Exact CI coverage command in a complete tracked-file checkout without local replication assets: **309 passed, 1 skipped, 12 warnings in 200.84s**, exit 0 (outer duration 207.59s).
+- Hosted matrix rerun remains pending; no commit or push was made.
+
+## [2026-11-23] - TASK-P20: Paired annotation-effort study tooling
+- Added `leredd/effort_study.py` and three CLIs for fixed-input schedule preparation, reviewer collection in manual/assisted conditions, and descriptive comparison. Study artifacts are blocked from all `data/` paths; provisional labels remain distinct from ground truth.
+- Updated `tests/test_effort_study.py`, `README.md`, `docs/ANNOTATION_GUIDE.md`, and `docs/FEATURE_TRACEABILITY.md`; recorded ADR-034, ISSUE-033, and TASK-P20 in project tracking files.
+- Focused annotation tests: **27 passed in 1.98s**. Full `python -m pytest tests/ -q`: **341 passed, 12 existing tqdm deprecation warnings in 92.81s**, exit 0 (98.50s PowerShell wall duration). All existing data hashes matched, with zero added data files. No real human study was conducted.
+
+## [2026-11-23] - TASK-P21: Docker build-context data protection
+- Added `.dockerignore` to prevent local datasets, evaluation reports, secrets, repository metadata, temp files, and `Minor_Project.pdf` from being copied into Docker image layers by `COPY . .`.
+- `docker compose config --quiet` exited 0 (Compose reports the existing obsolete `version` key warning). Docker CLI 29.1.5 is installed, but `docker info` cannot connect to the Docker Desktop Linux engine; no image build or runtime test occurred. TASK-P21 remains open pending daemon availability.
+
+## [2026-11-23] - TASK-P22: Live API/UI runtime check
+- Existing local API and Streamlit processes were confirmed listening on 8000 and 8501. API root and health payloads were correct; Streamlit health/root HTTP checks returned success.
+- Chrome inspection found the Streamlit page remained a blank shell showing `Running...` after 7.5 seconds. An older stderr file contains watcher import errors for missing `torchvision`, but the log is stale and causality is unconfirmed. No UI code or processes were changed.
+- Docker build remains blocked because the Docker Desktop Linux engine is unavailable. `Minor_Project.pdf` text extraction is also unavailable in the installed Python environment (`pypdf`, `pdfplumber`, and `fitz` are absent); no packages were installed.
+## [2026-11-24] - TASK-P43: Verify replication label semantics and rights evidence
+- Read the official arXiv v2 paper and all four local source workbooks. The paper's Implements meaning is explicit (higher-level requirement fulfilled by lower-level requirement); the imported source phrase Implemented by still lacks an authoritative crosswalk, despite a matching example with reversed workbook row order. Read-only openpyxl audit: 813 labeled rows, no incomplete rows, and no exact/reversed duplicate pairs.
+- Corrected docs/EVALUATION_PROTOCOL.md, retained dataset redistribution as blocked because the paper's CC BY 4.0 is not a separate dataset license, and added active BLOCKER-008 for the unresolved label crosswalk. Added ADR-058 and project context/roadmap evidence.
+- Read-only inspection only; no tests were needed. git diff --check passed. No datasets, reports, staged files, or Git history were changed.
+
+## [2026-11-24] - TASK-P44: Live application smoke revalidation
+- Ran `python -m leredd.cli --help` successfully. Existing local FastAPI root and health endpoints returned HTTP 200 when probed outside the restricted socket sandbox.
+- Launched a fresh Streamlit UI on port 8504 and visually inspected it. The UI extracted three clearly synthetic requirements and persisted three unlabeled, provisional candidate pairs in `.pytest-tmp/task-final-ui-demo/candidates.json`; a BM25/MockLLM synthetic prediction rendered with the expected confidence disclaimer.
+- No application source or dataset was changed; no tests were run because this was a live smoke check only. `git diff --check` passed. The sandboxed API probe was blocked by local socket permissions, but the unrestricted read-only probe succeeded. One Windows asyncio connection-reset callback was logged during socket teardown without a reproduced user-visible failure.
+- No human annotations, verified export, model-quality claim, or real-provider result was created. Rights, label mapping, human evidence, hosted CI, and Docker remain open.
+
+## [2026-11-24] - TASK-P45: Current full-suite verification
+- Ran `.venv\Scripts\python.exe -m pytest tests/` outside the restricted socket sandbox with `TEMP`/`TMP` set to `.pytest-tmp` and `HF_HUB_OFFLINE=1`: **400 passed, 1 Starlette deprecation warning in 176.51s**, exit 0 (PowerShell duration 181.96s). API root passed.
+- SHA-256 before/after manifest comparison matched all 312 files under `data/`. `git diff --check` passed, with Git's line-ending notices only. No tests changed application files or datasets; no packages or Git state were changed.
+- Remaining warning recommends `httpx2` for Starlette TestClient; current PyPI metadata requires Python >=3.11, so an unconditional dependency would conflict with the project's Python >=3.10 support. No upgrade was installed or attempted. A fresh read of the official arXiv v2 still says the replication package will be made available upon publication and exposes no direct package link; this does not establish that no external package exists. This local run does not cover hosted CI, Docker, real providers, or human/research evidence.
+
+## [2026-11-24] - TASK-P46: Migrate API tests off Starlette TestClient
+- Replaced the API test module's Starlette TestClient with an in-process HTTPX ASGI transport helper; strengthened `test_api_root` to assert the entire response payload. No production API behavior or dependency declarations changed.
+- Root test: **1 passed in 1.36s**. API module: **18 passed in 1.67s**. Full suite: **400 passed, no warnings in 107.33s**, exit 0 (PowerShell duration 111.87s). The earlier TestClient deprecation warning no longer appears.
+- All 312 `data/` paths and SHA-256 values matched before/after. `git diff --check` passed. The restricted Windows socket sandbox still stalls during event-loop initialization; the successful focused and full runs were outside that sandbox. No packages or Git state were changed.
+
+## [2026-11-24] - TASK-P47: Build and smoke-test CPU-only Docker deployment
+- Updated `Dockerfile` to install the CPU-only PyTorch wheel before project requirements, preventing the default package resolver from pulling CUDA/cuDNN libraries into the CPU-only API/UI images.
+- `docker compose build` completed successfully for `minor-api` and `minor-ui`. Compose launched both services; API `/` and `/api/v1/health` returned HTTP 200, Streamlit `/` returned HTTP 200, and `/_stcore/health` returned `ok`.
+- Browser visual inspection did not run because the computer-use tool could not verify the browser URL. A later Docker management API check returned 500/hung; final image-content and container-state inspection remain incomplete. `docker compose config --quiet` still reports the obsolete top-level `version` warning. No tests, application workflows, or data-writing requests were run.
+- Follow-up: a bounded `docker info` check timed out after 20 seconds, while API health and Streamlit health still returned 200/`ok`. Docker CLI management remains unstable after successful container startup.
+
+## [2026-11-24] - TASK-P48: External SRS extraction smoke
+- Updated `leredd/cli.py` extraction help/docstring to advertise Markdown, and extended `tests/test_cli.py` to assert Markdown and DOCX formats appear in `extract --help` while exercising the existing Markdown metadata-to-candidate workflow.
+- Ran that workflow on a temporary NASA Trick SRS copy: 99 extracted records with source locations; 4,851 all-pairs candidates; provisional labeling yielded 350 suggestions and 4,501 unresolved records; queue creation yielded 4,851 pending items and zero decisions. Outputs stayed under `.pytest-tmp`.
+- Focused regression: **1 passed in 3.33s**. No human review, evaluation, release, paid provider request, or full-suite run was performed. The keyword-line comparison is a smoke diagnostic, not precision/recall evidence.
+
+## [2026-11-24] - TASK-P49: Compare candidate strategy coverage
+- Ran existing candidate-generation CLI strategies against the 99 extracted NASA Trick requirements (4,851 possible pairs), with `HF_HUB_OFFLINE=1` and `top_k=5`: BM25 327 pairs / 6.74% pair-space coverage; dense 335 / 6.91%; hybrid 325 / 6.70%; all-pairs 4,851 / 100%. Results are in temporary `.pytest-tmp/task-p49-candidate-coverage` manifests.
+- Coverage is the fraction of the complete pair universe emitted, not dependency-positive recall. No gold labels or evaluation metrics were produced. Dense encoding used the local model and wrote 99 cache entries under configured `data/embeddings`; no imported dataset or historical report was written by the commands.
+- No tests were run for this execution-only comparison. `git diff --check` passed. A real reviewer sample covering generated and omitted pairs is still required to estimate missed dependencies and annotation effort.
+
+## [2026-11-24] - TASK-P50: Prepare blinded pilot sample
+- Prepared 100 unlabeled/provisional pairs under `.pytest-tmp/task-p50-blind-pilot`: 50 sampled from the hybrid top-5 candidate stratum and 50 from omitted pairs, with fixed seed 49017 and opaque reviewer IDs. Kept stratum mapping, population counts, sampling probabilities, and weights in a separate analysis-only file; the pilot manifest binds the SRS and reviewer file hashes.
+- Validation confirmed the 50/50 counts, no labels/stratum tags in the reviewer input, and the recorded SHA-256. `scripts/annotate_independent.py --help` confirms the existing blind collector accepts this input format.
+- No reviewer decisions, evaluation, agreement, or positive-recall result were fabricated. The packet is an unpowered pilot; two real reviewers and later weighted analysis are required.
+
+## [2026-11-24] - TASK-P51: Add weighted candidate-recall analysis
+- Added `leredd/candidate_coverage.py` and `scripts/analyze_candidate_coverage.py` for a post-stratified estimate of true dependency-pair recall from the fixed selected/omitted pilot sample. Requires an exact set of human `VERIFIED` adjudications and verifies the source SRS, sample, strata map, strategy candidates, and complete pair-universe hashes and identity.
+- Added fail-closed checks for provisional/unverified/conflicting labels, missing or extra IDs, duplicate pairs, changed inputs, inconsistent stratum membership, and candidate output outside the population. Reports estimated positive totals and an approximate design-based interval only when variance estimates are non-degenerate.
+- Updated README, annotation guide, and feature traceability with the post-review command and research limits. Final focused suite: **36 passed in 16.77s**. The restricted full-suite attempt stalled at the known Windows socket boundary after the first module; outside that restriction the complete suite finished **413 passed, no warnings in 38.38s**, exit 0 (PowerShell duration **42.26s**). Final review corrected `population_pair_count` and added a regression. The real pilot remains unreviewed; no research recall result was produced.
+- Full local suite: **400 passed, no warnings in 132.31s**, exit 0 (PowerShell duration 138.03s), with TEMP/TMP/CACHE_DIR isolated under `.pytest-tmp` and Hugging Face offline.
+
+\r\n
+
+### TASK-P52 — Synthetic/demo data safeguards (2026-11-24)
+- Added synthetic/source identity metadata and preserved it through extraction, candidate generation, CSV serialization, and review decisions. Synthetic demo records are excluded from retrieval examples and verified exports and rejected as evaluation ground truth.
+- Added `leredd/synthetic.py` and regression tests across evaluation, release, retrieval, CLI, UI, review queue, and CSV workflows. Updated README, annotation guide, feature traceability, and project tracking records to document the boundary.
+- Verification: focused suite **172 passed in 30.25s**; complete local suite **424 passed in 34.30s**, exit 0. No packages were installed. No human labels or research findings were generated.
+
+### TASK-P53 — Enforce declared system-disjoint split integrity (2026-11-24)
+- Recompute system, requirement, and pair-ID overlap from actual train/dev/test records before full evaluation; write the integrity result into the report. Duplicate prediction errors now include the offending IDs.
+- Added direct and runner-level regressions. Corrected two contamination fixtures to declare their actual pair-level split strategy.
+- Verification: focused evaluation tests **45 passed**; full suite **428 passed in 35.96s**, exit 0. All **412** files under `data/` retained identical SHA-256 hashes; `git diff --check` passed.
+- Reviewed the public Parts 1–3 task snapshot. Its fixture/guardrail files are pushed, but the remote branch and local worktree diverge. No staging, commit, or push was performed.

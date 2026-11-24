@@ -1,6 +1,7 @@
 """Tests for ExampleRetriever and RAGRetriever."""
 
 import numpy as np
+import pytest
 from leredd.retrieval import (
     compute_vector_similarity,
     compute_pair_similarity,
@@ -11,6 +12,17 @@ from leredd.data_models import (
     AnnotationProvenance, DependencyType, Requirement, RequirementPair,
     VerificationStatus,
 )
+
+
+class _OfflineEmbedder:
+    """Deterministic test vectors; retrieval unit tests must not download models."""
+
+    def encode(self, texts):
+        return np.asarray(
+            [[len(text), sum(map(ord, text)) % 997, text.lower().count("system")]
+             for text in texts],
+            dtype=np.float32,
+        )
 
 
 def test_similarity_math_formulas():
@@ -33,7 +45,7 @@ def test_similarity_math_formulas():
 
 
 def test_example_retriever(mock_config, sample_pair, sample_annotated_pool):
-    retriever = ExampleRetriever(config=mock_config)
+    retriever = ExampleRetriever(embedder=_OfflineEmbedder(), config=mock_config)
     examples = retriever.retrieve(sample_pair, sample_annotated_pool, k=2)
     
     assert isinstance(examples, dict)
@@ -63,10 +75,43 @@ def test_example_retriever_excludes_unlabeled_and_provisional_pairs(mock_config)
 
 
 def test_rag_retriever_chunking(mock_config, sample_pair):
-    rag = RAGRetriever(config=mock_config)
+    rag = RAGRetriever(embedder=_OfflineEmbedder(), config=mock_config)
     srs_text = "Section 1. " + ("The system shall verify sensor inputs. " * 50)
     chunks = rag.chunk_document(srs_text, chunk_size=100, overlap=20)
     
     assert len(chunks) > 1
     retrieved = rag.retrieve(sample_pair, srs_text, k=2)
     assert len(retrieved) <= 2
+
+
+@pytest.mark.parametrize("chunk_size", [0, -1, True, 1.5])
+def test_rag_chunking_rejects_invalid_chunk_sizes(mock_config, chunk_size):
+    rag = RAGRetriever(embedder=_OfflineEmbedder(), config=mock_config)
+
+    with pytest.raises(ValueError, match="chunk_size must be a positive integer"):
+        rag.chunk_document("x" * 20, chunk_size=chunk_size)
+
+
+@pytest.mark.parametrize("overlap", [-1, 10, 11])
+def test_rag_chunking_rejects_invalid_overlap(mock_config, overlap):
+    rag = RAGRetriever(embedder=_OfflineEmbedder(), config=mock_config)
+
+    with pytest.raises(ValueError, match="overlap must be an integer"):
+        rag.chunk_document("x" * 20, chunk_size=10, overlap=overlap)
+
+
+def test_rag_zero_requested_chunks_returns_without_embedding(mock_config, sample_pair):
+    class NoEncode:
+        def encode(self, texts):
+            raise AssertionError("zero chunks must not initialize retrieval embeddings")
+
+    rag = RAGRetriever(embedder=NoEncode(), config=mock_config)
+    assert rag.retrieve(sample_pair, "Relevant SRS text." * 20, k=0) == []
+
+
+@pytest.mark.parametrize("k", [-1, True, 1.5])
+def test_rag_retrieve_rejects_invalid_chunk_count(mock_config, sample_pair, k):
+    rag = RAGRetriever(embedder=_OfflineEmbedder(), config=mock_config)
+
+    with pytest.raises(ValueError, match="k must be a non-negative integer"):
+        rag.retrieve(sample_pair, "Relevant SRS text." * 20, k=k)

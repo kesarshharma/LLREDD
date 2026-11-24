@@ -21,7 +21,7 @@ This document tracks the milestones and definition of done for the **LEREDD** pr
   - Abstract LLM client layer supporting OpenAI, Ollama, and Mock LLM (`leredd/llm.py`).
 
 - [x] **Milestone 4: LEREDD Engine, Baselines & Evaluation Suite**
-  - Detection pipeline with threshold-based re-annotation (`leredd/detector.py`).
+  - Detection pipeline with confidence screening and a separate review status (`leredd/detector.py`).
   - Baseline 1: TF-IDF & LSA (`leredd/baselines/tfidf_lsa.py`).
   - Baseline 2: Fine-Tuned BERT multi-class classifier (`leredd/baselines/bert_classifier.py`).
   - Statistical significance tests (McNemar's test & Fisher's exact test) and metrics calculator (`leredd/evaluation.py`).

@@ -12,8 +12,13 @@ The figures below summarize values attributed to the research paper in this proj
    - Distance: Euclidean distance ($sim = \frac{1}{1 + \text{Euclidean}}$)
    - Similarity Aggregation: Average formula (Eq. 1)
    - Examples per type: $k = 6$
-   - Re-annotation Threshold: Confidence score $\le 4 \rightarrow \text{No\_dependency}$
+   - Paper-reported threshold method: confidence score $\le 4 \rightarrow \text{No\_dependency}$
    - RAG: 6 chunks of 1000 characters (200 overlap) for cross-system setting.
+The threshold above records the paper configuration for comparison. The local
+LEREDD implementation preserves a low-confidence predicted class and marks it
+`requires_review`; local reports must not describe this as reproducing the
+paper's threshold relabeling behavior.
+
 3. **RQ3 (Prompting Strategies)**: Few-shot prompting yields substantial gains over zero-shot ($F_1 = 0.91$). RAG provides no additional benefit over few-shot in intra-system setting, but improves performance in cross-system setting.
 4. **RQ4 (Intra-System Baselines Comparison)**: LEREDD outperforms TF-IDF & LSA ($F_1 = 0.66$) and fine-tuned BERT ($F_1 = 0.80$) with an overall average $F_1 = 0.88$.
 5. **RQ5 (Cross-System Baselines Comparison)**: LEREDD with RAG demonstrates strong cross-dataset generalization ($F_1 = 0.86$), outperforming BERT ($F_1 = 0.57$) and TF-IDF ($F_1 = 0.69$).

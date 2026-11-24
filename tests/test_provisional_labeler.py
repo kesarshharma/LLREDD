@@ -12,6 +12,7 @@ from leredd.data_models import (
     RequirementPair,
     VerificationStatus,
 )
+from leredd.config import LEREDDConfig
 from leredd.llm import MockLLMClient
 from leredd.provisional_labeler import (
     HeuristicLabeler,
@@ -19,6 +20,7 @@ from leredd.provisional_labeler import (
     LabelingMode,
     LabelingRunManifest,
     LLMLabeler,
+    MultiModelLLMLabeler,
     ProvisionalLabeler,
 )
 from leredd.cli import app
@@ -171,6 +173,114 @@ def test_provisional_labeler_disagreement_preserves_unresolved(req_a, req_b):
     assert processed.dependency_type is None  # Unresolved due to disagreement
     assert processed.provenance.status == VerificationStatus.PROVISIONAL
     assert "DISAGREEMENT" in processed.provenance.review_notes
+
+
+def test_multi_model_labeler_records_unanimous_votes_as_provisional(req_a, req_b):
+    response = json.dumps({
+        "dependency_type": "Requires",
+        "confidence": 4,
+        "explanation": "A controlled vote.",
+    })
+    labelers = [
+        LLMLabeler(
+            config=LEREDDConfig(llm_model=model_id),
+            llm_client=MockLLMClient(model=model_id, response_text=response),
+        )
+        for model_id in ("model-a", "model-b")
+    ]
+    coordinator = ProvisionalLabeler(llm_labeler=MultiModelLLMLabeler(labelers))
+    pair = RequirementPair(id="MULTI-AGREE", req_a=req_a, req_b=req_b)
+
+    labeled, manifest = coordinator.process_batch([pair], mode=LabelingMode.MULTI_LLM)
+
+    assert labeled[0].dependency_type == DependencyType.REQUIRES
+    assert labeled[0].provenance.status == VerificationStatus.PROVISIONAL
+    assert labeled[0].provenance.source == AnnotationSource.ENSEMBLE
+    assert labeled[0].provenance.model_id == "ensemble[model-a,model-b]"
+    assert "MULTI_LLM_UNANIMOUS" in labeled[0].provenance.evidence
+    assert manifest.agreed_count == 1
+    assert manifest.metadata["llm_models"] == ["model-a", "model-b"]
+
+
+def test_multi_model_disagreement_routes_hybrid_pair_for_review(req_a, req_b):
+    responses = [
+        json.dumps({"dependency_type": label, "confidence": 4, "explanation": f"Vote {label}."})
+        for label in ("Requires", "Conflicts")
+    ]
+    labelers = [
+        LLMLabeler(
+            config=LEREDDConfig(llm_model=model_id),
+            llm_client=MockLLMClient(model=model_id, response_text=response),
+        )
+        for model_id, response in zip(("model-a", "model-b"), responses)
+    ]
+    coordinator = ProvisionalLabeler(llm_labeler=MultiModelLLMLabeler(labelers))
+    # req_b explicitly cites req_a, so the heuristic alone would suggest Requires.
+    pair = RequirementPair(id="MULTI-DISAGREE", req_a=req_b, req_b=req_a)
+
+    processed = coordinator.process_pair(pair, mode=LabelingMode.HYBRID)
+
+    assert processed.dependency_type is None
+    assert processed.provenance.status == VerificationStatus.PROVISIONAL
+    assert processed.provenance.source == AnnotationSource.ENSEMBLE
+    assert "MULTI_LLM_DISAGREEMENT" in processed.provenance.review_notes
+    assert "model-a" in processed.provenance.review_notes
+    assert "model-b" in processed.provenance.review_notes
+
+
+def test_cli_multi_llm_mode_uses_distinct_configured_models(tmp_path, monkeypatch):
+    from leredd.llm import LLMClientFactory
+
+    pair = RequirementPair(
+        id="CLI-MULTI",
+        req_a=Requirement(id="CLI-A", text="System shall execute the primary task."),
+        req_b=Requirement(id="CLI-B", text="System shall store the task result."),
+    )
+    input_file = tmp_path / "candidates.json"
+    output_file = tmp_path / "labeled.json"
+    input_file.write_text(json.dumps([pair.model_dump(mode="json")]), encoding="utf-8")
+    response = json.dumps({"dependency_type": "Details", "confidence": 3, "explanation": "Vote."})
+    monkeypatch.setattr(
+        LLMClientFactory,
+        "create",
+        lambda config=None: MockLLMClient(model=config.llm_model, response_text=response),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "label", "--input", str(input_file), "--output", str(output_file),
+            "--mode", "multi_llm", "--models", "model-a,model-b",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    records = json.loads(output_file.read_text(encoding="utf-8"))
+    assert records[0]["dependency_type"] == "Details"
+    assert records[0]["provenance"]["status"] == "provisional"
+    manifest = json.loads((tmp_path / "labeled_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["metadata"]["llm_models"] == ["model-a", "model-b"]
+
+
+def test_cli_multi_llm_mode_rejects_missing_or_duplicate_models(tmp_path):
+    input_file = tmp_path / "candidates.json"
+    input_file.write_text("[]", encoding="utf-8")
+    missing = runner.invoke(
+        app,
+        ["label", "--input", str(input_file), "--mode", "multi_llm"],
+    )
+    duplicate = runner.invoke(
+        app,
+        [
+            "label", "--input", str(input_file), "--mode", "multi_llm",
+            "--models", "same-model,same-model",
+        ],
+    )
+
+    assert missing.exit_code == 1
+    assert "requires --models" in missing.output
+    assert duplicate.exit_code == 1
+    assert "at least two distinct IDs" in duplicate.output
 
 
 def test_directional_labeling_preserves_orientation(req_a, req_b):

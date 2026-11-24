@@ -81,7 +81,10 @@ class LEREDDConfig(BaseSettings):
         default=4,
         ge=-1,
         le=5,
-        description="Re-annotation threshold: predictions with confidence <= threshold are set to No_dependency. Set -1 to disable."
+        description=(
+            "Self-reported confidence cutoff: predictions at or below it are flagged "
+            "for review without changing the predicted class. Set -1 to disable."
+        )
     )
 
     # API Keys & URLs

@@ -1,6 +1,11 @@
 """Tests for Evaluation metrics and statistical significance tests."""
 
-from leredd.evaluation import Evaluator
+from leredd.evaluation import (
+    Evaluator,
+    PredictionAlignmentError,
+    SplitOverlapError,
+    validate_system_disjoint_splits,
+)
 import pytest
 from leredd.data_models import (
     AnnotationProvenance, Requirement, RequirementPair, Prediction,
@@ -68,3 +73,53 @@ def test_evaluator_rejects_provisional_ground_truth(sample_pair):
 def test_evaluator_rejects_missing_predictions(sample_pair):
     with pytest.raises(ValueError, match="missing ground-truth pair IDs"):
         Evaluator.evaluate([sample_pair], [])
+
+
+def test_evaluator_duplicate_prediction_error_reports_pair_ids(sample_pair):
+    prediction = Prediction(
+        pair_id=sample_pair.id,
+        dependency_type=DependencyType.REQUIRES,
+        rationale="controlled test",
+        confidence=5,
+    )
+
+    with pytest.raises(PredictionAlignmentError, match=sample_pair.id) as exc_info:
+        Evaluator.evaluate([sample_pair], [prediction, prediction])
+
+    assert exc_info.value.invalid_ids == [sample_pair.id]
+
+
+def test_system_disjoint_validator_accepts_separate_partitions():
+    def pair(pair_id, system, req_a_id, req_b_id):
+        return RequirementPair(
+            id=pair_id,
+            req_a=Requirement(id=req_a_id, text="A", system=system),
+            req_b=Requirement(id=req_b_id, text="B", system=system),
+        )
+
+    audit = validate_system_disjoint_splits(
+        train_pairs=[pair("P-TRAIN", "TRAIN", "TR-A", "TR-B")],
+        test_pairs=[pair("P-TEST", "TEST", "TE-A", "TE-B")],
+        dev_pairs=[pair("P-DEV", "DEV", "DE-A", "DE-B")],
+    )
+
+    assert audit["is_disjoint"] is True
+    assert audit["overlapping_systems"] == []
+
+
+def test_system_disjoint_validator_reports_overlapping_identity_ids():
+    train = RequirementPair(
+        id="P-SHARED",
+        req_a=Requirement(id="REQ-SHARED", text="A", system="ADB"),
+        req_b=Requirement(id="REQ-TRAIN", text="B", system="ADB"),
+    )
+    test = RequirementPair(
+        id="P-SHARED",
+        req_a=Requirement(id="REQ-SHARED", text="A", system="ADB"),
+        req_b=Requirement(id="REQ-TEST", text="B", system="ADB"),
+    )
+
+    with pytest.raises(SplitOverlapError) as exc_info:
+        validate_system_disjoint_splits([train], [test])
+
+    assert exc_info.value.invalid_ids == ["ADB", "P-SHARED", "REQ-SHARED"]

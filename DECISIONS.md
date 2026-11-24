@@ -2,6 +2,27 @@
 
 This document records key architectural, design, and implementation decisions for the project.
 
+## [ADR-030] Keep Requirement Graph Labels in Hover Details
+- **Date:** 2026-11-23
+- **Status:** Accepted locally
+- **Context:** Browser QA showed that permanently rendering every requirement ID over the graph caused overlap and obscured adjacent nodes.
+- **Decision:** Keep the graph uncluttered by rendering nodes without visible text; place each node's requirement ID and full statement in its interactive hover details.
+- **Consequences:** The graph remains navigable with zoom/pan and preserves the requirement context while improving legibility. Hover interaction and assistive/accessibility behavior still need broader browser/device review.
+
+## [ADR-031] Treat MockLLM Ablations as Pipeline Checks, Not Empirical Effects
+- **Date:** 2026-11-23
+- **Status:** Accepted locally
+- **Context:** The evaluation runner uses deterministic MockLLMClient, which does not interpret retrieved examples and always returns confidence 5. Retrieval/ICL/threshold ablation metrics can therefore remain identical for backend reasons.
+- **Decision:** Preserve MockLLM's deterministic behavior and attach structured validity metadata to both reports, marking the affected comparisons as non-informative for model effects. Keep the empirical issues open until an authorized real provider or validated controlled test double is used.
+- **Consequences:** Future reports explain the limitation alongside the metrics. Historical reports remain unchanged; existing scores are not retroactively presented as valid ablation evidence.
+
+## [ADR-029] Keep Independent Annotation Separate from Assisted Verification
+- **Date:** 2026-11-23
+- **Status:** Accepted locally
+- **Context:** The proposal calls for independently labeled examples and agreement measurement. The existing review queue displays assisted/model evidence and records a final verification decision; reusing it for blind agreement would expose cues and conflate agreement collection with adjudication.
+- **Decision:** Collect each reviewer vector in a separate blinded manifest keyed to the same candidate file and optional SRS context hashes. Record abstentions and elapsed time. Compare only complete vectors with matching source/context/pair IDs and distinct reviewer IDs. Agreement reports are descriptive and never promote labels; a separate human adjudication and existing verified-export workflow are required.
+- **Consequences:** The repository now supports collecting the evidence, but produces no research claim until actual independent human review occurs. Actor IDs are self-reported and not authenticated.
+
 ## [ADR-019] Keep API Tests Unmodified; Run Windows TestClient Outside Restricted Sandbox
 - **Date:** 2026-10-12
 - **Status:** Accepted
@@ -13,8 +34,8 @@ This document records key architectural, design, and implementation decisions fo
 - **Date:** 2026-10-12
 - **Status:** Accepted (user selected)
 - **Context:** Replication imports preserve source spreadsheet labels but are marked `pending_review`; spreadsheet labels alone do not establish local human verification. Letting those records into metrics would overstate annotation verification.
-- **Decision:** Evaluation accepts provenance-bearing labels only when `VerificationStatus.VERIFIED`. Pending-review, human-reviewed-but-not-verified, provisional, rejected, or absent-status provenance is excluded (or raises in strict mode). Existing provenance-free legacy benchmark records remain conditionally accepted with an audit warning for backward compatibility. Replication prototype evaluation fails closed on current imported packages and writes no report until records are locally verified.
-- **Consequences:** No replication metrics are reported from the current pending-review imports. Verification must occur through the human review workflow; the source spreadsheets and imported JSON are not modified. Full suite: **236 passed**, 40 warnings.
+- **Decision:** Evaluation accepts provenance-bearing labels only when status is `VERIFIED`, source is `HUMAN`, an annotator or reviewer is identified, and `accepted_label` equals the scored `dependency_type`. Pending-review, human-reviewed-but-not-verified, machine-sourced, unattributed, or contradictory provenance is excluded (or raises in strict mode). Existing provenance-free legacy benchmark records remain conditionally accepted with an audit warning for backward compatibility.
+- **Consequences:** No replication metrics are reported from the current pending-review imports. Verification must occur through the human review workflow; the source spreadsheets and imported JSON are not modified. Current full suite: **305 passed**, 12 deprecation warnings.
 
 ## [ADR-018] Candidate Generation Emits Explicitly Unlabeled Records
 - **Date:** 2026-10-12
@@ -222,3 +243,292 @@ This document records key architectural, design, and implementation decisions fo
 - **Context:** GitHub Actions failed test collection because the `pytest` console entry point did not expose the repository root for imports of top-level `api` and `scripts` packages. These modules are source-tree packages and are not included by the package's `leredd*` setuptools include rule.
 - **Decision:** Run the existing configured pytest coverage command as `python -m pytest ...`; preserve the same test path and coverage arguments.
 - **Consequences:** The interpreter adds the current working directory to the module search path. Local full-suite coverage succeeds; the hosted Python-version matrix must rerun before CI status is confirmed.
+
+## TASK-P10 — Stabilization Choices (2026-10-14)
+- Candidate-generation DENSE ranks individual `Requirement` records through a dedicated `RequirementRetriever`; `ExampleRetriever` remains pair-oriented for labeled ICL examples. HYBRID fuses dense and BM25 requirement rankings with the existing RRF configuration. This preserves data type semantics and makes the strategy names truthful.
+- `CandidateGenerationManifest.is_exhaustive` means generated unique pairs cover the mathematical all-pairs total and were not truncated. A retrieval run can therefore be exhaustive only when its selected neighbors cover the complete corpus.
+- HashingVectorizer replaces per-call-fitted TF-IDF as the embedding fallback because independently transformed query and corpus batches need a shared feature space. Fallback cache keys are versioned separately; SBERT cache keys are preserved.
+- Verified JSON export validates the existing file before recording a new decision, filters to explicit verified labeled records, replaces an existing pair on retry, and uses sibling-temp-plus-replace publication. If publication fails after the queue decision is saved, the CLI reports both states instead of implying a successful export.
+- Retrieval tests use deterministic injected embedders so wiring and ranking behavior tests do not require SentenceTransformer initialization or network access. This does not replace actual model-quality validation, which remains outside the offline suite.
+
+## [ADR-024] Require Coherent Human Provenance for Provenance-Bearing Evaluation Labels
+- **Date:** 2026-10-14
+- **Status:** Accepted
+- **Context:** Evaluation previously treated the `verified` enum value as sufficient even when the record claimed an LLM source, had no attributable human, or contradicted its own accepted label.
+- **Decision:** Any provenance-bearing ground-truth pair must be `verified`, use `human` source, identify an annotator or reviewer, and carry an `accepted_label` equal to `dependency_type`. Continue conditional warning-based acceptance only for legacy pairs with no provenance object.
+- **Consequences:** Queue, UI, and interactive CLI human decisions remain eligible; machine suggestions and malformed/inconsistent verification metadata fail closed. Legacy research records remain usable with disclosed provenance limitations.
+
+## [ADR-025] Reserve Requested System Partitions Before Ratio Apportionment
+- **Date:** 2026-10-14
+- **Status:** Accepted
+- **Context:** Rounding train/dev/test ratios independently produced empty dev partitions for the common three-system 60/20/20 case.
+- **Decision:** For system-disjoint splits, reserve one system for every requested partition that fits, then distribute remaining systems proportionally using largest remainders. If there are too few systems, preserve train/test first and omit optional retrieval/dev partitions as needed. Explicit assignments are unaffected.
+- **Consequences:** A three-system dataset produces non-empty train/dev/test partitions by default. Fractions are approximate at small system counts; leakage prevention and deterministic seed behavior remain primary.
+
+## [ADR-026] Require Explicit Actor Identity for Human Verification
+- **Date:** 2026-10-14
+- **Status:** Accepted
+- **Context:** CLI and review-queue defaults supplied `human_cli` or `human_reviewer_1` when operators omitted an identity, allowing verified provenance to appear attributable without identifying the actual actor.
+- **Decision:** Require a nonblank, non-placeholder identity at interactive CLI and queue-manager decision boundaries. New Streamlit decisions start with an empty actor field. Evaluation rejects records whose only actor IDs are the known generic placeholders.
+- **Consequences:** Verification provenance contains an operator-supplied identity. The application does not authenticate that identity; it remains an auditable self-reported identifier. Legacy queue files missing an actor remain readable with an empty identity and cannot be promoted without a reviewer identifier.
+
+## [ADR-027] Derive Evaluation Report Metadata From the Supplied Split
+- **Date:** 2026-10-14
+- **Status:** Accepted
+- **Context:** The general-purpose evaluation runner described its input using legacy ADB/APA/TJA names, fixed sample sizes, and provenance assumptions, including when a caller supplied another verified split.
+- **Decision:** Build systems, partition counts, provenance caveats, label coverage, and small-sample wording from the data actually loaded and accepted for the run. Keep MockLLM and non-authentication limitations explicit. Leave historical report artifacts immutable and require new destinations for new runs.
+- **Consequences:** A report about a synthetic or user-provided split reflects that split's metadata. Self-reported reviewer identities are still not authenticated, and synthetic fixture evaluations remain software demonstrations rather than research evidence.
+
+## TASK-P13 demonstration choices (2026-10-14)
+- The Streamlit annotation page uses explicitly labeled synthetic requirements and writes its default candidates beneath `.pytest-tmp/leredd-ui/`, keeping a fresh demonstration independent of imported source datasets. No automated or synthetic action is represented as human verification.
+
+## ADR-028 — Keep CI replication tests independent of private source data (2026-11-23)
+- **Status:** Accepted
+- **Context:** The imported replication JSON is local-only and its redistribution rights are unresolved. CI must still test loader validation and runner behavior without requiring those files.
+- **Decision:** Use synthetic expected-count fixtures under temporary roots for loader and runner contract tests. Keep checks of the actual imported package conditional on the package being supplied locally, with a clear skip when absent. Do not add the replication package to the repository solely to make CI pass.
+- **Consequences:** CI tests code and schema behavior without asserting access to research data. Full source-package integrity validation remains a local check until redistribution terms are established.
+
+## ADR-032 — Allocate synthetic requirement IDs around explicit IDs (2026-11-23)
+- **Status:** Accepted
+- **Context:** Extraction assigned IDs to unlabeled requirement statements using a counter independent of explicit IDs already found in the source. This could create duplicate requirement identity.
+- **Decision:** Track identifiers seen in a single extraction and advance the synthetic counter until it reaches an unused `REQ-<SYSTEM>-NNN` value. Preserve source-provided IDs and retain the existing requirement schema.
+- **Consequences:** Mixed explicit and generated IDs no longer collide in the common counter-matching case. Duplicate IDs explicitly repeated in source input remain visible and are not silently rewritten.
+
+## ADR-033 — Keep document identity separate from extraction location (2026-11-23)
+- **Status:** Accepted
+- **Context:** Extraction previously stored only the generic `regex_extraction` marker, losing the original SRS name and statement location. Combining filename and line into `Requirement.source` would make each line look like a separate document to document-level splitting.
+- **Decision:** Retain the source document name in `Requirement.source` and add optional `Requirement.source_location` for the extracted-text line. File extraction uses the source basename; API callers can send a source label; UI upload/paste provides one. Preserve the generic source fallback where no source name is known.
+- **Consequences:** New records are traceable while old JSON remains compatible and source grouping remains document-stable. PDF/DOCX coordinates are extracted-text lines; page/paragraph offsets remain future work. Short bracketed IDs, such as `[REQ-2]`, are retained as explicit identifiers.
+
+## ADR-034 — Keep effort-study observations separate from ground truth (2026-11-23)
+- **Status:** Accepted
+- **Context:** The proposal calls for comparing manual annotation effort with machine-assisted effort, but there are no actual reviewer measurements and machine suggestions are not verified labels.
+- **Decision:** Provide a separate paired, counterbalanced study workflow. Require provisional machine suggestions, hide them in the manual condition, identify them as provisional in assisted mode, and assign each pair to different reviewers across conditions. Store responses in study manifests and make the report explicitly descriptive; never auto-promote these labels to verified ground truth. Refuse study outputs anywhere under `data/`.
+- **Consequences:** The software can support a controlled pilot without conflating suggestion, observation, or adjudicated truth. The tool and synthetic tests are not human-study evidence; genuine rights-cleared samples and actual reviewers are still required.
+
+## ADR-035 — Exclude local-only assets from Docker build context (2026-11-23)
+- **Status:** Accepted
+- **Context:** Dockerfile uses `COPY . .`, and the working tree contains untracked research data, generated reports, project PDF, temporary files, and potentially local environment files. Without ignore rules, these can be copied into an image.
+- **Decision:** Add `.dockerignore` rules that exclude all `data/`, local environments/secrets, repository metadata, caches/temp, and `Minor_Project.pdf`. Compose can mount host data at runtime for local workflows, but image layers must not contain those local assets.
+- **Consequences:** Docker build context is safer and smaller. Because the Docker daemon was unavailable, actual image contents and Compose runtime behavior still need verification before considering Docker support complete.
+
+## ADR-036 — Diagnose Streamlit blank page before changing runtime behavior (2026-11-23)
+- **Status:** Accepted
+- **Context:** Streamlit health and root HTTP responses succeed, but a browser view showed a blank shell with a persistent running indicator. An older stderr log includes watcher import warnings for missing torchvision.
+- **Decision:** Keep the live process and application unchanged until fresh, correlated server and browser evidence identifies the blocking layer. Do not suppress file watching or install torchvision speculatively.
+- **Consequences:** The UI remains an open runtime verification defect. Diagnose on a separate port with fresh logs and browser console/network evidence before fixing.
+
+## ADR-037 — Separate Streamlit rendering from port and browser reachability (2026-11-24)
+- **Status:** Accepted
+- **Context:** A fresh diagnostic server on port 8502 returned HTTP 200 and native Chrome rendered the dashboard after cold startup; the isolated in-app browser had websocket reachability errors. The documented port 8501 had no listener and Chrome reported connection refused.
+- **Decision:** Do not modify app code or suppress the file watcher without correlated evidence. Track 8502 rendering, the initially unavailable 8501 listener, and isolated-browser websocket access as separate conditions. Resolve the persistent blank-page report after the documented 8501 process renders in native Chrome.
+- **Consequences:** The application rendered on both the diagnostic and documented ports after cold startup. Broader API/UI workflow checks remain outstanding. Synthetic annotations remain provisional; this demonstration creates no human ground truth.
+
+## ADR-038 — Initialize detection embeddings only for retrieval paths (2026-11-24)
+- **Status:** Accepted
+- **Context:** `LEREDDDetector.__init__` constructed `EmbeddingModel`, whose initialization loads SentenceTransformer. API detection with an empty example pool and RAG disabled does not use embeddings, yet the first zero-shot request incurred a full model startup delay.
+- **Decision:** Defer the embedder and dense/RAG retriever construction until the corresponding dense or RAG retrieval path is accessed. Preserve detector properties and injected-embedder support so existing callers and tests retain their interface. BM25 retrieval remains independent of SBERT.
+- **Consequences:** Cold start is avoided for zero-shot and BM25-only requests; first dense/RAG use still pays the configured model initialization cost. Full suite passed (342 tests), and a real local MockLLM API request completed in 164 ms without a model-load log.
+
+## ADR-040 — Expose per-request retrieval choice through product interfaces (2026-11-24)
+- **Status:** Accepted
+- **Context:** Dense, BM25, and hybrid retrieval were supported internally, but API and Streamlit users could not select among them for a detection request. The configured detector default must remain backward compatible.
+- **Decision:** Add an optional constrained retrieval mode to single and batch API requests and an explicit Streamlit detection selector. When omitted by an API caller, use the existing configured default; do not change label semantics or dataset schemas.
+- **Consequences:** BM25 is accessible without loading SentenceTransformer for supported requests; dense/hybrid paths remain available and retain their model startup cost. Focused API/UI tests and the full local suite passed. Visual inspection of the updated live Streamlit selector and retrieval-quality comparisons remain outstanding.
+
+## ADR-039 — Preserve segmented alphanumeric requirement identifiers (2026-11-24)
+- **Status:** Accepted
+- **Context:** The extractor accepted numeric trailing IDs such as `REQ-ADB-001` but truncated letter-suffixed IDs such as `[REQ-DEMO-A]` to `REQ-DEMO`, causing multiple source requirements to share an identifier and collapse during candidate generation.
+- **Decision:** Parse the complete `REQ-` token when it consists of alphanumeric segments separated by hyphens or colons, including alphabetic final segments. Keep generated IDs and the existing requirement schema unchanged.
+- **Consequences:** Such source IDs now survive extraction and produce distinct candidate pairs. This grammar is regression-tested; broader real-SRS identifier conventions still require validation on approved sample documents.
+
+## ADR-041 — Keep confidence screening separate from dependency classification (2026-11-24)
+- **Status:** Accepted
+- **Context:** The detector converted predictions at or below the Likert threshold into `No_dependency`. This conflated uncertainty with a negative label, despite the proposal calling for uncertain outputs to be identified for review. A model's self-reported confidence is also not a calibrated probability or annotation verification.
+- **Decision:** Preserve the parsed dependency class and record a separate validation status and threshold. Mark low-confidence predictions `requires_review`, above-threshold predictions `passed_threshold`, and disabled checks `threshold_disabled`. Present the status as a screening cue only; never elevate model output to verified ground truth.
+- **Consequences:** API/CLI serialization, Streamlit feedback, and new evaluation reports can expose screening decisions without corrupting label semantics. The UI never enqueues automatically; its explicit pending-queue action is defined in ADR-042. MockLLM's fixed confidence does not provide empirical evidence about screening utility.
+
+## ADR-042 — Queue low-confidence predictions only through explicit user action (2026-11-24)
+- **Status:** Accepted
+- **Context:** Confidence-screened predictions could be shown as requiring review but were not connected to the existing human review queue, leaving the Streamlit user to manually recreate the item. Machine predictions must remain distinct from verified annotation.
+- **Decision:** Add a separate user-triggered action that writes only predictions with `requires_review` into the pending review queue, preserving predicted class, rationale, confidence, and provisional provenance. The UI writes its queue JSON through a same-directory temporary file and atomic replacement and requires confirmation when that queue already exists. The shared `ReviewQueueManager.save_queue()` separately writes queue and manifest through staged, per-file atomic replacements.
+- **Consequences:** The product now routes the result to a real review worklist without claiming a human decision. A filesystem cannot atomically replace the shared queue and manifest together; queue is replaced first, so a later manifest write failure may leave a stale manifest. Tests verify preservation when the initial replacement fails. Real reviewer use and confidence-screening utility remain unverified.
+
+## ADR-043 — Verify Streamlit startup in a fresh process after import-time errors (2026-11-24)
+- **Status:** Accepted
+- **Context:** The long-running Streamlit process showed an import error for a class present in current source; a fresh interpreter imported the class and a fresh Streamlit process rendered the application and completed the synthetic detection-to-review journey.
+- **Decision:** Treat this observed error as stale runtime state and restart the documented Streamlit service after code/model changes; do not alter application source unless the failure reproduces in a fresh process.
+- **Consequences:** The 8501 UI is healthy after restart. The same-path fresh-process reproduction was not a source-level regression test; real human/provider behavior remains unverified.
+
+## ADR-044 — Preserve the inclusive confidence cutoff and describe its rule precisely (2026-11-24)
+- **Status:** Accepted
+- **Context:** The existing screen routes a prediction when `confidence <= threshold`. At the maximum threshold, a 5/5 score is therefore routed, but “low confidence” copy implies a low absolute score.
+- **Decision:** Preserve the inclusive threshold and stored `low_confidence` code for compatibility. In user-facing output, report that the self-reported score is at or below the configured cutoff and retain the explicit caveat that the output is not verified ground truth.
+- **Consequences:** Boundary behavior remains unchanged and understandable, including a 5/5 score at cutoff 5. This is a routing rule only; it provides no calibration or empirical utility evidence.
+
+## ADR-045 — Reuse the loaded embedding resource within a Streamlit session (2026-11-24)
+- **Status:** Accepted
+- **Context:** The UI creates a detector when each user clicks Run. Dense/hybrid retrieval and RAG initialize the embedder lazily, so the loaded SentenceTransformer was discarded at the end of the click and initialized again on the next prediction.
+- **Decision:** Store an embedder only after a detector has actually initialized it, keyed by configured model name and cache directory, and inject it into subsequent session-local detectors. Do not eagerly load it for zero-shot or BM25-only paths.
+- **Consequences:** Repeated dense/RAG interactions in one browser session reuse the same embedding model. The initial model load remains; the model is not shared across user sessions, and this change makes no latency claim.
+
+## ADR-046 — Use structured requirement metadata as a conditional hybrid ranking signal (2026-11-24)
+- **Status:** Accepted
+- **Context:** The project proposal identifies component/subsystem metadata as an optional hybrid retrieval signal. Existing `Requirement` records exposed system/source fields only, and example retrieval used dense plus BM25 rankings.
+- **Decision:** Add optional `component` and `subsystem` fields and rank eligible examples by normalized exact overlap across component, subsystem, and meaningful system values. Fuse this ranking with dense/BM25 only when the target has usable metadata and at least one candidate shares a value. Do not use IDs, source locations, or free text as metadata. Keep the metadata RRF weight configurable on `HybridRetriever`.
+- **Consequences:** Existing records without structured metadata preserve their existing dense/BM25 path; new data can use component/subsystem fields without forcing them to be inferred. This is implementation support, not evidence of improved retrieval. Metadata provenance/quality and empirical weight selection remain open.
+
+## ADR-047 — Require unanimous votes for multi-model provisional labels (2026-11-24)
+- **Status:** Accepted
+- **Context:** The proposal calls for multiple model predictions where feasible and review of ambiguous or conflicting labels. A majority rule would silently select a label despite a model disagreement, while the system has no empirically justified vote weighting.
+- **Decision:** In opt-in multi-model labeling, accept a suggestion only when every configured model returns a valid, identical taxonomy label. Any disagreement or incomplete vote produces no label, records each model's vote/rationale, and routes the pair for human review. The result remains provisional even when unanimous; confidence is the minimum self-reported vote and is not a calibrated probability.
+- **Consequences:** Vote handling is deterministic and auditable without pretending that agreement among models is ground truth. Real model diversity, calibration, cost, and usefulness require separate provider-backed evaluation.
+
+## ADR-048 — Include provider and model identity in LLM cache keys (2026-11-24)
+- **Status:** Accepted
+- **Context:** The response cache previously keyed only by client class, temperature, and prompt, allowing same-provider models to collide and invalidate multi-model comparison.
+- **Decision:** Version the cache-key input and include provider class, model identifier, temperature, and prompt. Do not fall back to legacy entries whose producing model is unknown.
+- **Consequences:** Distinct models do not share cached responses. Existing ambiguous cache entries remain on disk but are not reused; the next request may call the provider. No package install or real provider call is required to verify the key separation.
+
+## ADR-049 — Attach requirement metadata only through explicit ID mappings (2026-11-24)
+- **Status:** Accepted
+- **Context:** Hybrid retrieval can use component/subsystem values, but plain-text extraction cannot reliably infer those concepts from requirement prose. Unchecked metadata association could silently attach values to the wrong requirement.
+- **Decision:** Accept optional component/subsystem values via an exact requirement-ID-keyed JSON mapping during extraction/candidate generation and through equivalent API/UI fields. Reject unknown IDs, unsupported keys, and malformed values. Allow target requirement metadata in single detection. Do not infer metadata from prose, IDs, or source locations.
+- **Consequences:** Supplied structured metadata reaches candidate JSON and pair-level retrieval without changing existing text extraction semantics. Existing data remains metadata-free until a source-grounded user supplies values; empirical retrieval value is unproven.
+- **Verification (TASK-P34):** Focused metadata flow tests passed (50), and the complete suite passed (364, 12 existing `tqdm` deprecation warnings). No existing replication/evaluation artifact changed. This verifies software plumbing only; it does not validate metadata quality or retrieval effectiveness.
+
+## ADR-050 — Preserve requirement metadata in review queue records (2026-11-24)
+- **Status:** Accepted
+- **Context:** Explicit component/subsystem and source traceability are attached to each `Requirement`, but the queue previously flattened each pair into IDs, text, and a shared system name. Human decisions then rebuilt verified records from this reduced representation.
+- **Decision:** Store optional system, component, subsystem, source, and source-location fields independently for requirements A and B in each review item. Display available fields in the human review UI and reconstruct the verified pair with the stored values. Keep new fields optional so historic queue JSON remains loadable; do not infer missing historical values.
+- **Consequences:** New SRS-to-review-to-verified-export flows preserve metadata. Existing queue files that already omitted it remain usable but must be regenerated from candidate pairs to restore lost values.
+- **Verification (TASK-P35):** Focused queue/UI tests passed (41); complete suite passed (366, with 12 existing `tqdm` warnings). Eleven protected replication/evaluation artifacts were unchanged.
+
+## ADR-051 — Publish human-verified datasets as immutable releases (2026-11-24)
+- **Status:** Accepted
+- **Context:** Verified pair exports had a constant provenance dataset-version string and no artifact-level manifest, input hashes, or overwrite protection. Splits and evaluation therefore could not point back to a content-identified release.
+- **Decision:** Require each release input to be non-empty, uniquely identified, labeled, and backed by coherent human `VERIFIED` provenance. Copy eligible records, assign the requested release version in each provenance record, and atomically publish a new directory containing `pairs.json` plus a manifest with source-file hashes, released-data hash, class counts, record count, and timestamp. Never overwrite an existing release directory.
+- **Consequences:** Users can combine verified exports into a versioned dataset before splitting, and can detect source or release-content changes by hash. The operation does not create or authenticate human labels; legacy provenance-free records are intentionally ineligible.
+- **Verification (TASK-P36):** Focused release/CLI tests passed (19); complete suite passed (374, 12 existing `tqdm` warnings). Synthetic verified fixtures only; no human dataset was released.
+
+## ADR-052 — Define candidate recall against the exhaustive pair universe (2026-11-24)
+- **Status:** Accepted
+- **Context:** The proposal asks to estimate candidate-generation recall by comparing strategy output with the complete pair set on a sample, but this is distinct from recall of true dependency labels.
+- **Decision:** Candidate manifests report `pair_space_recall = unique generated pairs within the input corpus / n(n-1)/2`, together with the universe size and uncovered-pair count. A zero-pair universe reports recall as null. The CLI and docs call this candidate-space coverage and explicitly distinguish it from gold dependency recall.
+- **Consequences:** Strategy coverage is available before annotation and does not need labels. Research claims about recovering true dependencies still require a rights-cleared, human-verified labeled sample.
+- **Verification (TASK-P37):** Synthetic ALL_PAIRS, truncated, retrieval, empty-input, manifest round-trip, and CLI assertions passed (42 focused); the full suite passed (374, 12 existing warnings). All 311 data files were hash-identical before and after.
+
+## ADR-053 — Preserve first label and flag repeated-inference variation (2026-11-24)
+- **Status:** Accepted
+- **Context:** Proposal scope includes examining prediction consistency across repeated runs, while existing API/CLI/UI detection must remain inexpensive and deterministic by default.
+- **Decision:** Keep one inference as the default. Expose an optional 1–5 repeated-run count. For counts above one, bypass the built-in response cache while reusing the same constructed prompt. Record each run's class and self-reported confidence. Any class or confidence variation sets an inconsistent stability status and recommends human review; preserve the first run's class as the result. Do not treat consistency or Likert scores as calibrated uncertainty or annotation verification.
+- **Consequences:** Callers can explicitly inspect run stability without changing default behavior. Multiple OpenAI runs incur multiple provider calls and cost. Third-party `LLMClient` implementations that do not override `generate_uncached` may still have their own external caching behavior.
+- **Verification (TASK-P38):** 61 focused detector/LLM/API/CLI/UI tests passed; complete suite passed (383, 12 existing warnings). No external provider or human annotation was used.
+
+## ADR-054 — Preserve DOCX table text and fail clearly on image-only PDFs (2026-11-24)
+- **Status:** Accepted
+- **Context:** The proposal states that SRS requirements may occur in paragraphs or tables and asks that original requirement text be preserved. DOCX parsing omitted tables; regex extraction dropped final periods; image-only PDFs appeared as successful empty extractions.
+- **Decision:** Traverse DOCX body paragraphs and top-level tables in source order; join row cells with tabs so IDs and requirement text remain associated on one source line. Preserve the terminating period in extracted statements. If a PDF has no extractable text, raise an error that identifies unsupported OCR rather than return an apparently successful empty list.
+- **Consequences:** Text-based DOCX/PDF ingestion is more complete and failures are easier to diagnose. OCR, nested DOCX table traversal, and layout-specific table interpretation are not added. The PDF/DOCX libraries remain an optional `documents` extra.
+- **Verification (TASK-P39):** Synthetic PDF/DOCX tests and OCR failure test pass; full suite passed (386, one Starlette deprecation warning). Only synthetic SRS content was used.
+
+## ADR-055 — Treat short requirement length as a review cue, not a classifier (2026-11-24)
+- **Status:** Accepted
+- **Context:** The proposal asks the tool to flag unusually short or incomplete requirement statements for human review. A deterministic length rule can identify a subset for inspection, but cannot establish whether the text is incomplete or ambiguous.
+- **Decision:** Route non-empty requirement text shorter than a configurable minimum (default 20 characters) to human review. `queue-create --minimum-requirement-characters N` sets the minimum and `0` disables the cue. Persist the effective queue eligibility configuration in its manifest. Do not alter any dependency label or verification status.
+- **Consequences:** The review queue can highlight short text consistently while leaving semantic interpretation to the reviewer. The default threshold is heuristic and may need adjustment for a real corpus; it is not a validated language rule.
+- **Verification (TASK-P40):** Focused queue/CLI/UI integration tests passed (45); full suite passed (387, one existing Starlette deprecation warning). All 311 data files retained their SHA-256 hashes. Synthetic fixtures only.
+
+## ADR-056 — Validate RAG chunk progress and zero-result behavior (2026-11-24)
+- **Status:** Accepted
+- **Context:** SRS chunks advance by `chunk_size - overlap`; invalid values could yield a zero or negative step. The retrieval method also interpreted an explicit `k=0` as the configured default because it used truthiness.
+- **Decision:** Require a positive integer chunk size and integer overlap satisfying `0 <= overlap < chunk_size`; require `k` to be a non-negative integer. Treat explicit `k=0` as a request for no chunks and return before embedding.
+- **Consequences:** Malformed settings fail promptly with clear `ValueError`s instead of hanging or silently changing the request. Default configuration and positive retrieval behavior remain intact.
+- **Verification (TASK-P41):** Focused retrieval/detector tests passed (31); full suite passed (398, one existing Starlette deprecation warning). All 311 data files retained their SHA-256 hashes.
+
+## ADR-057 — Allow per-request API control of SRS context retrieval (2026-11-24)
+- **Status:** Accepted
+- **Context:** API payloads already accepted SRS text, but RAG was enabled only by server-wide configuration, disabled by default. This made the API's optional context field appear usable when it was ignored by default.
+- **Decision:** Add optional `use_rag` to single and batch requests and detector methods. Explicit booleans override the server setting; `None` preserves the existing configured default. Keep RAG disabled by default.
+- **Consequences:** API clients can opt into SRS context retrieval for a request without mutating shared server configuration. Embeddings initialize only for enabled RAG with non-empty context. This is interface wiring, not evidence of model-quality gains.
+- **Verification (TASK-P42):** Focused API/detector/retrieval suite passed (49); full suite passed (400, one existing Starlette deprecation warning). A controlled API regression confirms the retrieved marker is in the prompt.
+
+## ADR-058 — Keep imported replication labels unmapped without a source crosswalk (2026-11-24)
+- **Status:** Accepted
+- **Context:** The paper defines Implements as a higher-level requirement fulfilled by a lower-level requirement. The imported workbook uses Implemented by; an example corresponds to the paper's example with workbook columns reversed, but the source material provides no explicit normalization rule. Separately, the paper license does not establish the rights for the packaged datasets.
+- **Decision:** Preserve raw imported labels and keep them out of mapped metrics and redistribution until authoritative documentation provides the source-label crosswalk and dataset-specific rights. Do not infer the crosswalk from a matching example alone.
+- **Consequences:** The semantic definition in the paper is no longer treated as unknown, while the import-to-paper mapping and dataset redistribution remain distinct active blockers. Existing raw data and provenance stay unchanged.
+- **Evidence:** TASK-P43 read-only review of arXiv v2 and all four local workbooks; an openpyxl audit found zero exact/reversed duplicate pairs and zero incomplete rows across 813 entries. git diff --check passed. No tests or data edits were needed.
+
+## ADR-059 — Keep live smoke predictions explicitly synthetic (2026-11-24)
+- **Status:** Accepted
+- **Context:** The real application can be exercised with a built-in synthetic SRS and MockLLM, while no rights-cleared, independently verified dataset is currently available for a trustworthy end-to-end research evaluation.
+- **Decision:** Use only clearly labeled synthetic inputs and the Mock provider for interface smoke checks. Preserve generated candidates as unlabeled/provisional and do not turn a UI prediction into human ground truth, a dataset release, or benchmark evidence.
+- **Consequences:** Product navigation, serialization, and request plumbing can be checked without paid services or fabricated evidence. Prediction quality, reviewer agreement/effort, and replication metrics still require actual rights-cleared data and human review.
+- **Verification (TASK-P44):** UI extraction persisted three unlabeled provisional pairs; BM25/MockLLM rendered one result with the calibration/verification disclaimer. CLI help exited 0 and local API root/health returned HTTP 200.
+
+## ADR-060 — Keep full-suite verification offline and data-protected (2026-11-24)
+- **Status:** Accepted
+- **Context:** The Windows API `TestClient` can stall inside the restricted socket sandbox, while tests must not mutate imported research datasets or trigger model downloads.
+- **Decision:** Run the complete suite with the existing project virtual environment outside the restricted socket sandbox, set `TEMP`/`TMP` to `.pytest-tmp`, disable Hugging Face network access, and compare a SHA-256 manifest of `data/` before and after.
+- **Consequences:** This yields reproducible local test evidence while keeping test scratch output separate and detecting unexpected dataset changes. It does not substitute for hosted CI or clean-machine installation testing. The TestClient warning is currently non-fatal; `httpx2` requires Python >=3.11, so replacing the current HTTPX fallback requires a deliberate strategy that preserves the declared Python >=3.10 support.
+- **Verification (TASK-P45):** 400 passed, 1 Starlette deprecation warning, exit 0; all 312 data file paths and SHA-256 values matched before and after.
+
+## ADR-061 — Exercise API tests with in-process ASGI transport (2026-11-24)
+- **Status:** Accepted
+- **Context:** The API test module used Starlette `TestClient`, which launches an AnyIO worker portal. Its HTTPX fallback emits a deprecation warning in current Starlette, and its Windows Proactor/socket-pair path is unreliable in the restricted sandbox. Adding `httpx2` is not a clean universal fix because current releases require Python >=3.11 while the project supports Python >=3.10.
+- **Decision:** Keep synchronous pytest tests but send requests through the existing HTTPX `AsyncClient` and `ASGITransport`, invoking each request with `asyncio.run`. The FastAPI app has no lifespan hooks, so this covers the route behavior exercised by the module without TestClient's worker portal.
+- **Consequences:** No dependency or production-code change is needed, and the suite avoids the TestClient deprecation. Windows runs still need an environment that allows asyncio's socket setup; the restricted sandbox may block event-loop startup independently of the request transport.
+- **Verification (TASK-P46):** Root test 1 passed; API module 18 passed; full suite 400 passed with no warnings. All 312 `data/` files retained identical hashes.
+
+## ADR-062 — Use CPU-only PyTorch in the general Docker images (2026-11-24)
+- **Status:** Accepted
+- **Context:** The Compose API and UI services use CPU inference, but an unqualified Linux `pip install` of Torch selected a 555 MB CUDA wheel and then a 553 MB cuDNN wheel, with more NVIDIA packages queued. This inflated an ordinary local deployment without GPU use.
+- **Decision:** Install Torch from PyTorch's CPU wheel index in the Docker builder before installing the declared project requirements. The requirements then reuse the installed CPU build.
+- **Consequences:** The general Docker images avoid unnecessary NVIDIA runtime packages. GPU-specific Docker deployment is not configured by this decision.
+- **Verification (TASK-P47):** Both images built; build output reports `torch-2.14.1+cpu`. Compose API root/health and Streamlit root/health returned successful responses. Docker management API later became unstable, and browser visual inspection was not completed.
+- **Follow-up evidence:** A fresh bounded Docker CLI info request timed out after 20 seconds; API health and Streamlit health still returned HTTP 200/`ok`. This does not establish container/image inventory or browser-rendered UI state.
+
+## ADR-063 — Keep external SRS smoke artifacts temporary and non-evaluative (2026-11-24)
+- **Status:** Accepted
+- **Context:** Product extraction and candidate generation needed a non-synthetic input trial, but no project SRS has yet been cleared for dataset redistribution or independently labeled.
+- **Decision:** Use a repository-licensed public SRS only as a local parser/product smoke input, keep its copy and all outputs under workspace-local untracked `.pytest-tmp`, and do not treat keyword counts, heuristic labels, or exhaustive candidate enumeration as gold quality or benchmark evidence.
+- **Consequences:** The extraction pipeline receives a realistic Markdown document without modifying imported datasets or creating a release. Human source review, source permissions for any retained/shared data, and independently verified dependency labels remain prerequisites for research claims.
+- **Verification (TASK-P48):** 99 extracted records preserved source locations; 4,851 candidate pairs were exhaustively generated; all labels remained provisional and the queue contained zero reviewer decisions. Focused CLI regression passed (1 test).
+
+## ADR-064 — Report candidate-pair coverage separately from dependency recall (2026-11-24)
+- **Status:** Accepted
+- **Context:** The candidate generator records how much of the exhaustive pair universe each retrieval strategy emits. This software coverage number can be mistaken for recall of actual dependency links.
+- **Decision:** Report candidate-space coverage and omitted-pair count as workload/space diagnostics only. Report positive dependency recall only after independently verified labels exist for an appropriate sample that includes pairs omitted by the strategy.
+- **Consequences:** Current top-k strategy measurements are not used to assert candidate quality or choose research settings. Review sampling must capture its frame, selection probability, and both candidate and omitted strata.
+- **Verification (TASK-P49):** For 99 requirements and 4,851 possible pairs at `top_k=5`, BM25 emitted 327 (6.74%), dense 335 (6.91%), hybrid 325 (6.70%); all-pairs emitted all 4,851. No labels were available, so positive recall remains unknown.
+- **Operational note:** Dense encoding used the configured ignored cache directory `data/embeddings`; future trial commands must override `CACHE_DIR` to a workspace temporary directory when avoiding writes below `data/`.
+
+## ADR-065 — Stratify a small blinded pilot across selected and omitted pairs (2026-11-24)
+- **Status:** Accepted for an operational pilot only
+- **Context:** Measuring positive dependency recall for hybrid candidate generation requires labels both for emitted pairs and for pairs the strategy omits. Reviewing the entire 4,851-pair universe is too large for an initial pilot.
+- **Decision:** Prepare a fixed-seed sample of 50 of 325 hybrid-top-5 pairs and 50 of 4,526 omitted pairs. Give reviewers one shuffled, opaque-ID file with no labels or stratum information; store population counts, inclusion probabilities, and design weights separately for post-review analysis.
+- **Consequences:** If both strata contain adjudicated labels, a weighted estimate can account for their different sampling fractions. The 100-pair sample is an operational pilot only and is not powered or preregistered; no positive-recall claim can be made before real review and appropriate analysis.
+- **Verification (TASK-P50):** 100 unlabeled/provisional records validated, exactly 50 per stratum; the reviewer-file hash is bound in the pilot manifest. No human data was entered.
+- The current local suite passed **400 tests with no warnings in 132.31s** using temporary `TEMP`, `TMP`, and `CACHE_DIR` plus `HF_HUB_OFFLINE=1`; this verifies software only, not the pilot's research claims.
+
+## ADR-066 — Estimate candidate positive recall only from verified stratified labels (2026-11-24)
+- **Status:** Accepted
+- **Context:** The pilot oversamples strategy-selected pairs relative to omitted pairs. A raw positive fraction or independent reviewer vector would not be a valid positive-recall estimate or verified ground truth.
+- **Decision:** Use post-stratified positive totals and their ratio for candidate recall, after requiring exact sample-ID coverage and coherent human `VERIFIED` adjudications. Pin and validate the sample, context, analysis map, candidate output, and full pair universe by hash. Fail closed for incomplete/ambiguous labels; never adjudicate automatically. Report a finite-population-corrected, linearized normal interval only when non-degenerate and label the result exploratory.
+- **Consequences:** Future reports can account for different selected/omitted sampling fractions without treating provisional suggestions as labels. The 100-pair pilot's estimate remains unproven and potentially imprecise; real adjudication and appropriate research review are prerequisites.
+- **Verification (TASK-P51):** Final combined analysis/provenance/release suite: 36 passed; final complete suite: 413 passed with no warnings outside the restricted Windows socket environment. A regression verifies `population_pair_count` reports the actual universe size. No human data was supplied.
+
+## ADR-067 — Synthetic data is ineligible as research evidence (2026-11-24)
+- **Status:** Accepted
+- **Context:** Synthetic demo records can resemble reviewed annotations. A caller-supplied verified status or human-looking annotator identity must not let synthetic fixtures enter retrieval evidence, evaluation ground truth, or released datasets.
+- **Decision:** Carry explicit synthetic markers and source identities through requirement, pair, provenance, candidate, CSV, and review data. Exclude marked records from retrieval pools and verified exports; reject them as evaluation ground truth even if they carry verified provenance. Do not infer synthetic status solely from an annotator name.
+- **Consequences:** Existing unmarked records remain compatible. Synthetic demo output remains useful for demonstrations but cannot be presented as verified research data. Genuine human review and rights-cleared source material are still required.
+- **Verification:** TASK-P52 focused suite: 172 passed; full local suite: 424 passed. Tests use controlled synthetic fixtures only.
+
+## ADR-068 — Verify system-disjoint splits from partition contents (2026-11-24)
+- **Status:** Accepted
+- **Context:** The full evaluation runner trusted the split metadata's declared strategy and did not recompute overlap across the actual train/dev/test files. A stale or inaccurate metadata report could therefore permit evaluation of a contaminated system-disjoint split.
+- **Decision:** For a declared system-disjoint strategy, validate actual system identities, requirement IDs, and pair IDs before any ground-truth filtering or model fit. Raise a typed error carrying invalid IDs; include a passing split-integrity audit in the report.
+- **Compatibility:** Pair-level fixtures remain pair-level and continue exercising retrieval contamination behavior; non-system strategies are not subjected to the system-disjoint check. Duplicate prediction errors preserve the existing ValueError compatibility while carrying IDs.
+- **Verification:** TASK-P53 focused suite 45 passed; full suite 428 passed; all 412 `data/` file hashes unchanged.

@@ -36,16 +36,20 @@ from scripts.run_full_evaluation import (
     build_safe_retrieval_pool,
     check_ground_truth_eligibility,
     run_evaluation,
+    _serialize_report,
 )
 from leredd.data_models import (
     AnnotationProvenance,
     AnnotationSource,
     DependencyType,
     Prediction,
+    PredictionValidationStatus,
     Requirement,
     RequirementPair,
     VerificationStatus,
 )
+from leredd.evaluation import Evaluator
+from leredd.evaluation import SplitOverlapError
 
 
 # ---------------------------------------------------------------------------
@@ -80,11 +84,103 @@ def _provisional_provenance() -> AnnotationProvenance:
     )
 
 
-def _verified_provenance() -> AnnotationProvenance:
+def _verified_provenance(
+    accepted_label: DependencyType = DependencyType.REQUIRES,
+) -> AnnotationProvenance:
     return AnnotationProvenance(
         source=AnnotationSource.HUMAN,
         status=VerificationStatus.VERIFIED,
+        annotator_id="synthetic-test-reviewer",
+        accepted_label=accepted_label,
     )
+
+
+def test_full_runner_rechecks_actual_system_disjoint_partitions(tmp_path):
+    split_dir = tmp_path / "system-split"
+    split_dir.mkdir()
+
+    def pair(pair_id, req_a_id, req_b_id):
+        return {
+            "id": pair_id,
+            "req_a": {"id": req_a_id, "text": "Requirement A", "system": "ADB"},
+            "req_b": {"id": req_b_id, "text": "Requirement B", "system": "ADB"},
+            "dependency_type": "Requires",
+            "provenance": None,
+        }
+
+    (split_dir / "train_pairs.json").write_text(
+        json.dumps([pair("PAIR-TRAIN", "TRAIN-A", "TRAIN-B")]), encoding="utf-8"
+    )
+    (split_dir / "dev_pairs.json").write_text("[]", encoding="utf-8")
+    (split_dir / "test_pairs.json").write_text(
+        json.dumps([pair("PAIR-TEST", "TEST-A", "TEST-B")]), encoding="utf-8"
+    )
+    (split_dir / "split_metadata.json").write_text(
+        json.dumps({"summary": {"strategy": "system"}}), encoding="utf-8"
+    )
+
+    with pytest.raises(SplitOverlapError, match="ADB") as exc_info:
+        run_evaluation(
+            split_dir=str(split_dir),
+            output_path=str(tmp_path / "must-not-be-created.json"),
+        )
+
+    assert exc_info.value.invalid_ids == ["ADB"]
+    assert not (tmp_path / "must-not-be-created.json").exists()
+
+
+def test_evaluation_report_records_confidence_review_coverage():
+    pairs = [
+        _make_pair("PAIR-SCREEN-1", "REQ-SCREEN-1A", "REQ-SCREEN-1B"),
+        _make_pair("PAIR-SCREEN-2", "REQ-SCREEN-2A", "REQ-SCREEN-2B"),
+    ]
+    predictions = [
+        Prediction(
+            pair_id=pairs[0].id,
+            dependency_type=DependencyType.REQUIRES,
+            rationale="synthetic low-confidence prediction",
+            confidence=2,
+            validation_status=PredictionValidationStatus.REQUIRES_REVIEW,
+            validation_threshold=4,
+        ),
+        Prediction(
+            pair_id=pairs[1].id,
+            dependency_type=DependencyType.REQUIRES,
+            rationale="synthetic high-confidence prediction",
+            confidence=5,
+            validation_status=PredictionValidationStatus.PASSED_THRESHOLD,
+            validation_threshold=4,
+        ),
+    ]
+    metrics = Evaluator.evaluate(
+        pairs,
+        predictions,
+        system_name="SYNTHETIC",
+        model_name="controlled",
+    )
+    serialized = _serialize_report(
+        metrics,
+        model_tag="controlled",
+        note="synthetic test",
+        predictions=predictions,
+        n_test=len(pairs),
+    )
+
+    assert serialized["predictions"][pairs[0].id] == "Requires"
+    assert serialized["confidence_screening"] == {
+        "threshold": 4,
+        "screened_count": 2,
+        "passed_threshold_count": 1,
+        "review_required_count": 1,
+        "review_required_rate": 0.5,
+        "not_evaluated_count": 0,
+        "threshold_disabled_count": 0,
+        "interpretation": (
+            "Review routing is based on self-reported Likert confidence. "
+            "It does not change predicted classes, establish annotation truth, "
+            "or represent calibrated probability."
+        ),
+    }
 
 
 @pytest.fixture(scope="module")
@@ -98,9 +194,9 @@ def cached_evaluation_report_path():
         split_dir.mkdir()
         adb = [
             {
-                "id": f"PAIR-ADB-{i:03d}",
-                "req_a": {"id": f"REQ-ADB-{i*2:03d}", "text": f"The system shall do action {i}.", "system": "ADB"},
-                "req_b": {"id": f"REQ-ADB-{i*2+1:03d}", "text": f"The system shall support feature {i}.", "system": "ADB"},
+                "id": f"PAIR-DEMO-TRAIN-{i:03d}",
+                "req_a": {"id": f"REQ-DEMO-TRAIN-{i*2:03d}", "text": f"The system shall do action {i}.", "system": "DEMO-TRAIN"},
+                "req_b": {"id": f"REQ-DEMO-TRAIN-{i*2+1:03d}", "text": f"The system shall support feature {i}.", "system": "DEMO-TRAIN"},
                 "dependency_type": dep,
                 "provenance": None,
             }
@@ -113,9 +209,9 @@ def cached_evaluation_report_path():
         (split_dir / "train_pairs.json").write_text(json.dumps(adb), encoding="utf-8")
         tja = [
             {
-                "id": f"PAIR-TJA-{i:03d}",
-                "req_a": {"id": f"REQ-TJA-{i*2:03d}", "text": f"TJA shall perform task {i}.", "system": "TJA"},
-                "req_b": {"id": f"REQ-TJA-{i*2+1:03d}", "text": f"TJA shall handle event {i}.", "system": "TJA"},
+                "id": f"PAIR-DEMO-TEST-{i:03d}",
+                "req_a": {"id": f"REQ-DEMO-TEST-{i*2:03d}", "text": f"Test demo shall perform task {i}.", "system": "DEMO-TEST"},
+                "req_b": {"id": f"REQ-DEMO-TEST-{i*2+1:03d}", "text": f"Test demo shall handle event {i}.", "system": "DEMO-TEST"},
                 "dependency_type": dep,
                 "provenance": None,
             }
@@ -124,9 +220,9 @@ def cached_evaluation_report_path():
         (split_dir / "test_pairs.json").write_text(json.dumps(tja), encoding="utf-8")
         apa = [
             {
-                "id": f"PAIR-APA-{i:03d}",
-                "req_a": {"id": f"REQ-APA-{i*2:03d}", "text": f"APA shall comply with rule {i}.", "system": "APA"},
-                "req_b": {"id": f"REQ-APA-{i*2+1:03d}", "text": f"APA shall verify condition {i}.", "system": "APA"},
+                "id": f"PAIR-DEMO-DEV-{i:03d}",
+                "req_a": {"id": f"REQ-DEMO-DEV-{i*2:03d}", "text": f"Dev demo shall comply with rule {i}.", "system": "DEMO-DEV"},
+                "req_b": {"id": f"REQ-DEMO-DEV-{i*2+1:03d}", "text": f"Dev demo shall verify condition {i}.", "system": "DEMO-DEV"},
                 "dependency_type": dep,
                 "provenance": None,
             }
@@ -298,7 +394,7 @@ class TestCheckGroundTruthEligibility:
         assert any("REJECTED" in warning and status.value in warning for warning in warnings)
 
     def test_verified_pair_accepted(self):
-        """Explicitly VERIFIED pairs are accepted."""
+        """Human-verified records with an attributable, matching label are accepted."""
         pair = _make_pair(
             "P-VER", "REQ-A-001", "REQ-A-002",
             provenance=_verified_provenance()
@@ -306,6 +402,89 @@ class TestCheckGroundTruthEligibility:
         eligible, warnings = check_ground_truth_eligibility([pair], "TEST", strict=True)
 
         assert len(eligible) == 1
+
+    @pytest.mark.parametrize(
+        ("provenance", "problem"),
+        [
+            (
+                AnnotationProvenance(
+                    source=AnnotationSource.LLM,
+                    status=VerificationStatus.VERIFIED,
+                    annotator_id="machine",
+                    accepted_label=DependencyType.REQUIRES,
+                ),
+                "not human",
+            ),
+            (
+                AnnotationProvenance(
+                    source=AnnotationSource.HUMAN,
+                    status=VerificationStatus.VERIFIED,
+                    accepted_label=DependencyType.REQUIRES,
+                ),
+                "missing reviewer_id and annotator_id",
+            ),
+            (
+                AnnotationProvenance(
+                    source=AnnotationSource.HUMAN,
+                    status=VerificationStatus.VERIFIED,
+                    annotator_id="   ",
+                    reviewer_id="",
+                    accepted_label=DependencyType.REQUIRES,
+                ),
+                "missing reviewer_id and annotator_id",
+            ),
+            (
+                AnnotationProvenance(
+                    source=AnnotationSource.HUMAN,
+                    status=VerificationStatus.VERIFIED,
+                    reviewer_id="human_reviewer_1",
+                    accepted_label=DependencyType.REQUIRES,
+                ),
+                "generic placeholder identity",
+            ),
+            (
+                AnnotationProvenance(
+                    source=AnnotationSource.HUMAN,
+                    status=VerificationStatus.VERIFIED,
+                    annotator_id="reviewer",
+                ),
+                "missing accepted_label",
+            ),
+            (
+                AnnotationProvenance(
+                    source=AnnotationSource.HUMAN,
+                    status=VerificationStatus.VERIFIED,
+                    annotator_id="reviewer",
+                    accepted_label=DependencyType.CONFLICTS,
+                ),
+                "does not match dependency_type",
+            ),
+        ],
+    )
+    def test_contradictory_verified_provenance_is_rejected(self, provenance, problem):
+        pair = _make_pair(
+            "P-CONTRADICTORY", "REQ-A-001", "REQ-A-002", provenance=provenance
+        )
+
+        with pytest.raises(GroundTruthViolationError, match=problem):
+            check_ground_truth_eligibility([pair], "TEST", strict=True)
+
+        eligible, warnings = check_ground_truth_eligibility(
+            [pair], "TEST", strict=False
+        )
+        assert eligible == []
+        assert any("REJECTED" in warning and problem in warning for warning in warnings)
+
+        from leredd.data_models import Prediction
+
+        prediction = Prediction(
+            pair_id=pair.id,
+            dependency_type=DependencyType.REQUIRES,
+            rationale="Controlled regression assertion.",
+            confidence=5,
+        )
+        with pytest.raises(ValueError, match=problem):
+            Evaluator.evaluate([pair], [prediction])
 
     def test_none_dependency_type_skipped(self):
         """Pairs with dependency_type=None are skipped (cannot evaluate)."""
@@ -338,7 +517,7 @@ class TestCheckGroundTruthEligibility:
 class TestRunEvaluationIntegration:
     """Integration tests using a minimal fake split directory."""
 
-    def _write_fake_split(self, split_dir: Path):
+    def _write_fake_split(self, split_dir: Path, strategy: str = "system"):
         """Write minimal JSON files for train, dev, test and split_metadata."""
         # ADB train pairs (system=ADB)
         adb_pairs = [
@@ -385,7 +564,7 @@ class TestRunEvaluationIntegration:
 
         metadata = {
             "summary": {
-                "strategy": "system",
+                "strategy": strategy,
                 "seed": 42,
                 "counts": {
                     "train": {"pairs": 10, "requirements": 15},
@@ -409,12 +588,14 @@ class TestRunEvaluationIntegration:
 
             required_fields = [
                 "schema_version", "script_version", "run_timestamp",
-                "configuration", "split_inventory", "ground_truth_eligibility",
+                "configuration", "split_integrity", "split_inventory", "ground_truth_eligibility",
                 "leakage_audit", "model_results", "statistical_tests",
                 "evaluation_limitations", "split_metadata",
             ]
             for field in required_fields:
                 assert field in saved, f"Missing required field '{field}' in report."
+            assert saved["split_integrity"]["checked"] is True
+            assert saved["split_integrity"]["is_disjoint"] is True
 
             assert "BERTBaseline" in saved["model_results"]
             assert "TFIDF_LSA" in saved["model_results"]
@@ -424,6 +605,22 @@ class TestRunEvaluationIntegration:
                 "LEREDD_MockLLM must not appear in model_results — it was a copy-paste "
                 "duplicate of LEREDD_Hybrid (ISSUE-011)."
             )
+
+            # The report must describe this supplied fixture, not legacy hard-coded systems.
+            assert saved["split_inventory"]["train"]["systems"] == ["DEMO-TRAIN"]
+            assert saved["split_inventory"]["dev"]["systems"] == ["DEMO-DEV"]
+            assert saved["split_inventory"]["test"]["systems"] == ["DEMO-TEST"]
+            assert saved["ground_truth_eligibility"]["raw_counts"] == {
+                "train": 10, "dev": 5, "test": 5
+            }
+            assert saved["ground_truth_eligibility"]["eligible_counts"] == {
+                "train": 10, "dev": 5, "test": 5
+            }
+            assert saved["ground_truth_eligibility"]["provenance_free_count"] == 20
+            assert saved["ground_truth_eligibility"]["eligible_provenance_count"] == 0
+            assert "accepted conditionally" in saved["ground_truth_eligibility"]["provenance_note"]
+            assert "DEMO-TRAIN" in saved["model_results"]["BERTBaseline"]["note"]
+            assert "DEMO-TEST" in saved["evaluation_limitations"][0]
 
     def test_no_test_req_ids_in_retrieval_pool_logged(self, cached_evaluation_report_path):
         """Leakage audit in report confirms 0 contaminated pairs for disjoint split."""
@@ -442,10 +639,10 @@ class TestRunEvaluationIntegration:
             report = json.load(f)
 
             excluded = set(report["leakage_audit"]["excluded_req_ids"])
-            # TJA test req IDs
+            # Test fixture requirement IDs are excluded from the retrieval pool.
             for i in range(1, 6):
-                assert f"REQ-TJA-{i*2:03d}" in excluded
-                assert f"REQ-TJA-{i*2+1:03d}" in excluded
+                assert f"REQ-DEMO-TEST-{i*2:03d}" in excluded
+                assert f"REQ-DEMO-TEST-{i*2+1:03d}" in excluded
 
     def test_provisional_pairs_in_test_raise_error(self):
         """If a PROVISIONAL pair is written into the test partition, run_evaluation raises."""
@@ -493,7 +690,7 @@ class TestRunEvaluationIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             split_dir = Path(tmpdir) / "system_disjoint"
             split_dir.mkdir()
-            self._write_fake_split(split_dir)
+            self._write_fake_split(split_dir, strategy="pair")
 
             # Inject a shared req ID between train and test
             contaminated_train = [
@@ -520,7 +717,7 @@ class TestRunEvaluationIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             split_dir = Path(tmpdir) / "system_disjoint"
             split_dir.mkdir()
-            self._write_fake_split(split_dir)
+            self._write_fake_split(split_dir, strategy="pair")
 
             # Inject a shared req ID between train and test
             contaminated_train = [
@@ -620,6 +817,17 @@ class TestRunEvaluationIntegration:
             # Primary demarcation: top-level configuration field
             assert report["configuration"]["leredd_provider"] == "mock"
             assert "NOT a real LLM evaluation" in report["configuration"]["leredd_note"]
+
+            ablation_validity = report["ablation_validity"]
+            assert ablation_validity["is_empirical_model_evidence"] is False
+            assert ablation_validity["retrieval_strategy"]["status"] == "not_informative_with_mock_backend"
+            assert ablation_validity["in_context_examples"]["status"] == "not_informative_with_mock_backend"
+            assert ablation_validity["confidence_thresholding"]["status"] == "not_informative_with_mock_backend"
+            assert "fixed confidence 5" in ablation_validity["confidence_thresholding"]["reason"]
+            ablation_report = Path(cached_evaluation_report_path).parent / "ablation_report.json"
+            saved_ablation = json.loads(ablation_report.read_text(encoding="utf-8"))
+            assert saved_ablation["ablation_validity"] == ablation_validity
+            assert "does not interpret the prompt's retrieved-example block" in saved_ablation["ablation_validity"]["in_context_examples"]["reason"]
 
             # LEREDD_Hybrid note must identify the proposed system and mock backend context
             hybrid_note = report["model_results"]["LEREDD_Hybrid"]["note"]

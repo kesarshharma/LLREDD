@@ -24,6 +24,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from leredd.bm25_retrieval import BM25Retriever
+from leredd.config import get_config
 from leredd.data_models import (
     AnnotationProvenance,
     AnnotationSource,
@@ -32,8 +33,9 @@ from leredd.data_models import (
     RequirementPair,
     VerificationStatus,
 )
+from leredd.synthetic import is_synthetic, synthetic_source_identity
 from leredd.hybrid_retrieval import HybridRetriever
-from leredd.retrieval import ExampleRetriever
+from leredd.retrieval import RequirementRetriever
 
 
 class GenerationStrategy(str, Enum):
@@ -53,6 +55,21 @@ class CandidateGenerationManifest(BaseModel):
     top_k: Optional[int] = Field(default=None, description="Top-k retrieval parameter if retrieval strategy used")
     max_candidate_limit: Optional[int] = Field(default=None, description="Configured maximum candidate limit if set")
     generated_count: int = Field(description="Actual number of candidate pairs generated")
+    pair_universe_count: int = Field(
+        default=0,
+        description="Number of possible unordered pairs among unique input requirements",
+    )
+    pair_space_recall: Optional[float] = Field(
+        default=None,
+        description=(
+            "Fraction of the complete unordered pair universe emitted by this run; "
+            "this is candidate coverage, not recall of labeled dependencies"
+        ),
+    )
+    uncovered_pair_count: int = Field(
+        default=0,
+        description="Possible unordered pairs not present in this run's candidate output",
+    )
     is_exhaustive: bool = Field(description="True if generation produced all candidate pairs without truncation")
     truncated_count: int = Field(default=0, description="Number of candidate pairs omitted due to safety limits")
     created_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
@@ -85,7 +102,15 @@ class CandidateGenerator:
 
         Returns:
             Tuple of (List[RequirementPair], CandidateGenerationManifest)
+
+        The manifest's pair_space_recall measures coverage against all possible
+        unordered pairs in the deduplicated input requirement set. It is not a
+        positive-class recall metric because no dependency labels are consulted.
         """
+        if strategy != GenerationStrategy.ALL_PAIRS and (
+            not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1
+        ):
+            raise ValueError("top_k must be a positive integer for retrieval strategies.")
         if not requirements:
             logger.warning("Empty requirement list provided to CandidateGenerator.")
             manifest = CandidateGenerationManifest(
@@ -95,6 +120,9 @@ class CandidateGenerator:
                 top_k=top_k,
                 max_candidate_limit=max_candidates,
                 generated_count=0,
+                pair_universe_count=0,
+                pair_space_recall=None,
+                uncovered_pair_count=0,
                 is_exhaustive=True,
                 truncated_count=0,
             )
@@ -116,9 +144,9 @@ class CandidateGenerator:
             theoretical_total = (n * (n - 1)) // 2
         else:
             raw_candidates = CandidateGenerator._generate_retrieval_candidates(
-                unique_reqs, strategy=strategy, top_k=top_k or 5, source_identity=source_identity, retriever=retriever
+                unique_reqs, strategy=strategy, top_k=top_k, source_identity=source_identity, retriever=retriever
             )
-            theoretical_total = len(raw_candidates)
+            theoretical_total = (n * (n - 1)) // 2
 
         # Truncate if max_candidates limit is set
         truncated_count = 0
@@ -133,6 +161,18 @@ class CandidateGenerator:
                 f"({truncated_count} candidates omitted)."
             )
 
+        candidate_keys = set()
+        for pair in raw_candidates:
+            pair_req_a_id = (pair.req_a.id or pair.req_a.text.strip().lower()).upper()
+            pair_req_b_id = (pair.req_b.id or pair.req_b.text.strip().lower()).upper()
+            if (
+                pair_req_a_id in seen_req_ids
+                and pair_req_b_id in seen_req_ids
+                and pair_req_a_id != pair_req_b_id
+            ):
+                candidate_keys.add(get_canonical_pair_key(pair.req_a, pair.req_b))
+
+        covered_pair_count = len(candidate_keys)
         manifest = CandidateGenerationManifest(
             source_identity=source_identity,
             input_requirement_count=n,
@@ -140,7 +180,13 @@ class CandidateGenerator:
             top_k=top_k if strategy != GenerationStrategy.ALL_PAIRS else None,
             max_candidate_limit=max_candidates,
             generated_count=len(raw_candidates),
-            is_exhaustive=is_exhaustive and (len(raw_candidates) == theoretical_total),
+            pair_universe_count=theoretical_total,
+            pair_space_recall=(covered_pair_count / theoretical_total if theoretical_total else None),
+            uncovered_pair_count=theoretical_total - covered_pair_count,
+            is_exhaustive=(
+                is_exhaustive
+                and len(raw_candidates) == theoretical_total
+            ),
             truncated_count=truncated_count,
             metadata={
                 "unique_requirement_count": n,
@@ -180,6 +226,10 @@ class CandidateGenerator:
                     annotator_id="candidate_generator_all_pairs",
                     evidence_text=f"Exhaustive candidate generation from {source_identity}"
                 )
+                synthetic = is_synthetic(req_a) or is_synthetic(req_b)
+                origin = synthetic_source_identity(req_a, req_b) if synthetic else None
+                prov.synthetic = synthetic
+                prov.source_identity = origin
 
                 pair_id = f"CAND-{source_identity.upper()}-{pair_counter:05d}"
                 candidates.append(
@@ -189,6 +239,8 @@ class CandidateGenerator:
                         req_b=req_b,
                         dependency_type=None,  # Explicitly unlabeled candidate
                         provenance=prov,
+                        synthetic=synthetic,
+                        source_identity=origin,
                     )
                 )
                 pair_counter += 1
@@ -204,32 +256,59 @@ class CandidateGenerator:
         retriever: Optional[Any] = None
     ) -> List[RequirementPair]:
         """Generate candidate pairs by retrieving top-k matching requirements for each requirement."""
-        if strategy == GenerationStrategy.BM25:
-            retriever_inst = retriever or BM25Retriever(requirements)
-        elif strategy == GenerationStrategy.DENSE:
-            retriever_inst = retriever or ExampleRetriever()
-        elif strategy == GenerationStrategy.HYBRID:
-            retriever_inst = retriever or HybridRetriever()
-        else:
+        if strategy not in {
+            GenerationStrategy.BM25,
+            GenerationStrategy.DENSE,
+            GenerationStrategy.HYBRID,
+        }:
             raise ValueError(f"Unsupported retrieval strategy: {strategy}")
+
+        bm25_retriever = (
+            BM25Retriever(requirements)
+            if strategy in (GenerationStrategy.BM25, GenerationStrategy.HYBRID)
+            else None
+        )
+        if strategy == GenerationStrategy.DENSE:
+            dense_retriever = retriever or RequirementRetriever(requirements)
+        elif strategy == GenerationStrategy.HYBRID:
+            # HybridRetriever is accepted as an RRF configuration carrier; its
+            # pair-level dense retriever cannot rank individual Requirements.
+            dense_retriever = (
+                RequirementRetriever(requirements)
+                if isinstance(retriever, HybridRetriever)
+                else (retriever or RequirementRetriever(requirements))
+            )
+        else:
+            dense_retriever = None
+        rrf_k = get_config().rrf_k
+        dense_weight = 1.0
+        bm25_weight = 1.0
+        if isinstance(retriever, HybridRetriever):
+            rrf_k = retriever.rrf_k
+            dense_weight = retriever.dense_weight
+            bm25_weight = retriever.bm25_weight
 
         seen_canonical_keys: Set[str] = set()
         candidates: List[RequirementPair] = []
         pair_counter = 1
 
         for req in requirements:
-            if isinstance(retriever_inst, BM25Retriever):
-                scored_results = retriever_inst.retrieve(req, k=top_k + 1)
-            elif isinstance(retriever_inst, HybridRetriever):
-                # For string/requirement query against corpus
-                raw_rankings = [
-                    [r for score, r in retriever_inst.bm25_retriever.retrieve(req, k=top_k + 1)],
-                ]
-                scored_results = HybridRetriever.reciprocal_rank_fusion(raw_rankings, top_k=top_k + 1)
+            if strategy == GenerationStrategy.BM25:
+                scored_results = bm25_retriever.retrieve(req, k=top_k + 1)
+            elif strategy == GenerationStrategy.DENSE:
+                scored_results = dense_retriever.retrieve(req, k=top_k + 1)
             else:
-                # Dense retriever fallback
-                bm_temp = BM25Retriever(requirements)
-                scored_results = bm_temp.retrieve(req, k=top_k + 1)
+                dense_results = dense_retriever.retrieve(req, k=top_k + 1)
+                bm25_results = bm25_retriever.retrieve(req, k=top_k + 1)
+                scored_results = HybridRetriever.reciprocal_rank_fusion(
+                    rankings=[
+                        [candidate for _, candidate in dense_results],
+                        [candidate for _, candidate in bm25_results],
+                    ],
+                    weights=[dense_weight, bm25_weight],
+                    rrf_k=rrf_k,
+                    top_k=top_k + 1,
+                )
 
             for score, cand_req in scored_results:
                 if not isinstance(cand_req, Requirement):
@@ -250,6 +329,10 @@ class CandidateGenerator:
                     annotator_id=f"candidate_generator_{strategy.value}",
                     evidence_text=f"Retrieved via {strategy.value} strategy (top_{top_k}, score={score:.4f})"
                 )
+                synthetic = is_synthetic(req) or is_synthetic(cand_req)
+                origin = synthetic_source_identity(req, cand_req) if synthetic else None
+                prov.synthetic = synthetic
+                prov.source_identity = origin
 
                 pair_id = f"CAND-{source_identity.upper()}-{pair_counter:05d}"
                 candidates.append(
@@ -259,6 +342,8 @@ class CandidateGenerator:
                         req_b=cand_req,
                         dependency_type=None,  # Unlabeled
                         provenance=prov,
+                        synthetic=synthetic,
+                        source_identity=origin,
                     )
                 )
                 pair_counter += 1
