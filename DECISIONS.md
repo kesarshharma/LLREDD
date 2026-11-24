@@ -556,4 +556,4 @@ This document records key architectural, design, and implementation decisions fo
 - **Status:** Accepted
 - **Context:** GitHub's Linux run showed that Typer/Rich can emit ANSI control sequences inside option names even when `CliRunner(color=False)` is used. Literal substring assertions therefore failed on Linux but passed locally on Windows.
 - **Decision:** Strip ANSI styling with Click's `unstyle()` before asserting the CLI option spelling. Preserve the checks for command failure and, for queue decisions, no queue mutation.
-- **Verification:** Both affected tests passed locally; the full local coverage run passed **453 tests**, skipped **3**, emitted **12 deprecation warnings**, and measured **88%** coverage. Hosted rerun is still required.
+- **Verification:** Both affected tests passed locally; the full local coverage run passed **453 tests**, skipped **3**, emitted **12 deprecation warnings**, and measured **88%** coverage. Hosted run [45445432202](https://github.com/kesarshharma/LLREDD/actions/runs/45445432202) passed for Python 3.10 and 3.11, including pytest with coverage and Docker image build.

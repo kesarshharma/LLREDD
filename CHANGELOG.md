@@ -655,4 +655,5 @@ All notable changes, task completions, and verification events for the Minor Pro
 ### TASK-P58 — Normalize hosted Linux CLI error output assertions (2026-11-24)
 - The hosted run on commit `1643a7840bd475f5da8bd1b00b361b48ec11ec0a` failed two CLI tests: Rich ANSI styling split the expected option names. Updated those tests to remove ANSI styling before checking `--annotator` and `--reviewer`; application behavior and assertion intent are unchanged.
 - Verification: focused regressions **2 passed**. Full local coverage suite **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0; **88%** coverage. Test log and coverage outputs were written only to `.pytest-tmp/task-p58-coverage`.
-- Hosted workflow still needs a new run after publication. No packages were installed; no datasets or application code were changed.
+- Immediately after local verification the hosted run was pending. No packages were installed; no datasets or application code were changed.
+- Hosted verification completed: [Actions run 45445432202](https://github.com/kesarshharma/LLREDD/actions/runs/45445432202) passed for commit `061bd37cc5e01d4729fb1336473c4d085cc1c383`. Both Python 3.10 and 3.11 jobs passed dependency setup, pytest with coverage, and Docker image build. The workflow ended successfully.
