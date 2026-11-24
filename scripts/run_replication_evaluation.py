@@ -24,14 +24,12 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from scripts.integrate_replication import load_replication_annotation, INTERNAL_LABELS
+from scripts.integrate_replication import load_replication_annotation
 from leredd.config import LEREDDConfig
 from leredd.data_models import DependencyType, Prediction, Requirement, RequirementPair
 from leredd.evaluation import Evaluator
 from leredd.detector import LEREDDDetector
 from leredd.llm import MockLLMClient
-from leredd.baselines.bert_classifier import BERTBaseline
-from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline
 from leredd.provisional_labeler import HeuristicLabeler
 from leredd.embeddings import EmbeddingModel
 from scripts.run_full_evaluation import check_ground_truth_eligibility, build_safe_retrieval_pool
@@ -182,7 +180,6 @@ def run_prototype(dataset: str = DATASET, output_path: str = None):
         raise ValueError(f"{dataset}: confusion matrix total ({cm_total}) != eligible test count ({len(test_eligible)}); metric inconsistency.")
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    model_tag = "LEREDD-Hybrid-Mock"
     note = (
         "MockLLMClient — deterministic mock, NOT a real LLM evaluation. "
         "Prototype limited to ADB Pilot. Synthetic req IDs; retrieval claims unsupported. "

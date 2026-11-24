@@ -24,7 +24,7 @@ from leredd.data_models import (
     VerificationStatus,
 )
 from leredd.bm25_retrieval import BM25Retriever
-from leredd.hybrid_retrieval import HybridRetriever, get_candidate_id
+from leredd.hybrid_retrieval import HybridRetriever
 from leredd.retrieval import ExampleRetriever
 
 
@@ -113,6 +113,7 @@ def test_rrf_stable_tie_breaking():
     ranking2 = []
 
     fused = HybridRetriever.reciprocal_rank_fusion([ranking1, ranking2], rrf_k=60, top_k=2)
+    assert len(fused) == 2
     # Both have same score from ranking1; tie-breaking orders by ID ('A_Item' before 'B_Item')
     # Wait, A_Item is rank 2 (1/62), B_Item is rank 1 (1/61).
     # To test equal scores:

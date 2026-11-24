@@ -1,84 +1,172 @@
 """Main LEREDD Detection Pipeline orchestrating retrieval, prompts, LLM generation, and parsing."""
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any
+import datetime
+import json
+import re
+from typing import Any, Dict, List
+import warnings
 from loguru import logger
 from leredd.config import LEREDDConfig, get_config
 from leredd.data_models import (
-    RequirementPair,
+    AnnotationSource,
     DependencyType,
     Prediction,
     PredictionStabilityStatus,
     PredictionValidationStatus,
+    RequirementPair,
 )
 from leredd.embeddings import EmbeddingModel
-from leredd.retrieval import ExampleRetriever, RAGRetriever
-from leredd.prompts import PromptBuilder
 from leredd.llm import LLMClient, LLMClientFactory
+from leredd.prompts import PromptBuilder
+from leredd.retrieval import ExampleRetriever, RAGRetriever
 
 
 class ResponseParser:
-    """Parses structured LLM responses into Prediction objects."""
+    """Parses structured LLM responses into Prediction objects.
+
+    CONFIDENCE POLICY (Part 4):
+    - Raw predicted dependency classes are preserved by default regardless of confidence.
+    - Self-reported Likert confidence (0-5) is an ordinal screening cue, NEVER a
+      calibrated probability.
+    - Predictions with confidence <= confidence_threshold receive
+      validation_status = PredictionValidationStatus.REQUIRES_REVIEW.
+    - Malformed responses missing an explicit Dependency_Type header or valid JSON
+      field raise ValueError rather than guessing labels from free-text substrings.
+    """
 
     @staticmethod
     def parse(
         raw_text: str,
         pair_id: str,
         confidence_threshold: int = 4,
-        usage_info: Dict[str, Any] | None = None
+        usage_info: Dict[str, Any] | None = None,
+        *,
+        legacy_rewrite_low_confidence: bool = False,
     ) -> Prediction:
         """Extract Dependency_Type, Rationale, and Confidence Score from LLM text."""
         usage = usage_info or {}
+        if not raw_text or not raw_text.strip():
+            raise ValueError("Malformed LLM response: empty response text")
 
-        # 1. Parse Dependency Type
-        dep_match = re.search(r"Dependency_Type:\s*\[?(.*?)\]?\*?\*?$", raw_text, re.MULTILINE | re.IGNORECASE)
-        if dep_match:
-            raw_type_str = dep_match.group(1).strip().strip("*").strip("[]")
-            parsed_type = DependencyType.normalize(raw_type_str)
-        else:
-            # Fallback search anywhere in text
-            parsed_type = None
-            for item in DependencyType:
-                if item.value.lower() in raw_text.lower():
-                    parsed_type = item
-                    break
-            if parsed_type is None:
-                raise ValueError("Malformed LLM response: no supported dependency label found")
+        parsed_type: DependencyType | None = None
+        rationale: str | None = None
+        confidence: int | None = None
+        missing_or_invalid_confidence = False
 
-        # 2. Parse Rationale
-        rat_match = re.search(
-            r"Rationale:\s*(?:\*\*)?\s*\[?(.*?)(?=(?:\n\s*|\s+(?=\*\*))\s*(?:\*\*)?\s*(?:Confidence\s*Score|Dependency_Type)\b|\Z)",
-            raw_text,
-            re.DOTALL | re.IGNORECASE,
-        )
-        if rat_match:
-            rationale = rat_match.group(1).strip().strip("*").strip("[]").strip()
-        else:
-            rationale = raw_text.strip()
-
-        # 3. Parse Confidence Score (0 to 5)
-        conf_match = re.search(r"Confidence\s*Score:\s*\[?(\d+)\]?", raw_text, re.IGNORECASE)
-        if conf_match:
+        # 0. Support structured JSON responses when provided
+        stripped = raw_text.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
             try:
-                confidence = int(conf_match.group(1))
-                confidence = max(0, min(5, confidence))
-            except ValueError:
-                confidence = 5
-        else:
-            confidence = 5
+                payload = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Malformed LLM JSON response: {exc}") from exc
+            if not isinstance(payload, dict):
+                raise ValueError("Malformed LLM JSON response: expected JSON object")
+            raw_dep = payload.get("dependency_type") or payload.get("Dependency_Type")
+            if raw_dep is None or not str(raw_dep).strip():
+                raise ValueError("Malformed LLM JSON response: missing dependency_type field")
+            parsed_type = DependencyType.normalize(str(raw_dep))
+            rationale = str(
+                payload.get("rationale")
+                or payload.get("Rationale")
+                or payload.get("explanation")
+                or ""
+            ).strip()
+            raw_conf = (
+                payload.get("confidence")
+                if "confidence" in payload
+                else payload.get("confidence_score", payload.get("Confidence Score"))
+            )
+            if raw_conf is None or isinstance(raw_conf, bool):
+                missing_or_invalid_confidence = True
+                confidence = 0
+            else:
+                try:
+                    conf_int = int(raw_conf)
+                except (TypeError, ValueError):
+                    missing_or_invalid_confidence = True
+                    confidence = 0
+                else:
+                    if 0 <= conf_int <= 5:
+                        confidence = conf_int
+                    else:
+                        missing_or_invalid_confidence = True
+                        confidence = max(0, min(5, conf_int))
 
-        # Confidence screening is a review signal. A low self-reported score
-        # must not change the predicted taxonomy class into No_dependency.
+        # 1. Parse explicit Dependency_Type field from structured Markdown/text
+        if parsed_type is None:
+            dep_match = re.search(
+                r"(?:^\s*(?:\*\*)?\s*Dependency_Type\s*(?:\*\*)?\s*:\s*)(.*?)\s*$",
+                raw_text,
+                re.MULTILINE | re.IGNORECASE,
+            )
+            if not dep_match:
+                raise ValueError(
+                    "Malformed LLM response: missing explicit Dependency_Type field"
+                )
+            raw_type_str = dep_match.group(1).strip().strip("*").strip("[]").strip("*").strip()
+            if not raw_type_str:
+                raise ValueError("Malformed LLM response: empty Dependency_Type value")
+            parsed_type = DependencyType.normalize(raw_type_str)
+
+            # 2. Parse Rationale
+            rat_match = re.search(
+                r"Rationale:\s*(?:\*\*)?\s*\[?(.*?)(?=(?:\n\s*|\s+(?=\*\*))\s*(?:\*\*)?\s*(?:Confidence\s*Score|Dependency_Type)\b|\Z)",
+                raw_text,
+                re.DOTALL | re.IGNORECASE,
+            )
+            if rat_match:
+                rationale = rat_match.group(1).strip().strip("*").strip("[]").strip()
+            else:
+                rationale = raw_text.strip()
+
+            # 3. Parse Confidence Score (0 to 5)
+            conf_header_match = re.search(
+                r"Confidence\s*Score\s*(?:\*\*)?\s*:\s*(?:\*\*)?\s*\[?([^\n\r\*\]]+)\]?",
+                raw_text,
+                re.IGNORECASE,
+            )
+            if conf_header_match:
+                raw_conf_token = conf_header_match.group(1).strip()
+                int_match = re.match(r"^(-?\d+)(?:\s*/\s*5)?$", raw_conf_token)
+                if int_match:
+                    conf_val = int(int_match.group(1))
+                    if 0 <= conf_val <= 5:
+                        confidence = conf_val
+                    else:
+                        missing_or_invalid_confidence = True
+                        confidence = max(0, min(5, conf_val))
+                else:
+                    missing_or_invalid_confidence = True
+                    confidence = 0
+            else:
+                missing_or_invalid_confidence = True
+                confidence = 0
+
+        assert confidence is not None
+        assert rationale is not None
+
+        # Confidence screening is a review signal. By default, a low self-reported
+        # score preserves the predicted taxonomy class and sets REQUIRES_REVIEW.
         final_type = parsed_type
         if confidence_threshold < 0:
             validation_status = PredictionValidationStatus.THRESHOLD_DISABLED
-        elif confidence <= confidence_threshold:
+        elif missing_or_invalid_confidence or confidence <= confidence_threshold:
             validation_status = PredictionValidationStatus.REQUIRES_REVIEW
             logger.info(
                 f"Flagging pair {pair_id} for review: self-reported confidence "
                 f"{confidence} <= threshold {confidence_threshold}"
+                + (" (missing/invalid confidence field)" if missing_or_invalid_confidence else "")
             )
+            if legacy_rewrite_low_confidence:
+                warnings.warn(
+                    "legacy_rewrite_low_confidence is deprecated; low-confidence "
+                    "predictions should preserve dependency_type and use validation_status.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                final_type = DependencyType.NO_DEPENDENCY
         else:
             validation_status = PredictionValidationStatus.PASSED_THRESHOLD
 
@@ -92,7 +180,7 @@ class ResponseParser:
             raw_response=raw_text,
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
-            estimated_cost_usd=usage.get("cost_usd", 0.0)
+            estimated_cost_usd=usage.get("cost_usd", 0.0),
         )
 
 
@@ -170,7 +258,8 @@ class LEREDDDetector:
             from leredd.hybrid_retrieval import HybridRetriever
             self._hybrid_retriever = HybridRetriever(
                 dense_retriever=self.example_retriever,
-                config=self.config
+                bm25_retriever=self.bm25_retriever,
+                config=self.config,
             )
         return self._hybrid_retriever
 
@@ -202,6 +291,28 @@ class LEREDDDetector:
             if mode == "bm25":
                 retrieved_examples = self.bm25_retriever.retrieve_example_pairs(
                     target_pair=target_pair, candidate_pool=pool, k=self.config.k_examples
+                )
+            elif mode == "hybrid_no_metadata":
+                from leredd.hybrid_retrieval import HybridRetriever
+                no_meta_hybrid = HybridRetriever(
+                    dense_retriever=self.example_retriever,
+                    bm25_retriever=self.bm25_retriever,
+                    metadata_weight=0.0,
+                    config=self.config,
+                )
+                retrieved_examples = no_meta_hybrid.retrieve_example_pairs(
+                    target_pair=target_pair, annotated_pool=pool, k=self.config.k_examples
+                )
+            elif mode == "hybrid_metadata":
+                from leredd.hybrid_retrieval import HybridRetriever
+                meta_hybrid = HybridRetriever(
+                    dense_retriever=self.example_retriever,
+                    bm25_retriever=self.bm25_retriever,
+                    metadata_weight=self.config.metadata_weight if self.config.metadata_weight > 0 else 1.0,
+                    config=self.config,
+                )
+                retrieved_examples = meta_hybrid.retrieve_example_pairs(
+                    target_pair=target_pair, annotated_pool=pool, k=self.config.k_examples
                 )
             elif mode == "hybrid":
                 retrieved_examples = self.hybrid_retriever.retrieve_example_pairs(
@@ -259,7 +370,16 @@ class LEREDDDetector:
             raw_text=response_text,
             pair_id=target_pair.id,
             confidence_threshold=threshold,
-            usage_info=usage
+            usage_info=usage,
+            legacy_rewrite_low_confidence=self.config.legacy_rewrite_low_confidence_to_no_dependency,
+        )
+        prediction = prediction.model_copy(
+            update={
+                "annotation_source": AnnotationSource.LLM,
+                "model_id": self.config.llm_model,
+                "config_hash": self.prompt_builder.template_hash(domain=domain),
+                "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
         )
 
         if stability_runs == 1:
@@ -270,6 +390,7 @@ class LEREDDDetector:
                 raw_text=raw_text,
                 pair_id=target_pair.id,
                 confidence_threshold=threshold,
+                legacy_rewrite_low_confidence=self.config.legacy_rewrite_low_confidence_to_no_dependency,
             )
             for raw_text, _ in responses
         ]

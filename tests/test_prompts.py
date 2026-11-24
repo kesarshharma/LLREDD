@@ -1,7 +1,6 @@
 """Tests for PromptBuilder."""
 
 from leredd.prompts import PromptBuilder
-from leredd.data_models import DependencyType
 
 
 def test_prompt_builder_format(mock_config, sample_pair):

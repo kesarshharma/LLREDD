@@ -16,9 +16,7 @@ from leredd.config import LEREDDConfig
 from leredd.llm import MockLLMClient
 from leredd.provisional_labeler import (
     HeuristicLabeler,
-    HeuristicRuleResult,
     LabelingMode,
-    LabelingRunManifest,
     LLMLabeler,
     MultiModelLLMLabeler,
     ProvisionalLabeler,
@@ -292,6 +290,9 @@ def test_directional_labeling_preserves_orientation(req_a, req_b):
 
     res_ab = coord.process_pair(pair_ab, mode=LabelingMode.HEURISTIC)
     res_ba = coord.process_pair(pair_ba, mode=LabelingMode.HEURISTIC)
+
+    assert res_ab.req_a.id == "REQ-001"
+    assert res_ab.req_b.id == "REQ-002"
 
     # REQ-002 cites REQ-001. In (req_b, req_a), req_b is A and req_a is B -> RULE-REF-ID-DIRECT
     assert res_ba.dependency_type == DependencyType.REQUIRES

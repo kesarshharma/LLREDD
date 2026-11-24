@@ -1,7 +1,8 @@
 """Evaluation suite for computing metrics, confusion matrices, and statistical significance tests.
 
 Provides strict ground truth guardrails, prediction alignment verification,
-contamination detection, and system-disjoint split validation.
+contamination detection, system/document-disjoint split validation, development-set-only
+threshold tuning, and explicit separation of candidate recall from classifier accuracy.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ class PredictionAlignmentError(EvaluationGuardrailError):
 
 
 class SplitOverlapError(EvaluationGuardrailError):
-    """Raised when train/test/dev partitions have overlapping systems, requirements, or pairs."""
+    """Raised when train/test/dev partitions have overlapping systems, documents, requirements, or pairs."""
 
 
 class ContaminationError(RuntimeError):
@@ -74,16 +75,11 @@ def validate_ground_truth(
       - Synthetic fixtures (synthetic=True or source_identity='synthetic-review-tests')
         are strictly rejected and must never enter benchmark evaluations.
       - Pairs with dependency_type=None are rejected when reject_unlabeled=True.
-      - Pairs with non-verified provenance status (PROVISIONAL, PENDING_REVIEW, REJECTED)
-        are rejected.
+      - Pairs with non-verified provenance status (PROVISIONAL, PENDING_REVIEW,
+        HUMAN_REVIEWED, REJECTED) are rejected; only explicit VerificationStatus.VERIFIED
+        is accepted.
       - Legacy pairs (no provenance) are accepted conditionally when allow_legacy=True,
         or rejected when allow_legacy=False.
-
-    Returns:
-        (eligible_pairs, warnings)
-
-    Raises:
-        GroundTruthViolationError: when violations are found and strict=True.
     """
     if not pairs:
         msg = f"[{partition_label}] Ground truth dataset is empty."
@@ -100,7 +96,6 @@ def validate_ground_truth(
     legacy_ids: List[str] = []
 
     for pair in pairs:
-        # Check synthetic guardrail
         if is_synthetic(pair):
             synthetic_ids.append(pair.id)
             warnings_found.append(
@@ -109,7 +104,6 @@ def validate_ground_truth(
             )
             continue
 
-        # Check unlabeled guardrail
         if pair.dependency_type is None:
             unlabeled_ids.append(pair.id)
             warnings_found.append(
@@ -117,7 +111,6 @@ def validate_ground_truth(
             )
             continue
 
-        # Check verification provenance
         if pair.provenance is not None:
             status = pair.provenance.status
             if status != VerificationStatus.VERIFIED:
@@ -131,7 +124,6 @@ def validate_ground_truth(
                 f"[{partition_label}] Pair {pair.id} provenance status={status.value} — accepted."
             )
         else:
-            # Legacy record without provenance
             if not allow_legacy:
                 legacy_ids.append(pair.id)
                 warnings_found.append(
@@ -146,21 +138,23 @@ def validate_ground_truth(
 
         eligible.append(pair)
 
-    # In strict mode, raise if violations occurred
     if strict:
         if synthetic_ids:
             raise GroundTruthViolationError(
-                f"[{partition_label}] Synthetic records rejected from ground truth ({len(synthetic_ids)} pairs); synthetic/demo records are ineligible: {synthetic_ids}",
+                f"[{partition_label}] Synthetic records rejected from ground truth ({len(synthetic_ids)} pairs); "
+                f"synthetic/demo records are ineligible: {synthetic_ids}",
                 invalid_ids=synthetic_ids,
             )
         if reject_unlabeled and unlabeled_ids:
             raise GroundTruthViolationError(
-                f"[{partition_label}] Unlabeled pairs rejected ({len(unlabeled_ids)}): {unlabeled_ids}; ground truth contains unlabeled or unverified records.",
+                f"[{partition_label}] Unlabeled pairs rejected ({len(unlabeled_ids)}): {unlabeled_ids}; "
+                "ground truth contains unlabeled or unverified records.",
                 invalid_ids=unlabeled_ids,
             )
         if unverified_ids:
             raise GroundTruthViolationError(
-                f"[{partition_label}] Ground truth contains unlabeled or unverified pairs; unverified pairs rejected ({len(unverified_ids)}): {unverified_ids}",
+                f"[{partition_label}] Ground truth contains unlabeled or unverified pairs; "
+                f"unverified pairs rejected ({len(unverified_ids)}): {unverified_ids}",
                 invalid_ids=unverified_ids,
             )
         if legacy_ids:
@@ -172,31 +166,8 @@ def validate_ground_truth(
     return eligible, warnings_found
 
 
-def check_ground_truth_eligibility(
-    pairs: List[RequirementPair],
-    partition_label: str = "EVAL",
-    strict: bool = True,
-    allow_legacy: bool = True,
-    reject_unlabeled: bool = False,
-) -> Tuple[List[RequirementPair], List[str]]:
-    """Legacy compatibility wrapper for validate_ground_truth.
-
-    Matches legacy behavior where unlabeled pairs are skipped with warning when reject_unlabeled=False.
-    """
-    return validate_ground_truth(
-        pairs=pairs,
-        partition_label=partition_label,
-        strict=strict,
-        allow_legacy=allow_legacy,
-        reject_unlabeled=reject_unlabeled,
-    )
-
-
 def ground_truth_provenance_problem(pair: RequirementPair) -> str | None:
-    """Describe provenance that cannot substantiate a verified ground-truth label.
-
-    Provenance-free legacy records remain a caller-level compatibility decision.
-    """
+    """Describe provenance that cannot substantiate a verified ground-truth label."""
     if is_synthetic(pair):
         return "synthetic/demo records cannot be used as ground truth"
     provenance = pair.provenance
@@ -227,16 +198,82 @@ def ground_truth_provenance_problem(pair: RequirementPair) -> str | None:
     return None
 
 
+def check_ground_truth_eligibility(
+    pairs: List[RequirementPair],
+    partition_label: str = "EVAL",
+    strict: bool = True,
+    allow_legacy: bool = True,
+    reject_unlabeled: bool = False,
+) -> Tuple[List[RequirementPair], List[str]]:
+    """Check each pair for ground-truth eligibility with full provenance coherence checks.
+
+    Rules (fail-closed):
+      - synthetic/demo records           -> REJECTED (always)
+      - provenance problem / != VERIFIED -> REJECTED (always)
+      - dependency_type is None          -> SKIPPED when reject_unlabeled=False; REJECTED when True
+      - provenance is None (legacy)      -> Conditionally accepted with warning when allow_legacy=True
+    """
+    eligible: List[RequirementPair] = []
+    warnings_found: List[str] = []
+
+    for pair in pairs:
+        if is_synthetic(pair):
+            msg = (
+                f"[{partition_label}] REJECTED pair {pair.id}: "
+                "synthetic/demo records cannot be used as ground truth."
+            )
+            warnings_found.append(msg)
+            if strict:
+                raise GroundTruthViolationError(msg, invalid_ids=[pair.id])
+            continue
+
+        if pair.dependency_type is None:
+            msg = f"[{partition_label}] Pair {pair.id} has dependency_type=None — skipped."
+            warnings_found.append(msg)
+            if strict and reject_unlabeled:
+                raise GroundTruthViolationError(
+                    f"[{partition_label}] Unlabeled pairs rejected: {[pair.id]}",
+                    invalid_ids=[pair.id],
+                )
+            continue
+
+        if pair.provenance is not None:
+            status_val = pair.provenance.status.value if pair.provenance.status else None
+            provenance_problem = ground_truth_provenance_problem(pair)
+            if provenance_problem:
+                msg = f"[{partition_label}] REJECTED pair {pair.id}: {provenance_problem}."
+                warnings_found.append(msg)
+                if strict:
+                    raise GroundTruthViolationError(msg, invalid_ids=[pair.id])
+                continue
+            warnings_found.append(
+                f"[{partition_label}] Pair {pair.id} provenance status={status_val} — accepted."
+            )
+        else:
+            if not allow_legacy:
+                msg = (
+                    f"[{partition_label}] REJECTED pair {pair.id}: "
+                    "Legacy record with no provenance rejected (allow_legacy=False)."
+                )
+                warnings_found.append(msg)
+                if strict:
+                    raise GroundTruthViolationError(msg, invalid_ids=[pair.id])
+                continue
+            warnings_found.append(
+                f"[{partition_label}] Pair {pair.id} has NO provenance metadata "
+                "(legacy annotated record). Accepted conditionally."
+            )
+
+        eligible.append(pair)
+
+    return eligible, warnings_found
+
+
 def validate_predictions(
     ground_truth: List[RequirementPair],
     predictions: List[Prediction],
 ) -> None:
-    """Validate that predictions cover all ground truth pairs with no duplicates.
-
-    Raises:
-        PredictionAlignmentError: if duplicate prediction IDs are found or
-                                  if predictions do not cover all ground truth IDs.
-    """
+    """Validate that predictions cover all ground truth pairs with no duplicates."""
     seen_ids: Set[str] = set()
     duplicate_ids: List[str] = []
     for pred in predictions:
@@ -255,7 +292,7 @@ def validate_predictions(
     missing_ids = sorted(gt_ids - seen_ids)
     if missing_ids:
         raise PredictionAlignmentError(
-                f"Missing prediction coverage; predictions missing ground-truth pair IDs ({len(missing_ids)}): {missing_ids}",
+            f"Missing prediction coverage; predictions missing ground-truth pair IDs ({len(missing_ids)}): {missing_ids}",
             invalid_ids=missing_ids,
         )
 
@@ -265,19 +302,7 @@ def validate_system_disjoint_splits(
     test_pairs: List[RequirementPair],
     dev_pairs: Optional[List[RequirementPair]] = None,
 ) -> Dict[str, Any]:
-    """Verify that train, test, and optional dev partitions are strictly disjoint.
-
-    Checks:
-      1. Disjoint system identities.
-      2. Disjoint requirement IDs.
-      3. Disjoint pair IDs.
-
-    Returns:
-        Audit report dict.
-
-    Raises:
-        SplitOverlapError: with invalid_ids if any overlap is detected across partitions.
-    """
+    """Verify that train, test, and optional dev partitions are strictly system-disjoint."""
     dev_list = dev_pairs or []
 
     def get_systems(pairs: List[RequirementPair]) -> Set[str]:
@@ -344,17 +369,84 @@ def validate_system_disjoint_splits(
     return audit_report
 
 
+def validate_document_disjoint_splits(
+    train_pairs: List[RequirementPair],
+    test_pairs: List[RequirementPair],
+    dev_pairs: Optional[List[RequirementPair]] = None,
+) -> Dict[str, Any]:
+    """Verify that train, test, and optional dev partitions are strictly document-disjoint."""
+    dev_list = dev_pairs or []
+
+    def _doc_key(req: Any) -> str:
+        meta = getattr(req, "metadata", None) or {}
+        doc = meta.get("document") or getattr(req, "module", None) or meta.get("module") or req.source or req.system
+        return str(doc)
+
+    def get_docs(pairs: List[RequirementPair]) -> Set[str]:
+        docs = set()
+        for p in pairs:
+            docs.add(_doc_key(p.req_a))
+            docs.add(_doc_key(p.req_b))
+        return docs
+
+    def get_req_ids(pairs: List[RequirementPair]) -> Set[str]:
+        return {r_id for p in pairs for r_id in (p.req_a.id, p.req_b.id)}
+
+    def get_pair_ids(pairs: List[RequirementPair]) -> Set[str]:
+        return {p.id for p in pairs}
+
+    train_docs = get_docs(train_pairs)
+    test_docs = get_docs(test_pairs)
+    dev_docs = get_docs(dev_list)
+
+    train_reqs = get_req_ids(train_pairs)
+    test_reqs = get_req_ids(test_pairs)
+    dev_reqs = get_req_ids(dev_list)
+
+    train_pids = get_pair_ids(train_pairs)
+    test_pids = get_pair_ids(test_pairs)
+    dev_pids = get_pair_ids(dev_list)
+
+    overlap_docs = (train_docs & test_docs) | (train_docs & dev_docs) | (test_docs & dev_docs)
+    overlap_reqs = (train_reqs & test_reqs) | (train_reqs & dev_reqs) | (test_reqs & dev_reqs)
+    overlap_pairs = (train_pids & test_pids) | (train_pids & dev_pids) | (test_pids & dev_pids)
+
+    audit_report = {
+        "train_size": len(train_pairs),
+        "test_size": len(test_pairs),
+        "dev_size": len(dev_list),
+        "train_documents": sorted(train_docs),
+        "test_documents": sorted(test_docs),
+        "dev_documents": sorted(dev_docs),
+        "overlapping_documents": sorted(overlap_docs),
+        "overlapping_req_ids": sorted(overlap_reqs),
+        "overlapping_pair_ids": sorted(overlap_pairs),
+        "is_disjoint": not (overlap_docs or overlap_reqs or overlap_pairs),
+    }
+
+    if overlap_docs or overlap_reqs or overlap_pairs:
+        invalid_ids = sorted(overlap_docs | overlap_reqs | overlap_pairs)
+        details = []
+        if overlap_docs:
+            details.append(f"documents: {sorted(overlap_docs)}")
+        if overlap_reqs:
+            details.append(f"req_ids: {sorted(overlap_reqs)}")
+        if overlap_pairs:
+            details.append(f"pair_ids: {sorted(overlap_pairs)}")
+        msg = f"Document-disjoint split violation detected ({', '.join(details)})."
+        logger.warning(msg)
+        raise SplitOverlapError(msg, invalid_ids=invalid_ids)
+
+    return audit_report
+
+
 def build_safe_retrieval_pool(
     train_pairs: List[RequirementPair],
     test_pairs: List[RequirementPair],
     dev_pairs: Optional[List[RequirementPair]] = None,
     strict: bool = True,
 ) -> Tuple[List[RequirementPair], Dict[str, Any]]:
-    """Build a retrieval pool strictly isolated from test and dev requirement IDs.
-
-    Returns (safe_pool, leakage_audit_report).
-    Raises ContaminationError if leakage is detected and strict=True.
-    """
+    """Build a retrieval pool strictly isolated from test/dev IDs and synthetic records."""
     excluded_req_ids: Set[str] = set()
     excluded_pair_ids: Set[str] = set()
 
@@ -369,6 +461,7 @@ def build_safe_retrieval_pool(
         excluded_pair_ids.add(pair.id)
 
     contaminated_pairs: List[str] = []
+    excluded_synthetic_pair_ids: List[str] = []
     safe_pool: List[RequirementPair] = []
 
     for pair in train_pairs:
@@ -379,6 +472,8 @@ def build_safe_retrieval_pool(
                 f"Pair {pair.id} (req_ids: {sorted(pair_req_ids)}) "
                 f"overlaps with test/dev excluded IDs: {sorted(leaked_ids or {pair.id})}"
             )
+        elif is_synthetic(pair):
+            excluded_synthetic_pair_ids.append(pair.id)
         else:
             safe_pool.append(pair)
 
@@ -388,6 +483,8 @@ def build_safe_retrieval_pool(
         "train_pool_size": len(train_pairs),
         "contaminated_pairs": contaminated_pairs,
         "contaminated_count": len(contaminated_pairs),
+        "excluded_synthetic_pair_ids": sorted(excluded_synthetic_pair_ids),
+        "excluded_synthetic_count": len(excluded_synthetic_pair_ids),
         "safe_pool_size": len(safe_pool),
         "contamination_detected": len(contaminated_pairs) > 0,
     }
@@ -409,6 +506,163 @@ def build_safe_retrieval_pool(
     return safe_pool, leakage_audit
 
 
+def tune_confidence_threshold_on_dev(
+    dev_pairs: List[RequirementPair],
+    dev_predictions: List[Prediction],
+    *,
+    partition_label: str = "DEV",
+    default_threshold: int = 4,
+    min_coverage: float = 0.25,
+    allow_legacy: bool = True,
+) -> Dict[str, Any]:
+    """Tune the confidence review cutoff strictly on the development set (Part 4 & Part 8).
+
+    Evaluates candidate cutoffs t in [-1, 0, 1, 2, 3, 4] on dev predictions:
+      - Predictions with confidence <= t are routed for human review.
+      - Predictions with confidence > t (or all predictions when t == -1) are auto-accepted.
+      - Selects t maximizing selective Macro-F1 on auto-accepted dev pairs subject to
+        auto-accepted coverage >= min_coverage. Ties prefer default_threshold.
+
+    Raises:
+        EvaluationGuardrailError: if partition_label indicates a test split.
+    """
+    if "test" in partition_label.casefold():
+        raise EvaluationGuardrailError(
+            f"Threshold tuning on partition {partition_label!r} is strictly forbidden; "
+            "tune thresholds on the development set only.",
+            invalid_ids=[p.id for p in dev_pairs],
+        )
+
+    if not dev_pairs or not dev_predictions:
+        return {
+            "status": "skipped_empty_dev_partition",
+            "partition_used": partition_label,
+            "test_set_touched": False,
+            "selected_threshold": default_threshold,
+            "candidates": [],
+        }
+
+    eligible_dev, _ = validate_ground_truth(
+        dev_pairs,
+        partition_label=partition_label,
+        strict=True,
+        allow_legacy=allow_legacy,
+        reject_unlabeled=True,
+    )
+    validate_predictions(eligible_dev, dev_predictions)
+
+    pred_by_id = {p.pair_id: p for p in dev_predictions}
+    labels = [dt.value for dt in DependencyType]
+    n_dev = len(eligible_dev)
+    candidates: List[Dict[str, Any]] = []
+
+    for threshold in (-1, 0, 1, 2, 3, 4):
+        accepted_gt: List[str] = []
+        accepted_pred: List[str] = []
+        routed_count = 0
+        for pair in eligible_dev:
+            pred = pred_by_id[pair.id]
+            if threshold >= 0 and pred.confidence <= threshold:
+                routed_count += 1
+            else:
+                assert pair.dependency_type is not None
+                accepted_gt.append(pair.dependency_type.value)
+                accepted_pred.append(pred.dependency_type.value)
+
+        coverage = len(accepted_gt) / n_dev if n_dev > 0 else 0.0
+        review_rate = routed_count / n_dev if n_dev > 0 else 0.0
+        if accepted_gt:
+            sel_acc = float(accuracy_score(accepted_gt, accepted_pred))
+            _, _, sel_macro_f1, _ = precision_recall_fscore_support(
+                accepted_gt, accepted_pred, labels=labels, average="macro", zero_division=0
+            )
+            sel_f1 = float(sel_macro_f1)
+        else:
+            sel_acc = 0.0
+            sel_f1 = 0.0
+
+        candidates.append(
+            {
+                "threshold": threshold,
+                "auto_accepted_count": len(accepted_gt),
+                "review_routed_count": routed_count,
+                "coverage": round(coverage, 4),
+                "review_rate": round(review_rate, 4),
+                "selective_accuracy": round(sel_acc, 4),
+                "selective_macro_f1": round(sel_f1, 4),
+                "meets_min_coverage": coverage >= min_coverage,
+            }
+        )
+
+    feasible = [c for c in candidates if c["meets_min_coverage"]] or candidates
+    best = max(
+        feasible,
+        key=lambda c: (
+            c["selective_macro_f1"],
+            c["selective_accuracy"],
+            1 if c["threshold"] == default_threshold else 0,
+            c["threshold"],
+        ),
+    )
+
+    return {
+        "status": "tuned_on_dev_only",
+        "partition_used": partition_label,
+        "test_set_touched": False,
+        "n_dev": n_dev,
+        "min_coverage": min_coverage,
+        "selected_threshold": int(best["threshold"]),
+        "selected_metrics": best,
+        "candidates": candidates,
+    }
+
+
+def summarize_candidate_recall_vs_classifier(
+    classifier_report: EvaluationReport,
+    *,
+    candidate_manifest: Optional[Dict[str, Any]] = None,
+    coverage_report: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Explicitly separate candidate-generation recall from classifier accuracy (Part 8)."""
+    candidate_stage: Dict[str, Any] = {
+        "measured_separately": True,
+        "pair_space_recall": None,
+        "uncovered_pair_count": None,
+        "weighted_positive_dependency_recall": None,
+        "note": (
+            "Candidate generation recall measures what fraction of the requirement pair space "
+            "(or true positive dependencies in a stratified sample) is retained prior to "
+            "classification. It must never be conflated with classifier accuracy on the "
+            "supplied evaluation split."
+        ),
+    }
+    if isinstance(candidate_manifest, dict):
+        candidate_stage["strategy"] = candidate_manifest.get("strategy")
+        candidate_stage["pair_space_recall"] = candidate_manifest.get("pair_space_recall")
+        candidate_stage["uncovered_pair_count"] = candidate_manifest.get("uncovered_pair_count")
+        candidate_stage["exhaustive_pair_count"] = candidate_manifest.get("exhaustive_pair_count")
+
+    if isinstance(coverage_report, dict):
+        candidate_stage["weighted_positive_dependency_recall"] = coverage_report.get(
+            "weighted_positive_recall"
+        )
+        candidate_stage["coverage_confidence_interval_95"] = coverage_report.get(
+            "confidence_interval_95"
+        )
+
+    return {
+        "candidate_generation_stage": candidate_stage,
+        "classifier_evaluation_stage": {
+            "model_name": classifier_report.model_name,
+            "system_name": classifier_report.system_name,
+            "overall_accuracy": classifier_report.overall_accuracy,
+            "macro_f1": classifier_report.macro_f1,
+            "weighted_f1": classifier_report.weighted_f1,
+            "conditioned_on_supplied_pairs": True,
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Evaluator Class
 # ---------------------------------------------------------------------------
@@ -420,7 +674,10 @@ class Evaluator:
     check_ground_truth_eligibility = staticmethod(check_ground_truth_eligibility)
     validate_predictions = staticmethod(validate_predictions)
     validate_system_disjoint_splits = staticmethod(validate_system_disjoint_splits)
+    validate_document_disjoint_splits = staticmethod(validate_document_disjoint_splits)
     build_safe_retrieval_pool = staticmethod(build_safe_retrieval_pool)
+    tune_confidence_threshold_on_dev = staticmethod(tune_confidence_threshold_on_dev)
+    summarize_candidate_recall_vs_classifier = staticmethod(summarize_candidate_recall_vs_classifier)
 
     @staticmethod
     def evaluate(
@@ -432,10 +689,7 @@ class Evaluator:
         allow_legacy: bool = True,
         validate_alignment: bool = True,
     ) -> EvaluationReport:
-        """Compute Accuracy, Precision, Recall, F1 (per-class & macro/weighted) and confusion matrix.
-
-        Applies fail-closed ground-truth validation and prediction alignment checks before metrics calculation.
-        """
+        """Compute Accuracy, Precision, Recall, F1 (per-class & macro/weighted) and confusion matrix."""
         eligible_gt, _ = validate_ground_truth(
             ground_truth,
             partition_label=system_name,
@@ -462,7 +716,6 @@ class Evaluator:
         if validate_alignment:
             validate_predictions(eligible_gt, predictions)
 
-        # Align predictions by pair_id
         pred_map = {p.pair_id: p.dependency_type for p in predictions}
 
         y_true: List[str] = []
@@ -484,7 +737,7 @@ class Evaluator:
         p_macro, r_macro, f1_macro, _ = precision_recall_fscore_support(
             y_true, y_pred, average="macro", zero_division=0
         )
-        p_weight, r_weight, f1_weight, _ = precision_recall_fscore_support(
+        _, _, f1_weight, _ = precision_recall_fscore_support(
             y_true, y_pred, average="weighted", zero_division=0
         )
 
@@ -510,6 +763,8 @@ class Evaluator:
             overall_accuracy=acc,
             macro_f1=float(f1_macro),
             weighted_f1=float(f1_weight),
+            macro_precision=float(p_macro),
+            macro_recall=float(r_macro),
             per_class_metrics=per_class_metrics,
             confusion_matrix=cm_dict,
         )
@@ -520,10 +775,7 @@ class Evaluator:
         preds_a: List[Prediction],
         preds_b: List[Prediction],
     ) -> Tuple[float, float]:
-        """Perform McNemar's test comparing overall predictive accuracy of two models.
-
-        Returns (statistic, p_value).
-        """
+        """Perform McNemar's test comparing overall predictive accuracy of two models."""
         map_a = {p.pair_id: p.dependency_type for p in preds_a}
         map_b = {p.pair_id: p.dependency_type for p in preds_b}
 
@@ -534,8 +786,8 @@ class Evaluator:
             pa = map_a.get(pair.id, DependencyType.NO_DEPENDENCY)
             pb = map_b.get(pair.id, DependencyType.NO_DEPENDENCY)
 
-            correct_a = (pa == gt)
-            correct_b = (pb == gt)
+            correct_a = pa == gt
+            correct_b = pb == gt
 
             if correct_a and correct_b:
                 n11 += 1
@@ -565,10 +817,7 @@ class Evaluator:
         tp_b: int,
         fp_b: int,
     ) -> Tuple[float, float]:
-        """Perform Fisher's Exact test comparing precision/recall contingency tables.
-
-        Returns (odds_ratio, p_value).
-        """
+        """Perform Fisher's Exact test comparing precision/recall contingency tables."""
         table = [[tp_a, fp_a], [tp_b, fp_b]]
         odds_ratio, p_value = fisher_exact(table)
         return float(odds_ratio), float(p_value)
@@ -616,8 +865,8 @@ class Evaluator:
             pa = map_a.get(pair.id, DependencyType.NO_DEPENDENCY)
             pb = map_b.get(pair.id, DependencyType.NO_DEPENDENCY)
 
-            ca = (pa == gt)
-            cb = (pb == gt)
+            ca = pa == gt
+            cb = pb == gt
 
             if ca and cb:
                 n11 += 1

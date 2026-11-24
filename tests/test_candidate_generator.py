@@ -19,12 +19,11 @@ Covers:
 
 import json
 import os
-import tempfile
 import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from leredd.data_models import Requirement, RequirementPair, DependencyType, AnnotationSource, VerificationStatus
+from leredd.data_models import Requirement, VerificationStatus
 from leredd.candidate_generator import (
     CandidateGenerator,
     CandidateGenerationManifest,

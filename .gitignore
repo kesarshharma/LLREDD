@@ -16,12 +16,16 @@ build/
 
 # Testing & coverage
 .pytest_cache/
+.pytest-tmp/
 .coverage
+coverage.xml
 htmlcov/
 
 # Environment & secrets
 .env
 .env.local
+.env.*
+!.env.example
 
 # Data cache / scratch
 data/embeddings/
@@ -33,9 +37,6 @@ scratch/
 *.bin
 *.safetensors
 *.joblib
-
-# Additional environment files
-.env.*
 
 # IDE / OS
 .idea/

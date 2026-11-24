@@ -4,12 +4,7 @@ Unit and integration tests for TASK-P7-01 benchmark suite and ablation study mat
 
 from __future__ import annotations
 
-import json
-import tempfile
-from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 import numpy as np
 
 from leredd.config import LEREDDConfig
@@ -22,7 +17,6 @@ from leredd.data_models import (
 from leredd.detector import LEREDDDetector
 from leredd.llm import MockLLMClient
 from scripts.run_full_evaluation import (
-    run_evaluation,
     run_heuristic_model,
     run_leredd_variant,
 )
@@ -104,7 +98,7 @@ class TestAblationBenchmarkSuite:
 
     def test_threshold_behavior_flags_review_without_relabeling(self):
         """Confidence screening changes disposition, never the predicted class."""
-        from leredd.detector import ResponseParser, LEREDDDetector
+        from leredd.detector import LEREDDDetector
         from leredd.llm import LLMClient
 
         class LowConfMockLLM(LLMClient):
@@ -130,12 +124,9 @@ class TestAblationBenchmarkSuite:
     def test_retrieval_mode_dispatch_and_example_building(self):
         """Verify retrieval modes build prompt example blocks when k>0 and omit when k=0."""
         from leredd.detector import LEREDDDetector
-        from leredd.prompts import PromptBuilder
 
         train_pool = [_make_pair(f"TR-{i}") for i in range(5)]
         test_pair = _make_pair("P-DISPATCH")
-
-        builder = PromptBuilder()
 
         # k=0 -> No in-context examples
         config_z = LEREDDConfig(k_examples=0)

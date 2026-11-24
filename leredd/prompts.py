@@ -1,8 +1,9 @@
 """Prompt construction module implementing Paper Figure 2 and Table I definitions."""
 
-from typing import List, Dict
+import hashlib
+from typing import Dict, List
 from leredd.config import LEREDDConfig, get_config
-from leredd.data_models import RequirementPair, DependencyType
+from leredd.data_models import DependencyType, RequirementPair
 
 # Formal definitions strictly matching Table I of the paper
 DEPENDENCY_DEFINITIONS = {
@@ -119,3 +120,14 @@ Requirement B: {req_b_text}
         return prompt
 
     build_prompt = build
+
+    def template_hash(self, domain: str = "automotive software engineering") -> str:
+        """Compute deterministic SHA-256 hash of the prompt template and taxonomy definitions."""
+        definitions_text = self.build_definitions_block()
+        canonical = (
+            f"domain={domain}\n"
+            f"definitions=\n{definitions_text}\n"
+            "sections=#Requirements to analyze|#Dependency Definitions|#Examples|#Context|#Instructions\n"
+            "fields=**Dependency_Type: [TYPE]**|**Rationale: [EXPLANATION]**|**Confidence Score: [SCORE]**"
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]

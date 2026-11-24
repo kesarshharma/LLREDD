@@ -1,6 +1,5 @@
 """Tests for LEREDD configuration singleton and lifecycle management (ISSUE-012)."""
 
-import pytest
 from leredd.config import LEREDDConfig, get_config, reset_config
 
 

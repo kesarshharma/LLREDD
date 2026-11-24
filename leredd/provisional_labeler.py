@@ -1,21 +1,21 @@
-"""Provisional Requirement Dependency Labeling module (Phase 4, TASK-P4-02).
+"""Provisional Requirement Dependency Labeling module (Phase 4, TASK-P4-02 & Part 5).
 
 Implements provisional dataset labeling using:
 1. HeuristicLabeler: Rule-based baseline detecting explicit references, lexical similarity, and negation/conflict indicators.
 2. LLMLabeler: LLM-based classifier using existing LLM infrastructure (and MockLLMClient for offline testing).
-3. ProvisionalLabeler: Coordinator combining heuristic and LLM outputs, recording agreement/disagreement, and producing auditable provisional dataset records with full provenance.
+3. ProvisionalLabeler: Coordinator combining heuristic and LLM outputs, recording structured agreement/disagreement/failure/abstention fields, and producing auditable provisional dataset records with full provenance.
 
 CORE PRINCIPLE: Machine-generated labels are PROVISIONAL predictions (VerificationStatus.PROVISIONAL).
 They are NEVER silently promoted to verified ground-truth annotations.
 """
 
 import datetime
+from enum import Enum
 import json
 import os
 import re
+from typing import Any, Dict, List, Optional, Tuple
 import uuid
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -31,6 +31,7 @@ from leredd.data_models import (
 from leredd.detector import ResponseParser
 from leredd.llm import LLMClient, LLMClientFactory
 from leredd.prompts import PromptBuilder
+from leredd.synthetic import is_synthetic, synthetic_source_identity
 
 
 class LabelingMode(str, Enum):
@@ -47,6 +48,17 @@ class HeuristicRuleResult(BaseModel):
     rule_id: str
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence: str
+
+
+class LLMLabelResult(BaseModel):
+    """Structured result of an LLM provisional labeling evaluation."""
+    suggested_label: Optional[DependencyType] = None
+    confidence: Optional[int] = Field(default=None, ge=0, le=5)
+    rationale: str = ""
+    raw_response: Optional[str] = None
+    failed: bool = False
+    error: Optional[str] = None
+    disagreement: bool = False
 
 
 class HeuristicLabeler:
@@ -93,7 +105,7 @@ class HeuristicLabeler:
             )
 
         # 2. Check explicit structural dependency keywords
-        if "implements" in lower_a or "subsystem" in lower_b and "include" in lower_b:
+        if "implements" in lower_a or ("subsystem" in lower_b and "include" in lower_b):
             if "subsystem" in lower_a or "include" in lower_a or "implements" in lower_b:
                 return HeuristicRuleResult(
                     suggested_label=DependencyType.IMPLEMENTS,
@@ -102,7 +114,12 @@ class HeuristicLabeler:
                     evidence="Explicit subsystem architecture or implementation relation detected."
                 )
 
-        if "conflicts with" in lower_a or "contradicts" in lower_a or "conflicts with" in lower_b or "contradicts" in lower_b:
+        if (
+            "conflicts with" in lower_a
+            or "contradicts" in lower_a
+            or "conflicts with" in lower_b
+            or "contradicts" in lower_b
+        ):
             return HeuristicRuleResult(
                 suggested_label=DependencyType.CONFLICTS,
                 rule_id="RULE-REF-CONFLICTS",
@@ -124,7 +141,7 @@ class HeuristicLabeler:
                 suggested_label=DependencyType.CONFLICTS,
                 rule_id="RULE-NEG-CONFLICT",
                 confidence=0.75,
-                evidence=f"Asymmetric negation detected with {len(intersection)} shared terms: {sorted(list(intersection))[:4]}."
+                evidence=f"Asymmetric negation detected with {len(intersection)} shared terms: {sorted(intersection)[:4]}."
             )
 
         # 4. Check high lexical similarity (Jaccard)
@@ -156,19 +173,18 @@ class LLMLabeler:
         self.llm_client = llm_client or LLMClientFactory.create(self.config)
         self.prompt_builder = PromptBuilder()
 
-    def label_pair(
+    def evaluate_pair(
         self,
         target_pair: RequirementPair,
         examples: Optional[Dict[DependencyType, List[RequirementPair]]] = None,
         srs_context: Optional[List[str]] = None,
-    ) -> Tuple[Optional[DependencyType], Optional[int], str]:
-        """Classify a requirement pair using LLM client.
-
-        Returns Tuple of (predicted_label, confidence_score_0_5, rationale_text).
-        Returns (None, None, error_message) if parsing fails or LLM returns malformed label.
-        """
+    ) -> LLMLabelResult:
+        """Classify a requirement pair and return a structured LLMLabelResult."""
+        raw_response: Optional[str] = None
         try:
-            prompt = self.prompt_builder.build(target_pair, retrieved_examples=examples, context_chunks=srs_context)
+            prompt = self.prompt_builder.build(
+                target_pair, retrieved_examples=examples, context_chunks=srs_context
+            )
             raw_res = self.llm_client.generate(prompt)
             raw_response = raw_res[0] if isinstance(raw_res, tuple) else raw_res
 
@@ -176,35 +192,103 @@ class LLMLabeler:
             try:
                 data = json.loads(raw_response)
                 if isinstance(data, dict):
+                    if data.get("abstain") is True:
+                        rat = str(data.get("explanation") or data.get("rationale") or "LLM abstained.")
+                        return LLMLabelResult(
+                            suggested_label=None,
+                            confidence=None,
+                            rationale=rat,
+                            raw_response=raw_response,
+                            failed=False,
+                        )
                     dep_str = data.get("dependency_type") or data.get("dependency")
-                    conf = data.get("confidence") or data.get("confidence_score")
+                    conf = (
+                        data.get("confidence")
+                        if "confidence" in data
+                        else data.get("confidence_score")
+                    )
                     rat = data.get("explanation") or data.get("rationale", "")
                     if dep_str:
                         norm_label = DependencyType.normalize(str(dep_str))
-                        return norm_label, int(conf) if conf is not None else None, str(rat)
+                        parsed_conf = (
+                            max(0, min(5, int(conf)))
+                            if conf is not None and not isinstance(conf, bool)
+                            else None
+                        )
+                        return LLMLabelResult(
+                            suggested_label=norm_label,
+                            confidence=parsed_conf,
+                            rationale=str(rat),
+                            raw_response=raw_response,
+                            failed=False,
+                        )
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
-            # Fallback to standard ResponseParser if explicit tag exists
-            dep_match = re.search(r"Dependency_Type:\s*\[?(.*?)\]?\*?\*?$", raw_response, re.MULTILINE | re.IGNORECASE)
+            # Fallback to standard ResponseParser requiring explicit Dependency_Type tag
+            dep_match = re.search(
+                r"(?:^\s*(?:\*\*)?\s*Dependency_Type\s*(?:\*\*)?\s*:\s*)(.*?)\s*$",
+                raw_response,
+                re.MULTILINE | re.IGNORECASE,
+            )
             if not dep_match:
-                return None, None, f"Malformed LLM response (missing explicit Dependency_Type tag): {raw_response[:100]}"
+                err_msg = f"Malformed LLM response (missing explicit Dependency_Type tag): {raw_response[:100]}"
+                return LLMLabelResult(
+                    suggested_label=None,
+                    confidence=None,
+                    rationale=err_msg,
+                    raw_response=raw_response,
+                    failed=True,
+                    error=err_msg,
+                )
+
+            raw_val = dep_match.group(1).strip().strip("*").strip("[]").strip("*").strip()
+            if raw_val.upper() in {"ABSTAIN", "NONE", "UNKNOWN"}:
+                return LLMLabelResult(
+                    suggested_label=None,
+                    confidence=None,
+                    rationale=f"LLM abstained ({raw_val}).",
+                    raw_response=raw_response,
+                    failed=False,
+                )
 
             parsed = ResponseParser.parse(raw_response, pair_id=target_pair.id)
-            return parsed.dependency_type, parsed.confidence, parsed.rationale
+            has_conf_header = bool(
+                re.search(r"Confidence\s*Score\s*(?:\*\*)?\s*:", raw_response, re.IGNORECASE)
+            )
+            return LLMLabelResult(
+                suggested_label=parsed.dependency_type,
+                confidence=parsed.confidence if has_conf_header else None,
+                rationale=parsed.rationale,
+                raw_response=raw_response,
+                failed=False,
+            )
 
         except Exception as e:
             logger.error(f"Error during LLM labeling for pair {target_pair.id}: {e}")
-            return None, None, f"LLM provider error: {str(e)}"
+            err_msg = f"LLM provider error: {e}"
+            return LLMLabelResult(
+                suggested_label=None,
+                confidence=None,
+                rationale=err_msg,
+                raw_response=raw_response,
+                failed=True,
+                error=err_msg,
+            )
+
+    def label_pair(
+        self,
+        target_pair: RequirementPair,
+        examples: Optional[Dict[DependencyType, List[RequirementPair]]] = None,
+        srs_context: Optional[List[str]] = None,
+    ) -> Tuple[Optional[DependencyType], Optional[int], str]:
+        """Classify a requirement pair using LLM client (tuple-returning compatibility API)."""
+        res = self.evaluate_pair(target_pair, examples=examples, srs_context=srs_context)
+        return res.suggested_label, res.confidence, res.rationale
 
 
 class MultiModelLLMLabeler:
-    """Collect independent model labels; accept only unanimous valid votes.
-
-    Model clients are supplied by the caller so offline tests can use controlled
-    clients and real-provider use remains explicit at the CLI/configuration layer.
-    Any disagreement or failed/invalid vote returns no label for human review.
-    """
+    """Collect independent model labels; accept only unanimous valid votes."""
 
     def __init__(self, labelers: List[LLMLabeler]):
         if len(labelers) < 2:
@@ -215,37 +299,64 @@ class MultiModelLLMLabeler:
             raise ValueError("Multi-model labeling requires distinct model identifiers.")
         self.model_id = "ensemble[" + ",".join(self.model_ids) + "]"
 
+    def evaluate_pair(
+        self,
+        target_pair: RequirementPair,
+        examples: Optional[Dict[DependencyType, List[RequirementPair]]] = None,
+        srs_context: Optional[List[str]] = None,
+    ) -> LLMLabelResult:
+        votes: List[Tuple[str, LLMLabelResult]] = []
+        for model_id, labeler in zip(self.model_ids, self.labelers):
+            res = labeler.evaluate_pair(
+                target_pair, examples=examples, srs_context=srs_context
+            )
+            votes.append((model_id, res))
+
+        vote_evidence = "; ".join(
+            f"model={model_id}, label={res.suggested_label.value if res.suggested_label else 'ABSTAIN'}, "
+            f"confidence={res.confidence if res.confidence is not None else 'unknown'}, "
+            f"rationale={res.rationale}"
+            for model_id, res in votes
+        )
+        labels = [res.suggested_label for _, res in votes]
+        any_failed = any(res.failed for _, res in votes)
+        if all(label is not None for label in labels) and len(set(labels)) == 1:
+            confidences = [res.confidence for _, res in votes if res.confidence is not None]
+            confidence = min(confidences) if confidences else None
+            return LLMLabelResult(
+                suggested_label=labels[0],
+                confidence=confidence,
+                rationale=f"MULTI_LLM_UNANIMOUS: {vote_evidence}",
+                failed=False,
+            )
+
+        differing_labels = {label for label in labels if label is not None}
+        if len(differing_labels) > 1:
+            msg = f"MULTI_LLM_DISAGREEMENT: {vote_evidence}"
+            return LLMLabelResult(
+                suggested_label=None,
+                confidence=None,
+                rationale=msg,
+                failed=False,
+                disagreement=True,
+            )
+        msg = f"MULTI_LLM_INCOMPLETE: {vote_evidence}"
+        return LLMLabelResult(
+            suggested_label=None,
+            confidence=None,
+            rationale=msg,
+            failed=any_failed,
+            error=msg if any_failed else None,
+        )
+
     def label_pair(
         self,
         target_pair: RequirementPair,
         examples: Optional[Dict[DependencyType, List[RequirementPair]]] = None,
         srs_context: Optional[List[str]] = None,
     ) -> Tuple[Optional[DependencyType], Optional[int], str]:
-        votes = []
-        for model_id, labeler in zip(self.model_ids, self.labelers):
-            label, confidence, rationale = labeler.label_pair(
-                target_pair, examples=examples, srs_context=srs_context
-            )
-            votes.append((model_id, label, confidence, rationale))
-
-        vote_evidence = "; ".join(
-            f"model={model_id}, label={label.value if label else 'ABSTAIN'}, "
-            f"confidence={confidence if confidence is not None else 'unknown'}, "
-            f"rationale={rationale}"
-            for model_id, label, confidence, rationale in votes
-        )
-        labels = [label for _, label, _, _ in votes]
-        if all(label is not None for label in labels) and len(set(labels)) == 1:
-            confidences = [confidence for _, _, confidence, _ in votes if confidence is not None]
-            # The minimum self-reported score is conservative; it is not a calibrated
-            # probability and is retained only as a screening cue.
-            confidence = min(confidences) if confidences else None
-            return labels[0], confidence, f"MULTI_LLM_UNANIMOUS: {vote_evidence}"
-
-        differing_labels = {label for label in labels if label is not None}
-        if len(differing_labels) > 1:
-            return None, None, f"MULTI_LLM_DISAGREEMENT: {vote_evidence}"
-        return None, None, f"MULTI_LLM_INCOMPLETE: {vote_evidence}"
+        res = self.evaluate_pair(target_pair, examples=examples, srs_context=srs_context)
+        return res.suggested_label, res.confidence, res.rationale
 
 
 class LabelingRunManifest(BaseModel):
@@ -269,7 +380,7 @@ class ProvisionalLabeler:
     def __init__(
         self,
         heuristic_labeler: Optional[HeuristicLabeler] = None,
-        llm_labeler: Optional[LLMLabeler] = None,
+        llm_labeler: Optional[LLMLabeler | MultiModelLLMLabeler] = None,
         config: Optional[LEREDDConfig] = None,
     ):
         self.config = config or get_config()
@@ -282,53 +393,85 @@ class ProvisionalLabeler:
         mode: LabelingMode = LabelingMode.HYBRID,
         examples: Optional[Dict[DependencyType, List[RequirementPair]]] = None,
     ) -> RequirementPair:
-        """Process a single requirement pair and return a new RequirementPair with provisional provenance.
+        """Process a single requirement pair and return a new RequirementPair with structured provisional provenance.
 
         Never overwrites existing VERIFIED human annotations.
         """
-        # Safeguard: Do not overwrite verified annotations
         if pair.provenance and pair.provenance.status == VerificationStatus.VERIFIED:
             logger.info(f"Pair {pair.id} is human-verified. Skipping provisional labeling.")
             return pair
 
         heuristic_res: Optional[HeuristicRuleResult] = None
-        llm_label: Optional[DependencyType] = None
-        llm_conf: Optional[int] = None
-        llm_rationale: str = ""
+        llm_res: Optional[LLMLabelResult] = None
         is_multi_model = isinstance(self.llm_labeler, MultiModelLLMLabeler)
         if mode == LabelingMode.MULTI_LLM and not is_multi_model:
             raise ValueError("multi_llm mode requires a MultiModelLLMLabeler.")
-        llm_needs_review = False
 
         if mode in (LabelingMode.HEURISTIC, LabelingMode.HYBRID):
             heuristic_res = self.heuristic_labeler.evaluate_pair(pair)
 
         if mode in (LabelingMode.LLM, LabelingMode.MULTI_LLM, LabelingMode.HYBRID):
-            llm_label, llm_conf, llm_rationale = self.llm_labeler.label_pair(pair, examples=examples)
-            llm_needs_review = is_multi_model and llm_rationale.startswith(
-                ("MULTI_LLM_DISAGREEMENT:", "MULTI_LLM_INCOMPLETE:")
-            )
+            if hasattr(self.llm_labeler, "evaluate_pair"):
+                llm_res = self.llm_labeler.evaluate_pair(pair, examples=examples)
+            else:
+                l_lbl, l_cf, l_rt = self.llm_labeler.label_pair(pair, examples=examples)
+                failed_hint = l_lbl is None and l_rt.startswith(("Malformed LLM", "LLM provider error"))
+                llm_res = LLMLabelResult(
+                    suggested_label=l_lbl,
+                    confidence=l_cf,
+                    rationale=l_rt,
+                    failed=failed_hint,
+                    error=l_rt if failed_hint else None,
+                )
 
-        # Combine outputs and determine provisional outcome
         h_label = heuristic_res.suggested_label if heuristic_res else None
+        llm_label = llm_res.suggested_label if llm_res else None
+        llm_conf = llm_res.confidence if llm_res else None
+        llm_rationale = llm_res.rationale if llm_res else ""
+        llm_failed = bool(llm_res and llm_res.failed)
+        llm_error = llm_res.error if llm_res else None
+        llm_needs_review = bool(
+            is_multi_model
+            and llm_rationale.startswith(("MULTI_LLM_DISAGREEMENT:", "MULTI_LLM_INCOMPLETE:"))
+        )
+
         final_provisional_label: Optional[DependencyType] = None
         source: AnnotationSource = AnnotationSource.HEURISTIC
         review_notes = ""
-        evidence_parts = []
+        evidence_parts: List[str] = []
+        structured_reasons: List[str] = []
 
         if mode == LabelingMode.HEURISTIC:
             final_provisional_label = h_label
             source = AnnotationSource.HEURISTIC
             if heuristic_res:
                 evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
+            if h_label is not None:
+                structured_reasons.append("heuristic_only")
+            else:
+                structured_reasons.append("both_abstained")
+                review_notes = "UNRESOLVED: Heuristic abstained."
 
         elif mode in (LabelingMode.LLM, LabelingMode.MULTI_LLM):
             final_provisional_label = None if llm_needs_review else llm_label
             source = AnnotationSource.ENSEMBLE if is_multi_model else AnnotationSource.LLM
             if llm_rationale:
                 evidence_parts.append(f"LLM Rationale: {llm_rationale}")
-            if llm_needs_review:
+            if llm_failed:
+                structured_reasons.append("llm_failure")
+                review_notes = f"FAILED: {llm_error or llm_rationale}"
+            elif llm_res and llm_res.disagreement:
+                structured_reasons.append("disagreement")
                 review_notes = llm_rationale
+            elif llm_needs_review:
+                structured_reasons.append("both_abstained")
+                review_notes = llm_rationale
+            elif llm_label is not None:
+                if not is_multi_model:
+                    structured_reasons.append("llm_only")
+            else:
+                structured_reasons.append("both_abstained")
+                review_notes = "UNRESOLVED: LLM abstained."
 
         else:  # HYBRID mode
             if llm_needs_review:
@@ -341,32 +484,62 @@ class ProvisionalLabeler:
                         f"{h_label.value if h_label else 'ABSTAIN'}"
                     )
                 evidence_parts.append(f"LLM Votes: {llm_rationale}")
+                if llm_failed:
+                    structured_reasons.append("llm_failure")
+                if llm_res and llm_res.disagreement:
+                    structured_reasons.append("disagreement")
+                elif not llm_failed:
+                    structured_reasons.append("both_abstained")
             elif h_label is not None and llm_label is not None:
                 if h_label == llm_label:
                     final_provisional_label = h_label
                     source = AnnotationSource.ENSEMBLE
                     evidence_parts.append(f"AGREEMENT (Heuristic & LLM): {h_label.value}")
-                    evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
+                    if heuristic_res:
+                        evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
                     evidence_parts.append(f"LLM Rationale: {llm_rationale}")
                 else:
-                    # Disagreement -> Keep provisional label as None (Unresolved) for human review
                     final_provisional_label = None
                     source = AnnotationSource.ENSEMBLE
+                    structured_reasons.append("disagreement")
                     review_notes = f"DISAGREEMENT: Heuristic predicted '{h_label.value}', LLM predicted '{llm_label.value}'."
-                    evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {h_label.value}")
+                    if heuristic_res:
+                        evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {h_label.value}")
                     evidence_parts.append(f"LLM Rationale: {llm_label.value} ({llm_rationale})")
             elif h_label is not None:
                 final_provisional_label = h_label
                 source = AnnotationSource.HEURISTIC
-                evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
+                structured_reasons.append("heuristic_only")
+                if llm_failed:
+                    structured_reasons.append("llm_failure")
+                    review_notes = f"FAILED: {llm_error or llm_rationale}"
+                if heuristic_res:
+                    evidence_parts.append(f"Heuristic [{heuristic_res.rule_id}]: {heuristic_res.evidence}")
             elif llm_label is not None:
                 final_provisional_label = llm_label
                 source = AnnotationSource.ENSEMBLE if is_multi_model else AnnotationSource.LLM
+                if not is_multi_model:
+                    structured_reasons.append("llm_only")
                 evidence_parts.append(f"LLM Rationale: {llm_rationale}")
             else:
                 final_provisional_label = None
-                source = AnnotationSource.HEURISTIC
-                review_notes = "UNRESOLVED: Both heuristic and LLM abstained or failed."
+                if llm_failed:
+                    source = AnnotationSource.LLM
+                    structured_reasons.append("llm_failure")
+                    review_notes = f"FAILED: {llm_error or llm_rationale}"
+                    if llm_rationale:
+                        evidence_parts.append(f"LLM Error: {llm_rationale}")
+                else:
+                    source = AnnotationSource.HEURISTIC
+                    structured_reasons.append("both_abstained")
+                    review_notes = "UNRESOLVED: Both heuristic and LLM abstained or failed."
+
+        existing_explicit_flag = bool(pair.provenance and pair.provenance.explicit_review_flag)
+        if existing_explicit_flag and "explicit_flag" not in structured_reasons:
+            structured_reasons.append("explicit_flag")
+
+        synth_flag = is_synthetic(pair)
+        synth_identity = synthetic_source_identity(pair)
 
         prov = AnnotationProvenance(
             source=source,
@@ -383,6 +556,19 @@ class ProvisionalLabeler:
             evidence=" | ".join(evidence_parts),
             review_notes=review_notes,
             dataset_version="provisional-v1.0",
+            heuristic_label=h_label,
+            heuristic_rule_id=heuristic_res.rule_id if heuristic_res else None,
+            heuristic_confidence=heuristic_res.confidence if heuristic_res else None,
+            heuristic_evidence=heuristic_res.evidence if heuristic_res else None,
+            llm_label=llm_label,
+            llm_rationale=llm_rationale if mode != LabelingMode.HEURISTIC else None,
+            llm_raw_response=llm_res.raw_response if llm_res else None,
+            llm_failed=llm_failed,
+            llm_error=llm_error,
+            explicit_review_flag=existing_explicit_flag,
+            structured_review_reasons=structured_reasons,
+            synthetic=synth_flag,
+            source_identity=synth_identity,
         )
 
         return RequirementPair(
@@ -391,6 +577,8 @@ class ProvisionalLabeler:
             req_b=pair.req_b,
             dependency_type=final_provisional_label,
             provenance=prov,
+            synthetic=synth_flag,
+            source_identity=synth_identity,
         )
 
     def process_batch(
@@ -418,22 +606,37 @@ class ProvisionalLabeler:
 
                 prov = processed.provenance
                 if prov:
-                    if "AGREEMENT" in (prov.evidence or "") or "MULTI_LLM_UNANIMOUS" in (prov.evidence or ""):
+                    if prov.llm_failed:
+                        failed_count += 1
+                    if (
+                        (prov.heuristic_label is not None and prov.heuristic_label == prov.llm_label)
+                        or "MULTI_LLM_UNANIMOUS" in (prov.evidence or "")
+                        or "AGREEMENT" in (prov.evidence or "")
+                    ):
                         agreed_count += 1
-                    elif "DISAGREEMENT" in (prov.review_notes or ""):
+                    elif (
+                        "disagreement" in prov.structured_review_reasons
+                        or "DISAGREEMENT" in (prov.review_notes or "")
+                    ):
                         disagreed_count += 1
-                    elif processed.dependency_type is None:
+                    elif processed.dependency_type is None and not prov.llm_failed:
                         unresolved_count += 1
 
             except Exception as e:
                 logger.error(f"Failed to process candidate {candidate.id}: {e}")
                 failed_count += 1
-                # Preserve candidate in failed state
+                synth_flag = is_synthetic(candidate)
+                synth_id = synthetic_source_identity(candidate)
                 failed_prov = AnnotationProvenance(
                     source=AnnotationSource.HEURISTIC,
                     status=VerificationStatus.PROVISIONAL,
                     annotator_id="provisional_labeler_error",
-                    review_notes=f"FAILED: Execution error {str(e)}"
+                    review_notes=f"FAILED: Execution error {e}",
+                    llm_failed=True,
+                    llm_error=str(e),
+                    structured_review_reasons=["llm_failure"],
+                    synthetic=synth_flag,
+                    source_identity=synth_id,
                 )
                 labeled_pairs.append(
                     RequirementPair(
@@ -441,7 +644,9 @@ class ProvisionalLabeler:
                         req_a=candidate.req_a,
                         req_b=candidate.req_b,
                         dependency_type=None,
-                        provenance=failed_prov
+                        provenance=failed_prov,
+                        synthetic=synth_flag,
+                        source_identity=synth_id,
                     )
                 )
 
@@ -467,7 +672,8 @@ class ProvisionalLabeler:
 
         logger.info(
             f"Provisional labeling complete ({len(candidates)} candidates). "
-            f"Labeled: {labeled_count}, Agreed: {agreed_count}, Disagreed: {disagreed_count}, Unresolved: {unresolved_count}."
+            f"Labeled: {labeled_count}, Agreed: {agreed_count}, Disagreed: {disagreed_count}, "
+            f"Unresolved: {unresolved_count}, Failed: {failed_count}."
         )
         return labeled_pairs, manifest
 
@@ -486,7 +692,7 @@ class ProvisionalLabeler:
             json.dump(data, f, indent=2)
 
         if output_manifest_file is None:
-            base, ext = os.path.splitext(output_pairs_file)
+            base, _ = os.path.splitext(output_pairs_file)
             output_manifest_file = f"{base}_manifest.json"
 
         with open(output_manifest_file, "w", encoding="utf-8") as f:

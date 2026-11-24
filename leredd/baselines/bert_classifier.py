@@ -10,6 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from leredd.data_models import RequirementPair, DependencyType, Prediction, VerificationStatus
 from leredd.embeddings import EmbeddingModel
+from leredd.synthetic import is_synthetic
 
 
 class BERTBaseline:
@@ -18,14 +19,24 @@ class BERTBaseline:
     Handles severe class imbalance via class weighting and oversampling.
     """
 
-    def __init__(self, embedder: EmbeddingModel | None = None, model_type: str = "rf"):
+    def __init__(
+        self,
+        embedder: EmbeddingModel | None = None,
+        model_type: str = "rf",
+        random_state: int = 42,
+    ):
         self.embedder = embedder or EmbeddingModel()
         self.model_type = model_type
-        
+        self.random_state = random_state
+
         if model_type == "lr":
-            self.classifier = LogisticRegression(class_weight="balanced", max_iter=1000, random_state=42)
+            self.classifier = LogisticRegression(
+                class_weight="balanced", max_iter=1000, random_state=random_state
+            )
         else:
-            self.classifier = RandomForestClassifier(class_weight="balanced", n_estimators=100, random_state=42)
+            self.classifier = RandomForestClassifier(
+                class_weight="balanced", n_estimators=100, random_state=random_state
+            )
             
         self.is_fitted = False
         self.label_map = [
@@ -62,11 +73,12 @@ class BERTBaseline:
         invalid = [
             pair.id for pair in training_pairs
             if pair.dependency_type is None
+            or is_synthetic(pair)
             or (pair.provenance and pair.provenance.status != VerificationStatus.VERIFIED)
         ]
         if invalid:
             raise ValueError(
-                "Training data contains unlabeled or unverified pairs: "
+                "Training data contains unlabeled or unverified (or synthetic) pairs: "
                 + ", ".join(invalid)
             )
 

@@ -16,7 +16,6 @@ from leredd.dataset_splitter import (
     SplitConfig,
     SplitStrategy,
     DatasetSplit,
-    LeakageReport,
 )
 from leredd.cli import app
 

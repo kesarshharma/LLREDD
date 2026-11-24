@@ -1,7 +1,6 @@
 """Loader for original replication package datasets (standard-library only)."""
 from __future__ import annotations
 import json
-import os
 from pathlib import Path
 
 _DATA_ROOT = Path(__file__).resolve().parent.parent / "data" / "replication"

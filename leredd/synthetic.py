@@ -13,16 +13,18 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from leredd.data_models import (
     AnnotationProvenance,
     AnnotationSource,
-    DependencyType,
-    Requirement,
     RequirementPair,
     VerificationStatus,
 )
+
+if TYPE_CHECKING:
+    from leredd.review_queue import ReviewItem
+
 SYNTHETIC_SOURCE_IDENTITY = "synthetic-review-tests"
 
 DEFAULT_FIXTURES_DIR = os.path.join(
@@ -48,7 +50,9 @@ def list_synthetic_fixtures(fixtures_dir: Optional[str] = None) -> List[str]:
         with open(manifest_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data.get("fixtures", [])
-    return [f for f in os.listdir(fdir) if f.endswith(".json") and f != "manifest.json"]
+    return sorted(
+        f for f in os.listdir(fdir) if f.endswith(".json") and f != "manifest.json"
+    )
 
 
 def load_synthetic_fixture(
@@ -57,7 +61,7 @@ def load_synthetic_fixture(
     """Load and validate raw synthetic fixture JSON.
 
     Enforces that 'synthetic': true and 'source_identity': 'synthetic-review-tests'
-    are explicitly declared in the fixture.
+    are explicitly declared in the fixture, and that no simulated human decisions exist.
     """
     fdir = fixtures_dir or get_synthetic_fixtures_dir()
     if os.path.isabs(name_or_path):
@@ -65,7 +69,9 @@ def load_synthetic_fixture(
     elif os.path.exists(name_or_path):
         target_path = os.path.abspath(name_or_path)
     else:
-        filename = name_or_path if name_or_path.endswith(".json") else f"{name_or_path}.json"
+        filename = (
+            name_or_path if name_or_path.endswith(".json") else f"{name_or_path}.json"
+        )
         target_path = os.path.join(fdir, filename)
 
     if not os.path.exists(target_path):
@@ -86,6 +92,22 @@ def load_synthetic_fixture(
         raise ValueError(
             f"Invalid synthetic fixture '{target_path}': 'source_identity' must be '{SYNTHETIC_SOURCE_IDENTITY}'."
         )
+
+    for raw_pair in data.get("pairs", []):
+        if isinstance(raw_pair, Mapping):
+            if raw_pair.get("human_decision") is not None:
+                raise ValueError(
+                    f"Invalid synthetic fixture '{target_path}': simulated human_decision is forbidden."
+                )
+            prov = raw_pair.get("provenance")
+            if isinstance(prov, Mapping) and (
+                prov.get("status") == VerificationStatus.VERIFIED.value
+                or prov.get("source") == AnnotationSource.HUMAN.value
+                or prov.get("reviewer_id")
+            ):
+                raise ValueError(
+                    f"Invalid synthetic fixture '{target_path}': simulated human verification provenance is forbidden."
+                )
 
     return data
 
@@ -140,10 +162,14 @@ def synthetic_source_identity(*records: Any) -> str | None:
         )
         for child in nested:
             identity = (
-                child.get("source_identity")
-                if isinstance(child, Mapping)
-                else getattr(child, "source_identity", None)
-            ) if child is not None else None
+                (
+                    child.get("source_identity")
+                    if isinstance(child, Mapping)
+                    else getattr(child, "source_identity", None)
+                )
+                if child is not None
+                else None
+            )
             if isinstance(identity, str) and identity.strip():
                 return identity.strip()
     return None
@@ -154,8 +180,9 @@ def load_synthetic_pairs(
 ) -> List[RequirementPair]:
     """Load a synthetic fixture and parse into a list of RequirementPair models.
 
-    All generated RequirementPair instances are guaranteed to have synthetic=True
-    and source_identity='synthetic-review-tests'.
+    All generated RequirementPair instances and nested requirements/provenance are
+    guaranteed to have synthetic=True, source_identity='synthetic-review-tests', and
+    preserved structured review fields on AnnotationProvenance.
     """
     data = load_synthetic_fixture(name_or_path, fixtures_dir=fixtures_dir)
     raw_pairs = data.get("pairs", [])
@@ -166,12 +193,44 @@ def load_synthetic_pairs(
         pair_dict["synthetic"] = True
         pair_dict["source_identity"] = SYNTHETIC_SOURCE_IDENTITY
 
-        prov_dict = pair_dict.get("provenance")
-        if isinstance(prov_dict, dict):
-            prov_dict["synthetic"] = True
-            prov_dict["source_identity"] = SYNTHETIC_SOURCE_IDENTITY
-            pair_dict["provenance"] = AnnotationProvenance.model_validate(prov_dict)
+        for req_key in ("req_a", "req_b"):
+            if isinstance(pair_dict.get(req_key), dict):
+                req_copy = dict(pair_dict[req_key])
+                req_copy["synthetic"] = True
+                req_copy["source_identity"] = SYNTHETIC_SOURCE_IDENTITY
+                pair_dict[req_key] = req_copy
 
+        prov_dict = dict(pair_dict.get("provenance") or {})
+        prov_dict["synthetic"] = True
+        prov_dict["source_identity"] = SYNTHETIC_SOURCE_IDENTITY
+
+        reasons = list(pair_dict.get("review_reasons") or [])
+        if reasons and not prov_dict.get("structured_review_reasons"):
+            prov_dict["structured_review_reasons"] = [str(r) for r in reasons]
+        if "explicit_flag" in reasons:
+            prov_dict["explicit_review_flag"] = True
+        if "llm_failure" in reasons or pair_dict.get("llm_raw_response"):
+            if pair_dict.get("llm_prediction") is None:
+                prov_dict["llm_failed"] = True
+                prov_dict.setdefault(
+                    "llm_error",
+                    str(pair_dict.get("llm_rationale") or "Malformed LLM response"),
+                )
+
+        if "heuristic_prediction" in pair_dict and prov_dict.get("heuristic_label") is None:
+            prov_dict["heuristic_label"] = pair_dict.get("heuristic_prediction")
+        if "heuristic_evidence" in pair_dict and prov_dict.get("heuristic_evidence") is None:
+            prov_dict["heuristic_evidence"] = pair_dict.get("heuristic_evidence")
+        if "llm_prediction" in pair_dict and prov_dict.get("llm_label") is None:
+            prov_dict["llm_label"] = pair_dict.get("llm_prediction")
+        if "llm_rationale" in pair_dict and prov_dict.get("llm_rationale") is None:
+            prov_dict["llm_rationale"] = pair_dict.get("llm_rationale")
+        if "llm_raw_response" in pair_dict and prov_dict.get("llm_raw_response") is None:
+            prov_dict["llm_raw_response"] = pair_dict.get("llm_raw_response")
+        if "llm_confidence" in pair_dict and prov_dict.get("confidence_score") is None:
+            prov_dict["confidence_score"] = pair_dict.get("llm_confidence")
+
+        pair_dict["provenance"] = AnnotationProvenance.model_validate(prov_dict)
         pairs.append(RequirementPair.model_validate(pair_dict))
 
     return pairs
@@ -181,62 +240,15 @@ def load_synthetic_review_items(
     name_or_path: str, fixtures_dir: Optional[str] = None
 ) -> List[ReviewItem]:
     """Load a synthetic fixture and transform into ReviewItem models for review queue testing."""
-    from leredd.review_queue import QueueStatus, ReviewItem, ReviewReasonCode
+    from leredd.review_queue import ReviewQueueConfig, ReviewQueueManager
 
-    data = load_synthetic_fixture(name_or_path, fixtures_dir=fixtures_dir)
-    raw_pairs = data.get("pairs", [])
+    pairs = load_synthetic_pairs(name_or_path, fixtures_dir=fixtures_dir)
+    manager = ReviewQueueManager(
+        config=ReviewQueueConfig(minimum_requirement_characters=0)
+    )
     items: List[ReviewItem] = []
-
-    for idx, item in enumerate(raw_pairs, start=1):
-        pair_id = item.get("id", f"SYNTH-PAIR-{idx:03d}")
-        req_a_data = item.get("req_a", {})
-        req_b_data = item.get("req_b", {})
-
-        review_reasons = []
-        for r in item.get("review_reasons", []):
-            try:
-                review_reasons.append(ReviewReasonCode(r))
-            except ValueError:
-                pass
-
-        prov_dict = item.get("provenance")
-        provenance = (
-            AnnotationProvenance.model_validate(prov_dict)
-            if isinstance(prov_dict, dict)
-            else None
-        )
-
-        h_pred = item.get("heuristic_prediction")
-        l_pred = item.get("llm_prediction")
-        p_label = item.get("proposed_label") or l_pred or h_pred
-
-        review_item = ReviewItem(
-            queue_id=f"QITEM-{pair_id}",
-            pair_id=pair_id,
-            req_a_id=req_a_data.get("id", f"REQ-A-{idx}"),
-            req_b_id=req_b_data.get("id", f"REQ-B-{idx}"),
-            req_a_text=req_a_data.get("text", ""),
-            req_b_text=req_b_data.get("text", ""),
-            system_name=req_a_data.get("system") or "SyntheticSystem",
-            orientation=(
-                req_a_data.get("id", f"REQ-A-{idx}"),
-                req_b_data.get("id", f"REQ-B-{idx}"),
-            ),
-            heuristic_prediction=h_pred,
-            heuristic_evidence=item.get("heuristic_evidence", ""),
-            llm_prediction=l_pred,
-            llm_rationale=item.get("llm_rationale", ""),
-            llm_confidence=item.get("llm_confidence"),
-            proposed_label=p_label,
-            provenance=provenance,
-            review_reasons=review_reasons,
-            review_notes=item.get("llm_rationale") or item.get("heuristic_evidence") or "Synthetic review test pair.",
-            status=QueueStatus.PENDING,
-            priority=item.get("priority", 3),
-            human_decision=None,
-            synthetic=True,
-            source_identity=SYNTHETIC_SOURCE_IDENTITY,
-        )
-        items.append(review_item)
-
+    for pair in pairs:
+        created = manager.create_review_item(pair)
+        if created is not None:
+            items.append(created)
     return items

@@ -11,7 +11,6 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 import pytest
-from unittest.mock import patch
 import scripts.run_replication_evaluation as runner_mod
 from scripts.run_replication_evaluation import run_prototype, DATASET, build_pairs
 
@@ -64,7 +63,7 @@ class TestReplicationRunner:
 
     def test_invalid_unresolved_handled_transparently(self):
         # Direct pair construction with synthetic invalid Implemented by (unresolved False) — fail-closed
-        from leredd.data_models import DependencyType, Requirement, RequirementPair
+        from leredd.data_models import Requirement, RequirementPair
         bad_rec = {
             "pair_id": "test-bad-impl",
             "req_a_text": "A",

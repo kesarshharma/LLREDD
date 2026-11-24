@@ -14,13 +14,11 @@ from leredd.data_models import (
     VerificationStatus,
 )
 from leredd.review_queue import (
-    HumanDecision,
     QueueStatus,
     ReviewItem,
     ReviewPriority,
     ReviewQueueConfig,
     ReviewQueueManager,
-    ReviewQueueManifest,
     ReviewReasonCode,
 )
 

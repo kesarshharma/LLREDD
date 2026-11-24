@@ -8,7 +8,6 @@ import tempfile
 import uuid
 from pathlib import Path
 import pandas as pd
-import numpy as np
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
@@ -16,7 +15,7 @@ import networkx as nx
 from leredd.config import get_config
 from leredd.data_models import (
     AnnotationProvenance, AnnotationSource, Requirement, RequirementPair,
-    DependencyType, Prediction, PredictionStabilityStatus,
+    DependencyType, PredictionStabilityStatus,
     PredictionValidationStatus, VerificationStatus,
 )
 from leredd.utils import (
@@ -33,7 +32,6 @@ from leredd.review_queue import (
     ReviewQueueManager,
     QueueStatus,
     ReviewReasonCode,
-    ReviewPriority,
     ReviewQueueConfig,
 )
 
@@ -119,17 +117,17 @@ st.markdown("""
 def render_badge(dep_type: str) -> str:
     dep_clean = dep_type.strip()
     if "Require" in dep_clean:
-        return f'<span class="metric-badge badge-requires">Requires</span>'
+        return '<span class="metric-badge badge-requires">Requires</span>'
     elif "Implement" in dep_clean:
-        return f'<span class="metric-badge badge-implements">Implements</span>'
+        return '<span class="metric-badge badge-implements">Implements</span>'
     elif "Conflict" in dep_clean:
-        return f'<span class="metric-badge badge-conflicts">Conflicts</span>'
+        return '<span class="metric-badge badge-conflicts">Conflicts</span>'
     elif "Detail" in dep_clean:
-        return f'<span class="metric-badge badge-details">Details</span>'
+        return '<span class="metric-badge badge-details">Details</span>'
     elif "Similar" in dep_clean:
-        return f'<span class="metric-badge badge-similar">Is Similar</span>'
+        return '<span class="metric-badge badge-similar">Is Similar</span>'
     else:
-        return f'<span class="metric-badge badge-nodep">No Dependency</span>'
+        return '<span class="metric-badge badge-nodep">No Dependency</span>'
 
 
 def format_review_reason(reason) -> str:

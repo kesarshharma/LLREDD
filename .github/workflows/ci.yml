@@ -14,10 +14,10 @@ jobs:
         python-version: ["3.10", "3.11"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -25,9 +25,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -e .[dev]
+          pip install -e ".[dev,documents]"
+
+      - name: Run Static Checks (Ruff & Bytecode Compilation)
+        run: |
+          python -m ruff check leredd api ui scripts tests
+          python -m compileall -q leredd api ui scripts tests
 
       - name: Run Pytest with Coverage
+        env:
+          HF_HUB_OFFLINE: "1"
+          CACHE_DIR: ".pytest-tmp/ci-embeddings"
         run: |
           python -m pytest tests/ --cov=leredd --cov-report=xml --cov-report=term-missing
 

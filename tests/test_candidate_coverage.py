@@ -148,7 +148,6 @@ def test_stratified_candidate_recall_rejects_provisional_labels(tmp_path):
 @pytest.mark.parametrize("target", ["strata", "candidate", "universe"])
 def test_candidate_recall_rejects_tampered_design_inputs(tmp_path, target):
     manifest, strata, verified = _pilot_files(tmp_path)
-    payload = json.loads(manifest.read_text(encoding="utf-8"))
     path = {
         "strata": strata,
         "candidate": tmp_path / "candidate-pairs.json",

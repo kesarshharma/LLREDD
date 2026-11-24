@@ -1,11 +1,11 @@
 """TF-IDF & LSA Baseline model for requirement dependency detection."""
 
-import numpy as np
 from typing import List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
-from leredd.data_models import RequirementPair, DependencyType, Prediction
+from leredd.data_models import DependencyType, Prediction, RequirementPair, VerificationStatus
+from leredd.synthetic import is_synthetic
 
 
 class TFIDF_LSABaseline:
@@ -14,15 +14,32 @@ class TFIDF_LSABaseline:
     Recommends 'Requires' dependencies based on TF-IDF + LSA cosine similarity thresholding.
     """
 
-    def __init__(self, n_components: int = 20, similarity_threshold: float = 0.45):
+    def __init__(
+        self,
+        n_components: int = 20,
+        similarity_threshold: float = 0.45,
+        random_state: int = 42,
+    ):
         self.n_components = n_components
         self.similarity_threshold = similarity_threshold
+        self.random_state = random_state
         self.tfidf = TfidfVectorizer(ngram_range=(1, 2), stop_words="english")
-        self.svd = TruncatedSVD(n_components=n_components, random_state=42)
+        self.svd = TruncatedSVD(n_components=n_components, random_state=random_state)
         self.is_fitted = False
 
     def fit(self, training_pairs: List[RequirementPair]) -> "TFIDF_LSABaseline":
         """Fit TF-IDF vectorizer and SVD matrix on training requirements text."""
+        invalid = [
+            pair.id
+            for pair in training_pairs
+            if is_synthetic(pair)
+            or (pair.provenance and pair.provenance.status != VerificationStatus.VERIFIED)
+        ]
+        if invalid:
+            raise ValueError(
+                "Training data contains synthetic or unverified pairs: " + ", ".join(invalid)
+            )
+
         corpus = []
         for pair in training_pairs:
             corpus.append(pair.req_a.text)
@@ -34,7 +51,7 @@ class TFIDF_LSABaseline:
         tfidf_matrix = self.tfidf.fit_transform(corpus)
         actual_components = min(self.n_components, tfidf_matrix.shape[1] - 1)
         if actual_components > 0:
-            self.svd = TruncatedSVD(n_components=actual_components, random_state=42)
+            self.svd = TruncatedSVD(n_components=actual_components, random_state=self.random_state)
             self.svd.fit(tfidf_matrix)
         self.is_fitted = True
         return self

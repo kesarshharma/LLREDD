@@ -542,3 +542,31 @@ The long-running 8501 process displayed an import error for `PredictionValidatio
 - **Resolution:** The path test derives the project root from `__file__`. CLI assertions now strip ANSI styling with `click.unstyle()` before checking option spellings; `color=False` alone did not suppress Rich formatting in hosted Linux. No application behavior or assertions were weakened.
 - **Verification:** The failed run on `1643a7840bd475f5da8bd1b00b361b48ec11ec0a` reported **450 passed, 2 failed, 4 skipped**; both failures were ANSI-sensitive CLI assertions. After normalization, the two focused tests passed and the full local coverage suite reported **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0. Hosted run [45445432202](https://github.com/kesarshharma/LLREDD/actions/runs/45445432202) then completed successfully on `061bd37cc5e01d4729fb1336473c4d085cc1c383`: Python 3.10 and 3.11 both passed pytest with coverage and Docker image build.
 - **Boundary:** This resolves the CI portability issue. It does not establish research-data permissions, label correctness, or project research completion.
+
+
+### [ISSUE-059] Unverified, Synthetic, and Reversed Self-Pairs Could Leak Through Retrieval & Baseline Paths
+- **Severity:** High (retrieval & training isolation)
+- **Status:** ✅ Resolved locally (TASK-P59, 2026-11-25)
+- **Files:** `leredd/retrieval.py`, `leredd/bm25_retrieval.py`, `leredd/hybrid_retrieval.py`, `leredd/baselines/bert_classifier.py`, `leredd/baselines/tfidf_lsa.py`, `leredd/evaluation.py`.
+- **Description:** `HybridRetriever._metadata_ranking()` scored raw `annotated_pool` records without checking `VerificationStatus.VERIFIED` or `is_synthetic()`, `BM25Retriever.retrieve_example_pairs()` omitted `not is_synthetic()`, `leredd.evaluation.build_safe_retrieval_pool()` omitted synthetic filtering, and self-pair filters checked forward `(A, B)` text only rather than reversed `(B, A)` pairs.
+- **Resolution:** Centralized `is_eligible_retrieval_example()` and symmetric `is_equivalent_pair()` across all three retrievers, added synthetic/unverified checks to `BERTBaseline.fit()` and `TFIDF_LSABaseline.fit()`, and unified `build_safe_retrieval_pool()`. Verified by `tests/test_parts_2_to_5_workflows.py` and `tests/test_part6_and_part7_retrieval_context.py` (**495 passed**).
+
+### [ISSUE-060] ResponseParser Substring Fallback & Missing-Confidence Default Could Mask Malformed Outputs
+- **Severity:** High (prediction & screening integrity)
+- **Status:** ✅ Resolved locally (TASK-P59, 2026-11-25)
+- **File:** `leredd/detector.py`, `leredd/data_models.py`
+- **Description:** When `Dependency_Type:` was absent, `ResponseParser.parse()` scanned raw text for any `DependencyType` substring (converting refusals containing words like *"requires"* or *"conflicts"* into valid predictions) and defaulted missing `Confidence Score:` fields to maximum confidence `5`.
+- **Resolution:** Require an explicit `Dependency_Type:` header or valid JSON `dependency_type` key; default missing/unparseable confidence to `0` with `PredictionValidationStatus.REQUIRES_REVIEW`; forbid `calibrated_probability` on `Prediction`. Verified by 14 Part 4 unit tests.
+
+### [ISSUE-061] Review Queue Relied on `review_notes` Substrings, Dropped 3 Fixture Reasons & Duplicated Fields
+- **Severity:** Medium / Auditability & Static Safety
+- **Status:** ✅ Resolved locally (TASK-P59, 2026-11-25)
+- **Files:** `leredd/data_models.py`, `leredd/provisional_labeler.py`, `leredd/review_queue.py`, `leredd/synthetic.py`
+- **Description:** `ReviewItem` declared `synthetic` and `source_identity` twice (`PIE794`), `ProvisionalLabeler.process_pair()` dropped `pair.synthetic` and collapsed malformed LLM responses into generic abstention in hybrid mode, and `ReviewQueueManager.determine_eligibility()` never emitted `EXPLICIT_FLAG` or blank-system `MISSING_METADATA`.
+- **Resolution:** Added structured fields on `AnnotationProvenance`, removed duplicate `ReviewItem` fields, preserved synthetic markers, and routed all 7 review reasons from structured fields first with legacy string fallback. Verified across all synthetic fixtures with `review_notes=""`.
+
+### [ISSUE-062] `GET /api/v1/config` Redacted `openai_api_key` But Exposed `gemini_api_key`
+- **Severity:** High / Credential Exposure
+- **Status:** ✅ Resolved locally (TASK-P59, 2026-11-25)
+- **File:** `api/routes.py`
+- **Resolution:** Excluded `gemini_api_key` from serialized public config and added boolean `gemini_api_key_configured`. Verified by `test_api_config_redacts_both_openai_and_gemini_secrets`.

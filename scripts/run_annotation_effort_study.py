@@ -25,7 +25,6 @@ from leredd.effort_study import (
 )
 from leredd.independent_annotation import (
     atomic_write_json,
-    ensure_new_output_path,
     sha256_file,
     validate_reviewer_id,
 )

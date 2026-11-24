@@ -6,7 +6,6 @@ import datetime
 import tempfile
 import typer
 from typing import Optional
-from loguru import logger
 from leredd.config import get_config
 from leredd.data_models import (
     AnnotationProvenance, AnnotationSource, DependencyType, RequirementPair,
@@ -388,7 +387,7 @@ def candidates_cmd(
 
     CandidateGenerator.save_candidates(candidates, manifest, output_file, manifest_file)
 
-    typer.secho(f"\n================ CANDIDATE GENERATION SUMMARY ================", fg=typer.colors.GREEN, bold=True)
+    typer.secho("\n================ CANDIDATE GENERATION SUMMARY ================", fg=typer.colors.GREEN, bold=True)
     typer.echo(f"Input Requirements  : {manifest.input_requirement_count}")
     typer.echo(f"Generated Candidates: {manifest.generated_count}")
     typer.echo(f"Pair-Space Recall   : {manifest.pair_space_recall}")
@@ -452,7 +451,7 @@ def label_cmd(
 
     ProvisionalLabeler.save_provisional_dataset(labeled_pairs, manifest, output_file, manifest_file)
 
-    typer.secho(f"\n================ PROVISIONAL LABELING SUMMARY ================", fg=typer.colors.MAGENTA, bold=True)
+    typer.secho("\n================ PROVISIONAL LABELING SUMMARY ================", fg=typer.colors.MAGENTA, bold=True)
     typer.echo(f"Input Candidates   : {manifest.input_candidate_count}")
     typer.echo(f"Provisional Labeled: {manifest.labeled_count}")
     typer.echo(f"Agreed (Heur & LLM): {manifest.agreed_count}")
@@ -500,7 +499,7 @@ def queue_create_cmd(
 
     manager.save_queue(items, manifest, output_file, manifest_file)
 
-    typer.secho(f"\n================ REVIEW QUEUE SUMMARY ================", fg=typer.colors.MAGENTA, bold=True)
+    typer.secho("\n================ REVIEW QUEUE SUMMARY ================", fg=typer.colors.MAGENTA, bold=True)
     typer.echo(f"Total Queue Items  : {manifest.total_items}")
     typer.echo(f"Pending Items      : {manifest.pending_count}")
     typer.echo(f"Accepted Items     : {manifest.accepted_count}")

@@ -1,29 +1,33 @@
 """
 scripts/run_full_evaluation.py
 ==============================
-Safe, reproducible evaluation script for a supplied leakage-checked split.
+Safe, reproducible evaluation & controlled ablation runner for a leakage-checked split.
 
-Per-run reports summarize the actual input partition sizes, systems, provenance
-eligibility, configuration, and limitations. LEREDD variants in this runner use
-MockLLMClient; they are demonstrations and do not measure remote-LLM quality.
+Compares six controlled LEREDD configurations (Part 8):
+  1. Zero-shot (k=0, RAG disabled)
+  2. Semantic-only retrieval (SBERT dense)
+  3. BM25-only retrieval (lexical)
+  4. Existing hybrid retrieval (RRF: SBERT + BM25, metadata_weight=0)
+  5. Metadata-aware hybrid retrieval (RRF: SBERT + BM25 + structured metadata)
+  6. Context-enhanced retrieval (Metadata-aware hybrid + SRS RAG context)
 
-Usage:
-  python scripts/run_full_evaluation.py [--split-dir data/splits/system_disjoint]
-                                        [--output data/evaluation/system_disjoint_report.json]
-                                        [--seed 42]
-                                        [--model-type rf]
+Enforces:
+  - Fixed prompts (recorded via SHA-256 template hash), fixed model versions, fixed seeds
+  - Development-set-only confidence threshold tuning (never touching test pairs)
+  - System-disjoint or document-disjoint split verification
+  - Strict rejection of synthetic, provisional, pending, or rejected ground truth
+  - Explicit separation of candidate-generation recall from classifier accuracy
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import sys
 from collections import Counter
 from datetime import datetime, timezone
+import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+import sys
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _SCRIPT_DIR.parent
@@ -32,33 +36,34 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from loguru import logger
 
+from leredd.baselines.bert_classifier import BERTBaseline
+from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline
 from leredd.config import LEREDDConfig
 from leredd.data_models import (
     DependencyType,
+    EvaluationReport,
     Prediction,
     RequirementPair,
 )
+from leredd.detector import LEREDDDetector
+from leredd.embeddings import EmbeddingModel
 from leredd.evaluation import (
     ContaminationError,
     Evaluator,
-    ground_truth_provenance_problem,
     GroundTruthViolationError,
     build_safe_retrieval_pool,
     check_ground_truth_eligibility,
-    validate_ground_truth,
-    validate_predictions,
+    summarize_candidate_recall_vs_classifier,
+    tune_confidence_threshold_on_dev,
+    validate_document_disjoint_splits,
     validate_system_disjoint_splits,
 )
-from leredd.utils import load_pairs_json
-from leredd.baselines.bert_classifier import BERTBaseline
-from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline
-from leredd.detector import LEREDDDetector
-from leredd.llm import MockLLMClient
+from leredd.llm import LLMClientFactory, MockLLMClient
+from leredd.prompts import PromptBuilder
 from leredd.provisional_labeler import HeuristicLabeler
-from leredd.embeddings import EmbeddingModel
-from leredd.synthetic import is_synthetic
+from leredd.utils import load_pairs_json
 
-SCRIPT_VERSION = "2.0.0"
+SCRIPT_VERSION = "2.1.0"
 
 MOCK_ABLATION_VALIDITY = {
     "backend": "MockLLMClient",
@@ -93,151 +98,16 @@ MOCK_ABLATION_VALIDITY = {
     ),
 }
 
-
-# ---------------------------------------------------------------------------
-# Ground-Truth Safety Guards
-# ---------------------------------------------------------------------------
-
-class GroundTruthViolationError(ValueError):
-    """Raised when provisional or test-fixture records are supplied as ground truth."""
-
-
-def check_ground_truth_eligibility(
-    pairs: List[RequirementPair],
-    partition_label: str,
-    strict: bool = True,
-) -> Tuple[List[RequirementPair], List[str]]:
-    """
-    Check each pair for ground-truth eligibility. Returns (eligible, warnings).
-
-    Rules (fail-closed):
-      - provenance.status != VERIFIED     -> REJECTED (always)
-      - dependency_type is None           -> SKIPPED (cannot evaluate)
-      - provenance is None (legacy)       -> Conditionally accepted with warning
-    """
-    eligible: List[RequirementPair] = []
-    warnings_found: List[str] = []
-
-    for pair in pairs:
-        if is_synthetic(pair):
-            msg = (
-                f"[{partition_label}] REJECTED pair {pair.id}: "
-                "synthetic/demo records cannot be used as ground truth."
-            )
-            warnings_found.append(msg)
-            if strict:
-                raise GroundTruthViolationError(msg)
-            continue
-        if pair.dependency_type is None:
-            warnings_found.append(
-                f"[{partition_label}] Pair {pair.id} has dependency_type=None — skipped."
-            )
-            continue
-
-        if pair.provenance is not None:
-            status_val = pair.provenance.status.value if pair.provenance.status else None
-            provenance_problem = ground_truth_provenance_problem(pair)
-            if provenance_problem:
-                msg = (
-                    f"[{partition_label}] REJECTED pair {pair.id}: "
-                    f"{provenance_problem}."
-                )
-                warnings_found.append(msg)
-                if strict:
-                    raise GroundTruthViolationError(msg)
-                continue
-            warnings_found.append(
-                f"[{partition_label}] Pair {pair.id} provenance status={status_val} — accepted."
-            )
-        else:
-            # Legacy annotated record — no provenance field
-            warnings_found.append(
-                f"[{partition_label}] Pair {pair.id} has NO provenance metadata "
-                f"(legacy annotated record). Accepted conditionally."
-            )
-
-        eligible.append(pair)
-
-    return eligible, warnings_found
-
-
-# ---------------------------------------------------------------------------
-# Contamination Guard
-# ---------------------------------------------------------------------------
-
-class ContaminationError(RuntimeError):
-    """Raised when test/dev requirement IDs leak into the retrieval pool."""
-
-
-def build_safe_retrieval_pool(
-    train_pairs: List[RequirementPair],
-    test_pairs: List[RequirementPair],
-    dev_pairs: Optional[List[RequirementPair]] = None,
-    strict: bool = True,
-) -> Tuple[List[RequirementPair], Dict]:
-    """
-    Build a retrieval pool strictly isolated from test and dev requirement IDs.
-
-    Returns (safe_pool, leakage_audit_report).
-    Raises ContaminationError if leakage is detected and strict=True.
-    """
-    excluded_req_ids: Set[str] = set()
-    excluded_pair_ids: Set[str] = set()
-
-    for pair in test_pairs:
-        excluded_req_ids.add(pair.req_a.id)
-        excluded_req_ids.add(pair.req_b.id)
-        excluded_pair_ids.add(pair.id)
-
-    for pair in (dev_pairs or []):
-        excluded_req_ids.add(pair.req_a.id)
-        excluded_req_ids.add(pair.req_b.id)
-        excluded_pair_ids.add(pair.id)
-
-    contaminated_pairs: List[str] = []
-    excluded_synthetic_pair_ids: List[str] = []
-    safe_pool: List[RequirementPair] = []
-
-    for pair in train_pairs:
-        pair_req_ids = {pair.req_a.id, pair.req_b.id}
-        leaked_ids = pair_req_ids & excluded_req_ids
-        if leaked_ids or pair.id in excluded_pair_ids:
-            contaminated_pairs.append(
-                f"Pair {pair.id} (req_ids: {sorted(pair_req_ids)}) "
-                f"overlaps with test/dev excluded IDs: {sorted(leaked_ids or {pair.id})}"
-            )
-        elif is_synthetic(pair):
-            excluded_synthetic_pair_ids.append(pair.id)
-        else:
-            safe_pool.append(pair)
-
-    leakage_audit = {
-        "excluded_req_ids": sorted(excluded_req_ids),
-        "excluded_pair_ids": sorted(excluded_pair_ids),
-        "train_pool_size": len(train_pairs),
-        "contaminated_pairs": contaminated_pairs,
-        "contaminated_count": len(contaminated_pairs),
-        "safe_pool_size": len(safe_pool),
-        "excluded_synthetic_pair_ids": sorted(excluded_synthetic_pair_ids),
-        "excluded_synthetic_count": len(excluded_synthetic_pair_ids),
-        "contamination_detected": len(contaminated_pairs) > 0,
-    }
-
-    if contaminated_pairs:
-        msg = (
-            f"CONTAMINATION DETECTED: {len(contaminated_pairs)} training pair(s) "
-            f"contain requirement IDs present in test/dev set. "
-            f"Details: {contaminated_pairs}"
-        )
-        logger.warning(msg)
-        if strict:
-            raise ContaminationError(msg)
-
-    logger.info(
-        f"Contamination guard: {len(train_pairs)} train -> "
-        f"{len(contaminated_pairs)} removed -> {len(safe_pool)} safe retrieval pool."
-    )
-    return safe_pool, leakage_audit
+__all__ = [
+    "ContaminationError",
+    "GroundTruthViolationError",
+    "_serialize_report",
+    "build_safe_retrieval_pool",
+    "check_ground_truth_eligibility",
+    "run_evaluation",
+    "run_heuristic_model",
+    "run_leredd_variant",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +115,7 @@ def build_safe_retrieval_pool(
 # ---------------------------------------------------------------------------
 
 def _label_distribution(pairs: List[RequirementPair]) -> Dict[str, int]:
-    counter: Counter = Counter()
+    counter: Counter[str] = Counter()
     for p in pairs:
         label = p.dependency_type.value if p.dependency_type else "None"
         counter[label] += 1
@@ -264,7 +134,28 @@ def _system_description(pairs: List[RequirementPair]) -> str:
     return ", ".join(_unique_systems(pairs)) or "unspecified systems"
 
 
-def _ground_truth_report_summary(raw_partitions, eligible_partitions) -> Dict:
+def _build_srs_context_for_test_pairs(
+    test_pairs: List[RequirementPair],
+    srs_context_path: Optional[str] = None,
+) -> str:
+    """Load an explicit SRS document or assemble unlabeled requirement statements only.
+
+    Never includes ground-truth dependency labels so RAG context cannot leak labels.
+    """
+    if srs_context_path:
+        path = Path(srs_context_path)
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+
+    seen_reqs: Dict[str, str] = {}
+    for pair in test_pairs:
+        for req in (pair.req_a, pair.req_b):
+            if req.id not in seen_reqs:
+                seen_reqs[req.id] = f"[{req.id}] {req.text}"
+    return "\n".join(seen_reqs.values())
+
+
+def _ground_truth_report_summary(raw_partitions, eligible_partitions) -> Dict[str, Any]:
     """Build report provenance counts and wording from the supplied split."""
     raw_counts = {name: len(pairs) for name, pairs in raw_partitions.items()}
     eligible_counts = {name: len(pairs) for name, pairs in eligible_partitions.items()}
@@ -308,7 +199,13 @@ def _load_split_partition(split_dir: Path, partition: str) -> List[RequirementPa
     return load_pairs_json(str(path))
 
 
-def _serialize_report(report, model_tag: str, note: str, predictions: List[Prediction], n_test: int) -> Dict:
+def _serialize_report(
+    report: EvaluationReport,
+    model_tag: str,
+    note: str,
+    predictions: List[Prediction],
+    n_test: int,
+) -> Dict[str, Any]:
     pred_map = {p.pair_id: p.dependency_type.value for p in predictions}
     k_correct = int(round(report.overall_accuracy * n_test))
     ci = Evaluator.compute_wilson_score_interval(k_correct, n_test)
@@ -333,6 +230,8 @@ def _serialize_report(report, model_tag: str, note: str, predictions: List[Predi
         "overall_accuracy": report.overall_accuracy,
         "macro_f1": report.macro_f1,
         "weighted_f1": report.weighted_f1,
+        "macro_precision": report.macro_precision,
+        "macro_recall": report.macro_recall,
         "confidence_interval_95": {
             "method": "Wilson score interval",
             "point_estimate": ci["point_estimate"],
@@ -381,7 +280,7 @@ def _serialize_report(report, model_tag: str, note: str, predictions: List[Predi
     }
 
 
-def run_heuristic_model(test_pairs: List[RequirementPair]) -> Tuple[List[Prediction], Any]:
+def run_heuristic_model(test_pairs: List[RequirementPair]) -> Tuple[List[Prediction], EvaluationReport]:
     """Evaluate HeuristicLabeler baseline on test pairs."""
     preds = []
     for pair in test_pairs:
@@ -412,23 +311,40 @@ def run_leredd_variant(
     confidence_threshold: int = 4,
     model_name: str = "LEREDD-Hybrid",
     embedder: Optional[EmbeddingModel] = None,
-) -> Tuple[List[Prediction], Any]:
-    """Evaluate LEREDD detector variant on test pairs."""
+    *,
+    metadata_weight: float = 1.0,
+    use_rag: bool = False,
+    srs_text: Optional[str] = None,
+    llm_provider: str = "mock",
+    llm_model: str = "mock",
+) -> Tuple[List[Prediction], EvaluationReport]:
+    """Evaluate a controlled LEREDD detector variant on test pairs."""
     config = LEREDDConfig(
-        llm_provider="mock",
-        retrieval_mode=retrieval_mode,
+        llm_provider=llm_provider,  # type: ignore[arg-type]
+        llm_model=llm_model,
+        retrieval_mode=retrieval_mode,  # type: ignore[arg-type]
         k_examples=k_examples,
         confidence_threshold=confidence_threshold,
+        metadata_weight=metadata_weight,
+        use_rag=use_rag,
+        rag_deduplicate_chunks=True if use_rag else False,
+        rag_cite_id_boost=0.15 if use_rag else 0.0,
     )
-    mock_llm = MockLLMClient(model="mock")
-    detector = LEREDDDetector(config=config, llm=mock_llm, embedder=embedder)
+    llm_client = (
+        MockLLMClient(model=llm_model)
+        if llm_provider == "mock"
+        else LLMClientFactory.create(config)
+    )
+    detector = LEREDDDetector(config=config, llm=llm_client, embedder=embedder)
     pool = retrieval_pool if k_examples > 0 else None
     preds = detector.detect_batch(
         test_pairs,
         annotated_pool=pool,
+        srs_text=srs_text if use_rag else None,
         max_workers=1,
         retrieval_mode=retrieval_mode,
         confidence_threshold=confidence_threshold,
+        use_rag=use_rag,
     )
     report = Evaluator.evaluate(
         test_pairs,
@@ -450,15 +366,21 @@ def run_evaluation(
     bert_model_type: str = "rf",
     strict_contamination: bool = True,
     strict_gt: bool = True,
-) -> Dict:
-    """Run the full safe evaluation pipeline and return the report dict."""
+    *,
+    llm_provider: str = "mock",
+    llm_model: str = "mock",
+    srs_context_path: Optional[str] = None,
+    candidate_manifest_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run the full safe evaluation & controlled ablation pipeline and return the report dict."""
     run_start = datetime.now(timezone.utc).isoformat()
     logger.info("=" * 70)
-    logger.info("LEREDD Integrated Benchmark & Ablation Evaluation")
+    logger.info("LEREDD Integrated Benchmark & Controlled Ablation Evaluation")
     logger.info(f"Split dir  : {split_dir}")
     logger.info(f"Output path: {output_path}")
     logger.info(f"Seed       : {seed}")
     logger.info(f"BERT type  : {bert_model_type}")
+    logger.info(f"LLM backend: {llm_provider} ({llm_model})")
     logger.info("=" * 70)
 
     split_path = Path(split_dir)
@@ -466,7 +388,7 @@ def run_evaluation(
         raise FileNotFoundError(f"Split directory not found: {split_dir}")
 
     meta_path = split_path / "split_metadata.json"
-    split_metadata = {}
+    split_metadata: Dict[str, Any] = {}
     if meta_path.exists():
         with open(meta_path, "r", encoding="utf-8") as f:
             split_metadata = json.load(f)
@@ -474,21 +396,21 @@ def run_evaluation(
     # Step 1: Load split partitions
     logger.info("Step 1: Loading split partitions ...")
     train_pairs_raw = _load_split_partition(split_path, "train")
-    dev_pairs_raw   = _load_split_partition(split_path, "dev")
-    test_pairs_raw  = _load_split_partition(split_path, "test")
+    dev_pairs_raw = _load_split_partition(split_path, "dev")
+    test_pairs_raw = _load_split_partition(split_path, "test")
     logger.info(
         f"  Raw: train={len(train_pairs_raw)}, dev={len(dev_pairs_raw)}, test={len(test_pairs_raw)}"
     )
 
     if not test_pairs_raw:
         raise ValueError(
-            "Test partition is empty. Ensure system-disjoint split has been generated."
+            "Test partition is empty. Ensure system-disjoint or document-disjoint split has been generated."
         )
 
     split_strategy = str(
         split_metadata.get("summary", {}).get("strategy", "system")
     ).casefold().split(".")[-1]
-    split_integrity = {"checked": False, "strategy": split_strategy}
+    split_integrity: Dict[str, Any] = {"checked": False, "strategy": split_strategy}
     if split_strategy == "system":
         split_integrity.update(
             validate_system_disjoint_splits(
@@ -499,6 +421,16 @@ def run_evaluation(
         )
         split_integrity["checked"] = True
         logger.info("  System-disjoint split integrity check passed.")
+    elif split_strategy == "document":
+        split_integrity.update(
+            validate_document_disjoint_splits(
+                train_pairs=train_pairs_raw,
+                test_pairs=test_pairs_raw,
+                dev_pairs=dev_pairs_raw,
+            )
+        )
+        split_integrity["checked"] = True
+        logger.info("  Document-disjoint split integrity check passed.")
 
     # Step 2: Ground-truth eligibility
     logger.info("Step 2: Checking ground-truth eligibility ...")
@@ -526,24 +458,28 @@ def run_evaluation(
         strict=strict_contamination,
     )
 
-    # Step 4: BERTBaseline
+    # Step 4: BERTBaseline (fixed seed)
     cls_desc = (
-        "RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state=42)"
+        f"RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state={seed})"
         if bert_model_type == "rf"
-        else "LogisticRegression(max_iter=1000, class_weight='balanced', random_state=42)"
+        else f"LogisticRegression(max_iter=1000, class_weight='balanced', random_state={seed})"
     )
     logger.info(f"Step 4: BERTBaseline (classifier={bert_model_type.upper()}: {cls_desc}) ...")
-    bert = BERTBaseline(model_type=bert_model_type)
+    shared_embedder = EmbeddingModel()
+    bert = BERTBaseline(embedder=shared_embedder, model_type=bert_model_type, random_state=seed)
     bert.fit(train_pairs)
     bert_preds = bert.predict_batch(test_pairs)
     bert_report = Evaluator.evaluate(
-        test_pairs, bert_preds, system_name=_system_description(test_pairs), model_name=f"BERTBaseline-{bert_model_type.upper()}"
+        test_pairs,
+        bert_preds,
+        system_name=_system_description(test_pairs),
+        model_name=f"BERTBaseline-{bert_model_type.upper()}",
     )
     logger.info(f"  Accuracy={bert_report.overall_accuracy:.4f}, Macro-F1={bert_report.macro_f1:.4f}")
 
-    # Step 5: TFIDF_LSA
+    # Step 5: TFIDF_LSA (fixed seed)
     logger.info("Step 5: TFIDF_LSABaseline ...")
-    tfidf_lsa = TFIDF_LSABaseline()
+    tfidf_lsa = TFIDF_LSABaseline(random_state=seed)
     tfidf_lsa.fit(train_pairs)
     tfidf_preds = tfidf_lsa.predict_batch(test_pairs)
     tfidf_report = Evaluator.evaluate(
@@ -556,36 +492,146 @@ def run_evaluation(
     heuristic_preds, heuristic_report = run_heuristic_model(test_pairs)
     logger.info(f"  Accuracy={heuristic_report.overall_accuracy:.4f}, Macro-F1={heuristic_report.macro_f1:.4f}")
 
-    # Step 7: Zero-Shot LLM & Proposed Hybrid System & Ablation Matrix
-    logger.info("Step 7: LEREDD Variants & Ablation Matrix (MockLLM) ...")
+    # Step 6b: Development-set-only threshold tuning (NEVER touches test_pairs)
+    logger.info("Step 6b: Tuning confidence screening threshold on DEV partition only ...")
+    if dev_pairs:
+        dev_pool, _ = build_safe_retrieval_pool(
+            train_pairs=train_pairs,
+            test_pairs=dev_pairs,
+            dev_pairs=[],
+            strict=False,
+        )
+        dev_preds, _ = run_leredd_variant(
+            dev_pairs,
+            dev_pool,
+            retrieval_mode="hybrid_metadata",
+            k_examples=6,
+            confidence_threshold=4,
+            model_name="LEREDD-DevTuning",
+            embedder=shared_embedder,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+        )
+        dev_threshold_tuning = tune_confidence_threshold_on_dev(
+            dev_pairs, dev_preds, partition_label="DEV", default_threshold=4
+        )
+    else:
+        dev_threshold_tuning = tune_confidence_threshold_on_dev(
+            [], [], partition_label="DEV", default_threshold=4
+        )
+    dev_tuned_threshold = int(dev_threshold_tuning["selected_threshold"])
 
-    # Reuse a single real EmbeddingModel instance across all LEREDD evaluation variants
-    shared_embedder = EmbeddingModel()
+    # Step 7: Six Controlled LEREDD Configurations & Ablations (Part 8)
+    logger.info("Step 7: Controlled LEREDD Configurations & Ablation Matrix ...")
+    srs_context_text = _build_srs_context_for_test_pairs(test_pairs, srs_context_path)
 
-    # Primary LEREDD Proposed System (Hybrid RRF + Examples k=6 + Confidence Threshold=4)
-    leredd_hybrid_preds, leredd_hybrid_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="hybrid", k_examples=6, confidence_threshold=4, model_name="LEREDD-Hybrid", embedder=shared_embedder
-    )
-
-    # Primary LEREDD Zero-Shot (k=0 examples)
+    # C1. Zero-Shot (k=0, RAG disabled)
     leredd_zeroshot_preds, leredd_zeroshot_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="dense", k_examples=0, confidence_threshold=4, model_name="LEREDD-ZeroShot", embedder=shared_embedder
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="dense",
+        k_examples=0,
+        confidence_threshold=4,
+        model_name="LEREDD-ZeroShot",
+        embedder=shared_embedder,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )
 
-    # Ablation Variants:
-    # A1. Dense Retrieval Only (SBERT)
+    # C2. Semantic-only retrieval (SBERT dense)
     leredd_dense_preds, leredd_dense_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="dense", k_examples=6, confidence_threshold=4, model_name="LEREDD-Dense", embedder=shared_embedder
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="dense",
+        k_examples=6,
+        confidence_threshold=4,
+        model_name="LEREDD-Dense",
+        embedder=shared_embedder,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )
 
-    # A2. Lexical Retrieval Only (BM25)
+    # C3. BM25-only retrieval (lexical)
     leredd_bm25_preds, leredd_bm25_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="bm25", k_examples=6, confidence_threshold=4, model_name="LEREDD-BM25", embedder=shared_embedder
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="bm25",
+        k_examples=6,
+        confidence_threshold=4,
+        model_name="LEREDD-BM25",
+        embedder=shared_embedder,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )
 
-    # A3. Thresholding Disabled (Off: threshold=-1)
+    # C4. Existing hybrid retrieval (SBERT + BM25 RRF without metadata)
+    leredd_hybrid_preds, leredd_hybrid_report = run_leredd_variant(
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="hybrid_no_metadata",
+        k_examples=6,
+        confidence_threshold=4,
+        model_name="LEREDD-Hybrid",
+        embedder=shared_embedder,
+        metadata_weight=0.0,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+    )
+
+    # C5. Metadata-aware hybrid retrieval (SBERT + BM25 + structured metadata RRF)
+    leredd_meta_preds, leredd_meta_report = run_leredd_variant(
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="hybrid_metadata",
+        k_examples=6,
+        confidence_threshold=4,
+        model_name="LEREDD-Hybrid-Metadata",
+        embedder=shared_embedder,
+        metadata_weight=1.0,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+    )
+
+    # C6. Context-enhanced retrieval (Metadata-aware hybrid + SRS RAG context)
+    leredd_context_preds, leredd_context_report = run_leredd_variant(
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="hybrid_metadata",
+        k_examples=6,
+        confidence_threshold=4,
+        model_name="LEREDD-Context-RAG",
+        embedder=shared_embedder,
+        metadata_weight=1.0,
+        use_rag=True,
+        srs_text=srs_context_text,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+    )
+
+    # Thresholding Disabled (-1) & Dev-Tuned Threshold
     leredd_nothresh_preds, leredd_nothresh_report = run_leredd_variant(
-        test_pairs, safe_retrieval_pool, retrieval_mode="hybrid", k_examples=6, confidence_threshold=-1, model_name="LEREDD-Hybrid-NoThreshold", embedder=shared_embedder
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="hybrid_no_metadata",
+        k_examples=6,
+        confidence_threshold=-1,
+        model_name="LEREDD-Hybrid-NoThreshold",
+        embedder=shared_embedder,
+        metadata_weight=0.0,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+    )
+    leredd_devthresh_preds, leredd_devthresh_report = run_leredd_variant(
+        test_pairs,
+        safe_retrieval_pool,
+        retrieval_mode="hybrid_metadata",
+        k_examples=6,
+        confidence_threshold=dev_tuned_threshold,
+        model_name="LEREDD-Hybrid-DevTunedThreshold",
+        embedder=shared_embedder,
+        metadata_weight=1.0,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )
 
     logger.info(f"  Proposed Hybrid Accuracy={leredd_hybrid_report.overall_accuracy:.4f}, Macro-F1={leredd_hybrid_report.macro_f1:.4f}")
@@ -613,7 +659,7 @@ def run_evaluation(
     )
     n_classes = len(_label_distribution(test_pairs))
 
-    mcnemar_results: Dict = {
+    mcnemar_results: Dict[str, Any] = {
         "status": "exploratory",
         "exploratory_notice": mcnemar_notice,
         "leredd_vs_bert": Evaluator.analyze_mcnemar(test_pairs, leredd_hybrid_preds, bert_preds),
@@ -624,22 +670,82 @@ def run_evaluation(
         "proposed_hybrid_vs_zeroshot": Evaluator.analyze_mcnemar(test_pairs, leredd_hybrid_preds, leredd_zeroshot_preds),
         "proposed_hybrid_vs_dense": Evaluator.analyze_mcnemar(test_pairs, leredd_hybrid_preds, leredd_dense_preds),
         "proposed_hybrid_vs_bm25": Evaluator.analyze_mcnemar(test_pairs, leredd_hybrid_preds, leredd_bm25_preds),
+        "metadata_hybrid_vs_existing_hybrid": Evaluator.analyze_mcnemar(test_pairs, leredd_meta_preds, leredd_hybrid_preds),
+        "context_rag_vs_metadata_hybrid": Evaluator.analyze_mcnemar(test_pairs, leredd_context_preds, leredd_meta_preds),
     }
 
-    # Assemble report
+    # Honest delta summary (including zero or negative deltas!)
+    zs_f1 = leredd_zeroshot_report.macro_f1
+    zs_acc = leredd_zeroshot_report.overall_accuracy
+    ablation_deltas = {}
+    for cfg_key, cfg_rep in (
+        ("ZeroShot", leredd_zeroshot_report),
+        ("Semantic_Only_Dense", leredd_dense_report),
+        ("BM25_Only", leredd_bm25_report),
+        ("Existing_Hybrid", leredd_hybrid_report),
+        ("Metadata_Aware_Hybrid", leredd_meta_report),
+        ("Context_Enhanced_RAG", leredd_context_report),
+    ):
+        delta_f1 = round(cfg_rep.macro_f1 - zs_f1, 6)
+        delta_acc = round(cfg_rep.overall_accuracy - zs_acc, 6)
+        ablation_deltas[cfg_key] = {
+            "macro_f1": cfg_rep.macro_f1,
+            "overall_accuracy": cfg_rep.overall_accuracy,
+            "delta_macro_f1_vs_zeroshot": delta_f1,
+            "delta_accuracy_vs_zeroshot": delta_acc,
+            "outcome": (
+                "improved" if delta_f1 > 0 else ("degraded_negative_result" if delta_f1 < 0 else "no_change")
+            ),
+        }
+
+    candidate_manifest_data = None
+    if candidate_manifest_path and Path(candidate_manifest_path).exists():
+        candidate_manifest_data = json.loads(
+            Path(candidate_manifest_path).read_text(encoding="utf-8")
+        )
+    candidate_separation = summarize_candidate_recall_vs_classifier(
+        leredd_meta_report,
+        candidate_manifest=candidate_manifest_data,
+    )
+
+    prompt_hash = PromptBuilder().template_hash()
+    is_mock = llm_provider == "mock"
+    ablation_validity = (
+        MOCK_ABLATION_VALIDITY
+        if is_mock
+        else {
+            "backend": llm_provider,
+            "model": llm_model,
+            "is_empirical_model_evidence": True,
+            "note": (
+                "Live LLM provider invoked with fixed prompt template hash and system/document-disjoint "
+                "test partition. Interpret significance alongside test sample size n_test."
+            ),
+        }
+    )
+
     report = {
-        "schema_version": "2.0",
+        "schema_version": "2.1",
         "script_version": SCRIPT_VERSION,
         "run_timestamp": run_start,
         "configuration": {
             "split_dir": str(split_dir),
             "output_path": str(output_path),
             "seed": seed,
+            "prompt_template_hash": prompt_hash,
+            "embedding_model": shared_embedder.model_name,
             "bert_classifier_backend": bert_model_type,
             "bert_classifier_description": cls_desc,
             "split_strategy": split_metadata.get("summary", {}).get("strategy", "system"),
-            "leredd_provider": "mock",
-            "leredd_note": "MockLLMClient — deterministic keyword heuristics. NOT a real LLM evaluation.",
+            "leredd_provider": llm_provider,
+            "leredd_model": llm_model,
+            "test_set_tuning": False,
+            "dev_tuned_threshold": dev_tuned_threshold,
+            "leredd_note": (
+                "MockLLMClient — deterministic keyword heuristics. NOT a real LLM evaluation."
+                if is_mock
+                else f"Live LLM evaluation via provider={llm_provider!r}, model={llm_model!r}."
+            ),
         },
         "split_integrity": split_integrity,
         "split_inventory": {
@@ -664,12 +770,14 @@ def run_evaluation(
             **provenance_summary,
         },
         "leakage_audit": leakage_audit,
+        "dev_threshold_tuning": dev_threshold_tuning,
+        "candidate_recall_separation": candidate_separation,
         "model_results": {
             "BERTBaseline": _serialize_report(
                 bert_report,
                 model_tag=f"BERTBaseline-{bert_model_type.upper()}",
                 note=(
-                    f"SBERT (all-MiniLM-L6-v2) + {cls_desc}. "
+                    f"SBERT ({shared_embedder.model_name}) + {cls_desc}. "
                     "Supervised cross-system evaluation trained on "
                     f"{training_systems} (n={len(train_pairs)}) "
                     f"and tested on {test_systems} (n={n_test}). Not a zero-shot model."
@@ -702,9 +810,7 @@ def run_evaluation(
             "LEREDD_ZeroShot": _serialize_report(
                 leredd_zeroshot_report,
                 model_tag="LEREDD-ZeroShot",
-                note=(
-                    "Zero-shot LLM inference without in-context dynamic examples (k=0)."
-                ),
+                note="Zero-shot LLM inference without in-context dynamic examples (k=0).",
                 predictions=leredd_zeroshot_preds,
                 n_test=n_test,
             ),
@@ -719,8 +825,72 @@ def run_evaluation(
                 predictions=leredd_hybrid_preds,
                 n_test=n_test,
             ),
+            "LEREDD_Hybrid_Metadata": _serialize_report(
+                leredd_meta_report,
+                model_tag="LEREDD-Hybrid-Metadata",
+                note=(
+                    "Metadata-aware Hybrid RRF retrieval fusing SBERT, BM25, and structured "
+                    "component/subsystem/module/system overlap (k=6)."
+                ),
+                predictions=leredd_meta_preds,
+                n_test=n_test,
+            ),
+            "LEREDD_Context_RAG": _serialize_report(
+                leredd_context_report,
+                model_tag="LEREDD-Context-RAG",
+                note=(
+                    "Context-enhanced LEREDD combining Metadata-aware Hybrid ICL retrieval "
+                    "with deduplicated, cited-ID-boosted SRS RAG context chunks."
+                ),
+                predictions=leredd_context_preds,
+                n_test=n_test,
+            ),
         },
         "ablation_results": {
+            "controlled_six_way_comparison": {
+                "1_ZeroShot": _serialize_report(
+                    leredd_zeroshot_report,
+                    model_tag="1. Zero-Shot (k=0, no RAG)",
+                    note="Zero-shot baseline with fixed taxonomy prompt only.",
+                    predictions=leredd_zeroshot_preds,
+                    n_test=n_test,
+                ),
+                "2_Semantic_Only": _serialize_report(
+                    leredd_dense_report,
+                    model_tag="2. Semantic-Only Retrieval (SBERT)",
+                    note="Dense SBERT embedding retrieval only (k=6).",
+                    predictions=leredd_dense_preds,
+                    n_test=n_test,
+                ),
+                "3_BM25_Only": _serialize_report(
+                    leredd_bm25_report,
+                    model_tag="3. BM25-Only Retrieval (Lexical)",
+                    note="Lexical BM25Plus retrieval only (k=6).",
+                    predictions=leredd_bm25_preds,
+                    n_test=n_test,
+                ),
+                "4_Existing_Hybrid": _serialize_report(
+                    leredd_hybrid_report,
+                    model_tag="4. Existing Hybrid Retrieval (SBERT + BM25)",
+                    note="Reciprocal Rank Fusion over SBERT and BM25 only (metadata_weight=0).",
+                    predictions=leredd_hybrid_preds,
+                    n_test=n_test,
+                ),
+                "5_Metadata_Aware_Hybrid": _serialize_report(
+                    leredd_meta_report,
+                    model_tag="5. Metadata-Aware Hybrid Retrieval",
+                    note="Reciprocal Rank Fusion over SBERT, BM25, and structured metadata (metadata_weight=1).",
+                    predictions=leredd_meta_preds,
+                    n_test=n_test,
+                ),
+                "6_Context_Enhanced_RAG": _serialize_report(
+                    leredd_context_report,
+                    model_tag="6. Context-Enhanced Retrieval (Hybrid + RAG)",
+                    note="Metadata-aware Hybrid ICL plus SRS RAG context chunks.",
+                    predictions=leredd_context_preds,
+                    n_test=n_test,
+                ),
+            },
             "retrieval_strategy": {
                 "LEREDD_Dense": _serialize_report(
                     leredd_dense_report,
@@ -739,8 +909,22 @@ def run_evaluation(
                 "LEREDD_Hybrid": _serialize_report(
                     leredd_hybrid_report,
                     model_tag="LEREDD-Hybrid (RRF Dense+Lexical)",
-                    note="Hybrid RRF fusion combining SBERT and BM25Plus.",
+                    note="Hybrid RRF fusion combining SBERT and BM25Plus (metadata_weight=0).",
                     predictions=leredd_hybrid_preds,
+                    n_test=n_test,
+                ),
+                "LEREDD_Hybrid_Metadata": _serialize_report(
+                    leredd_meta_report,
+                    model_tag="LEREDD-Hybrid-Metadata (RRF Dense+Lexical+Metadata)",
+                    note="Hybrid RRF fusion combining SBERT, BM25Plus, and structured metadata.",
+                    predictions=leredd_meta_preds,
+                    n_test=n_test,
+                ),
+                "LEREDD_Context_RAG": _serialize_report(
+                    leredd_context_report,
+                    model_tag="LEREDD-Context-RAG (Metadata Hybrid + SRS RAG)",
+                    note="Metadata-aware Hybrid RRF plus SRS RAG context chunks.",
+                    predictions=leredd_context_preds,
                     n_test=n_test,
                 ),
             },
@@ -778,22 +962,40 @@ def run_evaluation(
                     predictions=leredd_hybrid_preds,
                     n_test=n_test,
                 ),
+                "Threshold_Dev_Tuned": _serialize_report(
+                    leredd_devthresh_report,
+                    model_tag=f"Dev-Tuned Screening (<= {dev_tuned_threshold}: review cue)",
+                    note=(
+                        f"Threshold {dev_tuned_threshold} selected exclusively on the development "
+                        "partition without touching test pairs."
+                    ),
+                    predictions=leredd_devthresh_preds,
+                    n_test=n_test,
+                ),
             },
         },
-        "ablation_validity": MOCK_ABLATION_VALIDITY,
+        "ablation_deltas_vs_zeroshot": ablation_deltas,
+        "ablation_validity": ablation_validity,
         "statistical_tests": {"mcnemar": mcnemar_results},
-
         "evaluation_limitations": [
             f"Test sample size n_test={n_test}; test systems: {test_systems}. "
             + ("Small-sample metrics have high uncertainty. " if n_test < 10 else ""),
             "BERTBaseline and TFIDF_LSABaseline fit on the train partition "
             f"({training_systems}, n={len(train_pairs)}) "
             f"and score the held-out test partition ({test_systems}); they are not zero-shot models.",
-            "LEREDD evaluated with MockLLMClient — NOT a real LLM evaluation.",
-            "MockLLMClient does not interpret retrieved examples and returns fixed confidence 5; retrieval-strategy, ICL-example, and confidence-threshold ablations are not informative about model effects.",
+            *(
+                [
+                    "LEREDD evaluated with MockLLMClient — NOT a real LLM evaluation.",
+                    "MockLLMClient does not interpret retrieved examples and returns fixed confidence 5; retrieval-strategy, ICL-example, and confidence-threshold ablations are not informative about model effects.",
+                ]
+                if is_mock
+                else []
+            ),
+            "Zero or negative ablation deltas are preserved unedited; proposed retrieval/context variants do not guarantee accuracy gains on every split.",
+            "Candidate-generation recall is distinct from classifier accuracy and is reported separately under candidate_recall_separation.",
             provenance_summary["provenance_note"],
             f"Test labels cover {n_classes} of 6 dependency classes.",
-            "This report evaluates only the supplied split; a separate requirement-disjoint evaluation was not run.",
+            f"Evaluated split strategy: {split_strategy}. Threshold tuning used the development partition only (test_set_tuning=False).",
             mcnemar_notice,
         ],
         "split_metadata": split_metadata,
@@ -811,10 +1013,14 @@ def run_evaluation(
     with open(ablation_out_path, "w", encoding="utf-8") as f:
         json.dump(
             {
-                "schema_version": "2.0",
+                "schema_version": "2.1",
                 "run_timestamp": run_start,
                 "n_test": n_test,
+                "configuration": report["configuration"],
+                "dev_threshold_tuning": report["dev_threshold_tuning"],
+                "candidate_recall_separation": report["candidate_recall_separation"],
                 "ablation_results": report["ablation_results"],
+                "ablation_deltas_vs_zeroshot": report["ablation_deltas_vs_zeroshot"],
                 "ablation_validity": report["ablation_validity"],
                 "statistical_tests": report["statistical_tests"],
             },
@@ -824,39 +1030,22 @@ def run_evaluation(
         )
     logger.info(f"Dedicated ablation report saved to: {ablation_out_path}")
 
-    # Print summary table
     print("\n" + "=" * 78)
     print("LEREDD Safe Evaluation — Primary Model Benchmark Summary")
     print("=" * 78)
-    print(f"{'Model':<35} {'Accuracy':>10} {'Macro-F1':>10} {'WtdF1':>10}")
+    print(f"{'Model':<38} {'Accuracy':>10} {'Macro-F1':>10} {'WtdF1':>10}")
     print("-" * 78)
-    for key, res in report["model_results"].items():
+    for res in report["model_results"].values():
         print(
-            f"{res['model']:<35} "
+            f"{res['model']:<38} "
             f"{res['overall_accuracy']:>10.4f} "
             f"{res['macro_f1']:>10.4f} "
             f"{res['weighted_f1']:>10.4f}"
         )
     print("=" * 78)
 
-    print("\n" + "=" * 78)
-    print("LEREDD Ablation Study Matrix Summary")
-    print("=" * 78)
-    for cat_name, cat_dict in report["ablation_results"].items():
-        print(f"\n--- Dimension: {cat_name.upper()} ---")
-        print(f"{'Variant':<35} {'Accuracy':>10} {'Macro-F1':>10} {'WtdF1':>10}")
-        print("-" * 78)
-        for var_key, var_res in cat_dict.items():
-            print(
-                f"{var_res['model']:<35} "
-                f"{var_res['overall_accuracy']:>10.4f} "
-                f"{var_res['macro_f1']:>10.4f} "
-                f"{var_res['weighted_f1']:>10.4f}"
-            )
-    print("=" * 78)
-
-    print(f"\n[WARNING] n_test={len(test_pairs)} — results are demonstrative only.")
-    print("[WARNING] LEREDD uses MockLLMClient — NOT a real LLM evaluation.")
+    if is_mock:
+        print("[WARNING] LEREDD uses MockLLMClient — NOT a real LLM evaluation.")
     print(f"Report: {out_path}\n")
 
     return report
@@ -866,20 +1055,28 @@ def run_evaluation(
 # CLI Entry Point
 # ---------------------------------------------------------------------------
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="LEREDD Safe Evaluation & Ablation Study Benchmark Script",
+        description="LEREDD Safe Evaluation & Controlled Ablation Study Benchmark Script",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--split-dir", default="data/splits/system_disjoint",
-                        help="Directory containing system-disjoint split partition JSON files.")
+                        help="Directory containing system-disjoint or document-disjoint split partition JSON files.")
     parser.add_argument("--output", default="data/evaluation/system_disjoint_report.json",
                         help="Output JSON report file path.")
     parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for baseline model fitting.")
+                        help="Fixed random seed for baseline model fitting.")
     parser.add_argument("--bert-classifier-type", "--model-type", dest="bert_classifier_type",
                         default="rf", choices=["rf", "lr"],
-                        help="Classification backend head for BERTBaseline: 'rf' (RandomForestClassifier) or 'lr' (LogisticRegression). Note: All baselines and ablation variants are evaluated in sequence.")
+                        help="Classification backend head for BERTBaseline: 'rf' or 'lr'.")
+    parser.add_argument("--llm-provider", default="mock", choices=["mock", "openai", "ollama", "gemini"],
+                        help="LLM backend provider (defaults safely to 'mock').")
+    parser.add_argument("--llm-model", default="mock",
+                        help="Fixed LLM model version identifier.")
+    parser.add_argument("--srs-context", default=None,
+                        help="Optional path to SRS document text for context-enhanced RAG ablation.")
+    parser.add_argument("--candidate-manifest", default=None,
+                        help="Optional candidate generation manifest JSON to report candidate recall separately.")
     parser.add_argument("--no-strict", action="store_true",
                         help="Log warnings instead of raising errors for contamination/GT violations.")
     args = parser.parse_args()
@@ -905,9 +1102,13 @@ def main():
             bert_model_type=args.bert_classifier_type,
             strict_contamination=not args.no_strict,
             strict_gt=not args.no_strict,
+            llm_provider=args.llm_provider,
+            llm_model=args.llm_model,
+            srs_context_path=args.srs_context,
+            candidate_manifest_path=args.candidate_manifest,
         )
-    except (ContaminationError, GroundTruthViolationError, FileNotFoundError, ValueError) as e:
-        logger.error(f"Evaluation aborted: {e}")
+    except (ContaminationError, GroundTruthViolationError, ValueError, FileNotFoundError) as exc:
+        logger.error(f"Evaluation aborted due to safety violation: {exc}")
         sys.exit(1)
 
 

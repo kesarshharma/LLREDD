@@ -657,3 +657,19 @@ All notable changes, task completions, and verification events for the Minor Pro
 - Verification: focused regressions **2 passed**. Full local coverage suite **453 passed, 3 skipped, 12 warnings in 225.32s**, exit 0; **88%** coverage. Test log and coverage outputs were written only to `.pytest-tmp/task-p58-coverage`.
 - Immediately after local verification the hosted run was pending. No packages were installed; no datasets or application code were changed.
 - Hosted verification completed: [Actions run 45445432202](https://github.com/kesarshharma/LLREDD/actions/runs/45445432202) passed for commit `061bd37cc5e01d4729fb1336473c4d085cc1c383`. Both Python 3.10 and 3.11 jobs passed dependency setup, pytest with coverage, and Docker image build. The workflow ended successfully.
+
+
+## [2026-11-25] TASK-P59 — Parts 1–9 Specification Audit, Guardrails, Retrieval/RAG Enhancements, Controlled Ablations & Static CI
+- **Added:**
+  - `docs/BASELINE_AUDIT.md` (Part 1 baseline test/lint report, 8-module audit, and prioritized backlog).
+  - `docs/PROVENANCE_AND_CONFIGURATION.md` (Verified vs. Provisional vs. Synthetic tier reference, confidence policy, and retrieval/RAG configuration guide).
+  - `tests/test_parts_2_to_5_workflows.py` (28 tests covering synthetic isolation, ground-truth/document-disjoint guardrails, confidence boundary/malformed-output handling, structured queue routing across all synthetic scenarios, and API secret redaction).
+  - `tests/test_part6_and_part7_retrieval_context.py` (9 tests covering metadata round-trips, configurable RRF weights, reversed self-pair & unverified candidate exclusion, baseline RAG behavior, duplicate measurement/filtering, boundary chunking, and cited-ID boosting).
+  - `tests/test_part8_controlled_ablations.py` (3 end-to-end tests covering the 6-way controlled ablation matrix, dev-only threshold tuning, document-disjoint enforcement, and candidate-recall separation).
+- **Modified:**
+  - `leredd/config.py`, `leredd/data_models.py`, `leredd/prompts.py`, `leredd/detector.py`, `leredd/provisional_labeler.py`, `leredd/review_queue.py`, `leredd/synthetic.py`, `leredd/retrieval.py`, `leredd/bm25_retrieval.py`, `leredd/hybrid_retrieval.py`, `leredd/evaluation.py`, `leredd/dataset_splitter.py`, `leredd/utils.py`, `leredd/baselines/bert_classifier.py`, `leredd/baselines/tfidf_lsa.py`, `api/routes.py`, `scripts/run_full_evaluation.py`, `.env.example`, `.github/workflows/ci.yml`, `pyproject.toml`, `README.md`, and Ruff unused-import/variable cleanups across `leredd/`, `ui/`, `scripts/`, and `tests/`.
+- **Commands & Empirical Results:**
+  - Baseline before edits: `pytest tests/ -q` -> **455 passed, 1 skipped in 51.26s**; `ruff check` -> 803 findings (10 critical `E9/F821/F811/PIE794`).
+  - Post-implementation static checks: `python -m ruff check leredd api ui scripts tests` -> **All checks passed! (0 errors)**; `python -m compileall -q leredd api ui scripts tests` -> **exit 0**.
+  - Post-implementation full coverage suite: `python -m pytest tests/ --cov=leredd --cov-report=term-missing -q` -> **495 passed, 1 skipped in 78.43s, 89% coverage**, exit 0.
+  - Controlled evaluation smoke: `python scripts/run_full_evaluation.py --split-dir data/splits/system_disjoint --candidate-manifest data/candidates/adb_candidates_bm25_manifest.json --output .pytest-tmp/.../report.json` -> **exit 0**, generated schema v2.1 primary and ablation reports; `git status --short data/` empty.

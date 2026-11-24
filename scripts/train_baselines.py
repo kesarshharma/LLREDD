@@ -1,7 +1,6 @@
 """Script to train baseline models."""
 
 import sys
-import os
 from leredd.utils import load_pairs_json
 from leredd.baselines.bert_classifier import BERTBaseline
 from leredd.baselines.tfidf_lsa import TFIDF_LSABaseline

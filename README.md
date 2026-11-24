@@ -80,29 +80,31 @@ flowchart TD
 ```bash
 # Clone the repository
 git clone https://github.com/kesarshharma/LLREDD.git
-cd minor
+cd LLREDD
 
 # Create and activate virtual environment
-python -m venv venv
+python -m venv .venv
 # On Windows:
-venv\Scripts\activate
+.venv\Scripts\activate
 # On Linux/macOS:
-source venv/bin/activate
+source .venv/bin/activate
 
-# Install the package and development/test dependencies
-pip install -e ".[dev]"
-
-# Optional: enable PDF and DOCX text extraction
-pip install -e ".[documents]"
+# Install the package, development/test tools, and optional PDF/DOCX extractors
+pip install -e ".[dev,documents]"
 ```
 
-### 2. Environment Configuration
+### 2. Environment, Data Tiers & Retrieval Configuration
 
-The local heuristic labeling and MockLLM paths do not require provider
-credentials. The default embedding model is `all-MiniLM-L6-v2`; it must be
-cached locally or downloaded when network access is available. To force an
-offline model-cache check during a run, set `HF_HUB_OFFLINE=1`. Do not add real
-provider credentials unless you intend to call that provider.
+Copy [`.env.example`](.env.example) to `.env` only if you need local overrides (never commit real API keys). The local heuristic labeling, BM25 retrieval, and `MockLLMClient` paths require zero external credentials. See [`docs/PROVENANCE_AND_CONFIGURATION.md`](docs/PROVENANCE_AND_CONFIGURATION.md) and [`docs/BASELINE_AUDIT.md`](docs/BASELINE_AUDIT.md) for full details on:
+
+- **Strict Data Tiers (`Verified` vs. `Provisional` vs. `Synthetic`):**
+  - **Verified (`VerificationStatus.VERIFIED`)**: Requires explicit human review (`AnnotationSource.HUMAN`), a non-placeholder reviewer ID, and `accepted_label == dependency_type`. Only verified (or explicitly permitted legacy) non-synthetic pairs can enter benchmark evaluation, supervised baseline training, ICL retrieval pools, or `dataset-release`.
+  - **Provisional / Pending (`PROVISIONAL`, `PENDING_REVIEW`, `HUMAN_REVIEWED`, `REJECTED`)**: Machine suggestions and deferred/rejected queue items remain ineligible for benchmark scoring until an explicit `ACCEPTED` or `CORRECTED` human decision is recorded.
+  - **Synthetic (`synthetic: true`, `source_identity: "synthetic-review-tests"`)**: Deterministic review fixtures under `tests/fixtures/synthetic/` and CLI `--synthetic` demo outputs are strictly excluded from all retrievers (`ExampleRetriever`, `BM25Retriever`, `HybridRetriever`), baseline fitting, `export_verified_pairs()`, dataset releases, and evaluation metrics.
+- **Retrieval & Context Selection Options:**
+  - `RETRIEVAL_MODE`: `dense` (SBERT), `bm25` (lexical), `hybrid_no_metadata` (SBERT + BM25 RRF), or `hybrid` / `hybrid_metadata` (SBERT + BM25 + `component`/`subsystem`/`module`/`system`/`metadata` RRF with configurable `DENSE_WEIGHT`, `BM25_WEIGHT`, `METADATA_WEIGHT`, and `RRF_K`).
+  - `USE_RAG`: Optional SRS context retrieval supporting `RAG_CHUNKING_MODE` (`fixed` or `requirement_boundary`), `RAG_DEDUPLICATE_CHUNKS`, `RAG_CITE_ID_BOOST`, and measurable chunk diagnostics (`RAGRetriever.retrieve_with_diagnostics`).
+  - `CONFIDENCE_THRESHOLD`: Flags predictions with self-reported Likert score `<= threshold` as `requires_review` without rewriting the predicted class (legacy `<= threshold -> No_dependency` rewriting is deprecated; Likert scores are never treated as calibrated probabilities).
 
 ---
 
@@ -374,12 +376,16 @@ report.
 
 ---
 
-## 🛠️ Testing & Verification
+## 🛠️ Testing & Static Verification
 
-Run the full automated test suite (including unit, integration, and provenance verification tests):
+Run static checks (`ruff` + bytecode compilation) and the full offline automated test suite (unit, integration, provenance, synthetic-isolation, RAG diagnostics, and controlled 6-way ablation tests):
 
-```bash
-python -m pytest tests/
+```powershell
+$env:HF_HUB_OFFLINE = "1"
+$env:CACHE_DIR = ".pytest-tmp/embeddings"
+python -m ruff check leredd api ui scripts tests
+python -m compileall -q leredd api ui scripts tests
+python -m pytest tests/ --cov=leredd --cov-report=term-missing
 ```
 
 ---

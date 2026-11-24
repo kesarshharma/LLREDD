@@ -324,8 +324,6 @@ def analyze_candidate_recall(
                 * (1 - n / population_n)
                 * sample_variance / n
             )
-        selected_total = selected["estimated_positive_population_total"]
-        omitted_total = omitted["estimated_positive_population_total"]
         variance_recall = (
             (1 - recall) ** 2 * variances["hybrid_selected"]
             + recall ** 2 * variances["hybrid_omitted"]

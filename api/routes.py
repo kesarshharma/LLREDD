@@ -1,10 +1,10 @@
 """FastAPI Route Handlers for requirement dependency detection."""
 
 from typing import Any, List, Literal, Optional
-from fastapi import APIRouter, HTTPException, File, UploadFile, Body
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from leredd.config import get_config
-from leredd.data_models import Requirement, RequirementPair, Prediction, DependencyType
+from leredd.data_models import Requirement, RequirementPair, Prediction
 from leredd.detector import LEREDDDetector
 from leredd.utils import apply_requirement_metadata, extract_requirements_from_text
 
@@ -83,10 +83,13 @@ def health_check():
 
 @router.get("/config")
 def get_system_config():
-    """Return active system configuration settings."""
+    """Return active system configuration settings with all secrets redacted."""
     cfg = get_config()
-    public_config = cfg.model_dump(mode="json", exclude={"openai_api_key"})
+    public_config = cfg.model_dump(
+        mode="json", exclude={"openai_api_key", "gemini_api_key"}
+    )
     public_config["openai_api_key_configured"] = bool(cfg.openai_api_key)
+    public_config["gemini_api_key_configured"] = bool(cfg.gemini_api_key)
     return public_config
 
 

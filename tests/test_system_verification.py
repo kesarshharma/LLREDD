@@ -10,9 +10,6 @@ from pathlib import Path
 from leredd.candidate_generator import CandidateGenerator, GenerationStrategy
 from leredd.config import LEREDDConfig
 from leredd.data_models import (
-    DependencyType,
-    Requirement,
-    RequirementPair,
     VerificationStatus,
 )
 from leredd.dataset_splitter import DatasetSplitter, SplitConfig, SplitStrategy
@@ -20,7 +17,7 @@ from leredd.detector import LEREDDDetector
 from leredd.evaluation import Evaluator
 from leredd.llm import MockLLMClient
 from leredd.provisional_labeler import LabelingMode, LLMLabeler, ProvisionalLabeler
-from leredd.review_queue import HumanDecision, QueueStatus, ReviewQueueConfig, ReviewQueueManager
+from leredd.review_queue import QueueStatus, ReviewQueueConfig, ReviewQueueManager
 from leredd.utils import (
     extract_requirements_from_text,
     load_pairs_json,

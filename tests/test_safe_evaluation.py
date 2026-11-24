@@ -15,12 +15,9 @@ Coverage:
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -884,8 +881,6 @@ class TestRunEvaluationIntegration:
                 assert m1["macro_f1"] == m2["macro_f1"]
                 assert m1["predictions"] == m2["predictions"]
 
-
-from leredd.evaluation import Evaluator
 
 def test_evaluator_wilson_ci_and_mcnemar_analysis():
     """Unit tests for Evaluator.compute_wilson_score_interval and Evaluator.analyze_mcnemar."""

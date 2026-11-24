@@ -13,7 +13,7 @@ from leredd.utils import (
     load_pairs_csv,
     save_pairs_csv,
 )
-from leredd.data_models import AnnotationSource, Requirement, DependencyType, RequirementPair, VerificationStatus
+from leredd.data_models import AnnotationSource, Requirement, DependencyType, VerificationStatus
 
 
 def test_extract_requirements_from_text():

@@ -5,7 +5,7 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from leredd.data_models import DependencyType, Requirement, RequirementPair
+from leredd.data_models import Requirement, RequirementPair
 
 def test_implemented_by_never_remapped_to_implements():
     """Direct proof: Implemented by must not become IMPLEMENTS in predictions or labels."""

@@ -11,8 +11,6 @@ Comprehensive tests for Part 2 & Part 3 deliverables:
 from __future__ import annotations
 
 import pytest
-from pathlib import Path
-from typing import List
 
 from leredd.data_models import (
     AnnotationProvenance,
@@ -37,7 +35,6 @@ from leredd.review_queue import (
     QueueStatus,
     ReviewItem,
     ReviewQueueManager,
-    ReviewReasonCode,
 )
 from leredd.synthetic import (
     SYNTHETIC_SOURCE_IDENTITY,

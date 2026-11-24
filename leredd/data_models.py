@@ -1,9 +1,8 @@
 """Data models for SRS Requirements, Pairs, LLM Predictions, and Evaluation Metrics."""
 
 from enum import Enum
-import re
 from typing import Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class AnnotationSource(str, Enum):
@@ -80,10 +79,18 @@ class Requirement(BaseModel):
         default=None,
         description="Optional subsystem metadata used by metadata-aware retrieval",
     )
+    module: str | None = Field(
+        default=None,
+        description="Optional module metadata used by metadata-aware retrieval and document splitting",
+    )
     source: str | None = Field(default=None, description="Source document or section reference")
     source_location: str | None = Field(
         default=None,
         description="Location within the source document, such as an extracted-text line number",
+    )
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional structured key-value requirement metadata",
     )
     synthetic: bool = Field(
         default=False,
@@ -166,6 +173,52 @@ class AnnotationProvenance(BaseModel):
         default=None,
         description="Dataset version identifier (e.g. 'v1.0', 'v2.0-provisional')"
     )
+    heuristic_label: DependencyType | None = Field(
+        default=None,
+        description="Structured raw prediction from HeuristicLabeler",
+    )
+    heuristic_rule_id: str | None = Field(
+        default=None,
+        description="Deterministic rule identifier from HeuristicLabeler",
+    )
+    heuristic_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Rule heuristic score [0.0, 1.0]",
+    )
+    heuristic_evidence: str | None = Field(
+        default=None,
+        description="Structured rule evidence from HeuristicLabeler",
+    )
+    llm_label: DependencyType | None = Field(
+        default=None,
+        description="Structured raw prediction from LLMLabeler",
+    )
+    llm_rationale: str | None = Field(
+        default=None,
+        description="Structured rationale from LLMLabeler",
+    )
+    llm_raw_response: str | None = Field(
+        default=None,
+        description="Raw LLM output text captured during provisional labeling",
+    )
+    llm_failed: bool = Field(
+        default=False,
+        description="Whether LLM invocation or response parsing failed",
+    )
+    llm_error: str | None = Field(
+        default=None,
+        description="Structured error message when LLM labeling failed",
+    )
+    explicit_review_flag: bool = Field(
+        default=False,
+        description="Explicit ambiguity or manual flag routing this pair to human review",
+    )
+    structured_review_reasons: list[str] = Field(
+        default_factory=list,
+        description="Structured machine-readable review reason codes",
+    )
     synthetic: bool = Field(
         default=False,
         description="Whether this annotation was created for synthetic/demo data",
@@ -175,7 +228,7 @@ class AnnotationProvenance(BaseModel):
         description="Identity of the dataset or synthetic source for this annotation",
     )
 
-    @field_validator("predicted_label", "accepted_label", mode="before")
+    @field_validator("predicted_label", "accepted_label", "heuristic_label", "llm_label", mode="before")
     @classmethod
     def parse_provenance_labels(cls, v: Any) -> DependencyType | None:
         if v is None:
@@ -290,6 +343,17 @@ class Prediction(BaseModel):
         description="ISO 8601 timestamp when this prediction was generated"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_calibrated_probability_representation(cls, data: Any) -> Any:
+        """Forbid representing uncalibrated Likert confidence as calibrated probability."""
+        if isinstance(data, dict) and data.get("calibrated_probability") is not None:
+            raise ValueError(
+                "Self-reported Likert confidence (0-5) cannot be represented as "
+                "calibrated_probability on Prediction."
+            )
+        return data
+
     @property
     def requires_review(self) -> bool:
         """Whether confidence or repeated-run evidence recommends human review."""
@@ -319,6 +383,8 @@ class EvaluationReport(BaseModel):
     overall_accuracy: float = Field(..., description="Overall accuracy")
     macro_f1: float = Field(..., description="Macro average F1 score")
     weighted_f1: float = Field(..., description="Weighted average F1 score")
+    macro_precision: float | None = Field(default=None, description="Macro average precision score")
+    macro_recall: float | None = Field(default=None, description="Macro average recall score")
     per_class_metrics: dict[str, EvaluationMetric] = Field(..., description="Metrics for each dependency class")
     confusion_matrix: dict[str, dict[str, int]] | None = Field(
         default=None,

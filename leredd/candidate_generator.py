@@ -17,7 +17,6 @@ import json
 import os
 import uuid
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from loguru import logger
@@ -28,7 +27,6 @@ from leredd.config import get_config
 from leredd.data_models import (
     AnnotationProvenance,
     AnnotationSource,
-    DependencyType,
     Requirement,
     RequirementPair,
     VerificationStatus,

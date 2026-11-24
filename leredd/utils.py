@@ -4,7 +4,7 @@ import re
 import json
 from pathlib import Path
 import pandas as pd
-from typing import Any, List, Mapping, Tuple
+from typing import Any, List, Mapping
 from loguru import logger
 from leredd.data_models import (
     AnnotationProvenance, AnnotationSource, DependencyType, Requirement,
@@ -126,7 +126,7 @@ def apply_requirement_metadata(
             + ", ".join(sorted(str(item) for item in unknown_ids))
         )
 
-    allowed_fields = {"component", "subsystem"}
+    allowed_fields = {"component", "subsystem", "module", "metadata"}
     enriched = []
     for requirement in requirements:
         entry = metadata_by_id.get(requirement.id)
@@ -142,15 +142,22 @@ def apply_requirement_metadata(
                 + ", ".join(sorted(str(item) for item in extra_fields))
             )
 
-        updates = {}
+        updates: dict[str, Any] = {}
         for field in allowed_fields:
             if field not in entry or entry[field] is None:
                 continue
             value = entry[field]
-            if not isinstance(value, str):
-                raise ValueError(f"Metadata field '{field}' for {requirement.id} must be a string or null.")
-            clean_value = value.strip()
-            updates[field] = clean_value or None
+            if field == "metadata":
+                if not isinstance(value, Mapping):
+                    raise ValueError(
+                        f"Metadata field 'metadata' for {requirement.id} must be an object or null."
+                    )
+                updates["metadata"] = dict(value)
+            else:
+                if not isinstance(value, str):
+                    raise ValueError(f"Metadata field '{field}' for {requirement.id} must be a string or null.")
+                clean_value = value.strip()
+                updates[field] = clean_value or None
         enriched.append(requirement.model_copy(update=updates) if updates else requirement)
     return enriched
 

@@ -12,7 +12,6 @@ import math
 import os
 import random
 from enum import Enum
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from loguru import logger
@@ -97,6 +96,9 @@ class LeakageReport(BaseModel):
     system_overlap_retrieval_train: Set[str] = Field(default_factory=set, description="System names present in both retrieval and train partitions.")
     system_overlap_retrieval_dev: Set[str] = Field(default_factory=set, description="System names present in both retrieval and dev partitions.")
     system_overlap_retrieval_test: Set[str] = Field(default_factory=set, description="System names present in both retrieval and test partitions.")
+    doc_overlap_train_test: Set[str] = Field(default_factory=set, description="Document/module identifiers present in both train and test partitions.")
+    doc_overlap_train_dev: Set[str] = Field(default_factory=set, description="Document/module identifiers present in both train and dev partitions.")
+    doc_overlap_dev_test: Set[str] = Field(default_factory=set, description="Document/module identifiers present in both dev and test partitions.")
     total_unique_requirements: int = Field(default=0, description="Total unique requirements across all partitions.")
     total_pairs: int = Field(default=0, description="Total pairs across all partitions.")
     leakage_rate: float = Field(default=0.0, description="Fraction of test requirements found in training set.")
@@ -302,12 +304,29 @@ class DatasetSplitter:
         """Partition dataset by document or module metadata on requirements."""
         doc_pairs: Dict[str, List[RequirementPair]] = {}
         for p in pairs:
-            # Check metadata or source document
+            # Check metadata, module, or source document
             meta_a = getattr(p.req_a, "metadata", None) or {}
             meta_b = getattr(p.req_b, "metadata", None) or {}
-            doc_a = meta_a.get("document") or meta_a.get("module") or p.req_a.source or p.req_a.system
-            doc_b = meta_b.get("document") or meta_b.get("module") or p.req_b.source or p.req_b.system
-            doc_name = str(doc_a if doc_a == doc_b else f"{doc_a}_{doc_b}")
+            doc_a = (
+                meta_a.get("document")
+                or p.req_a.module
+                or meta_a.get("module")
+                or p.req_a.source
+                or p.req_a.system
+            )
+            doc_b = (
+                meta_b.get("document")
+                or p.req_b.module
+                or meta_b.get("module")
+                or p.req_b.source
+                or p.req_b.system
+            )
+            if doc_a != doc_b:
+                raise ValueError(
+                    f"DOCUMENT split requires each pair to belong to one document/module; "
+                    f"pair {p.id} spans {doc_a!r} and {doc_b!r}."
+                )
+            doc_name = str(doc_a)
             doc_pairs.setdefault(doc_name, []).append(p)
 
         docs = sorted(list(doc_pairs.keys()))
@@ -481,6 +500,16 @@ class DatasetSplitter:
                     sys_set.add(p.req_b.system)
             return sys_set
 
+        def get_docs(pairs: List[RequirementPair]) -> Set[str]:
+            doc_set = set()
+            for p in pairs:
+                for req in (p.req_a, p.req_b):
+                    meta = getattr(req, "metadata", None) or {}
+                    doc_id = meta.get("document") or req.module or meta.get("module") or req.source
+                    if doc_id:
+                        doc_set.add(str(doc_id))
+            return doc_set
+
         train_reqs = get_req_ids(split.train_pairs)
         dev_reqs = get_req_ids(split.dev_pairs)
         test_reqs = get_req_ids(split.test_pairs)
@@ -503,6 +532,13 @@ class DatasetSplitter:
         sys_overlap_retrieval_train = retrieval_sys.intersection(train_sys)
         sys_overlap_retrieval_dev = retrieval_sys.intersection(dev_sys)
         sys_overlap_retrieval_test = retrieval_sys.intersection(test_sys)
+
+        train_docs = get_docs(split.train_pairs)
+        dev_docs = get_docs(split.dev_pairs)
+        test_docs = get_docs(split.test_pairs)
+        doc_overlap_train_test = train_docs.intersection(test_docs)
+        doc_overlap_train_dev = train_docs.intersection(dev_docs)
+        doc_overlap_dev_test = dev_docs.intersection(test_docs)
 
         all_reqs = train_reqs | dev_reqs | test_reqs | retrieval_reqs
         total_pairs = (
@@ -535,6 +571,13 @@ class DatasetSplitter:
         ):
             has_leakage = True
 
+        if split.config.strategy == SplitStrategy.DOCUMENT and (
+            doc_overlap_train_test
+            or doc_overlap_train_dev
+            or doc_overlap_dev_test
+        ):
+            has_leakage = True
+
         leakage_rate = len(overlap_train_test) / len(test_reqs) if test_reqs else 0.0
 
         return LeakageReport(
@@ -551,6 +594,9 @@ class DatasetSplitter:
             system_overlap_retrieval_train=sys_overlap_retrieval_train,
             system_overlap_retrieval_dev=sys_overlap_retrieval_dev,
             system_overlap_retrieval_test=sys_overlap_retrieval_test,
+            doc_overlap_train_test=doc_overlap_train_test,
+            doc_overlap_train_dev=doc_overlap_train_dev,
+            doc_overlap_dev_test=doc_overlap_dev_test,
             total_unique_requirements=len(all_reqs),
             total_pairs=total_pairs,
             leakage_rate=leakage_rate,

@@ -557,3 +557,16 @@ This document records key architectural, design, and implementation decisions fo
 - **Context:** GitHub's Linux run showed that Typer/Rich can emit ANSI control sequences inside option names even when `CliRunner(color=False)` is used. Literal substring assertions therefore failed on Linux but passed locally on Windows.
 - **Decision:** Strip ANSI styling with Click's `unstyle()` before asserting the CLI option spelling. Preserve the checks for command failure and, for queue decisions, no queue mutation.
 - **Verification:** Both affected tests passed locally; the full local coverage run passed **453 tests**, skipped **3**, emitted **12 deprecation warnings**, and measured **88%** coverage. Hosted run [45445432202](https://github.com/kesarshharma/LLREDD/actions/runs/45445432202) passed for Python 3.10 and 3.11, including pytest with coverage and Docker image build.
+
+
+## ADR-073 — Structured Provenance Routing, Measurable RAG Diagnostics, and Six-Way Controlled Ablations (2026-11-25)
+- **Status:** Accepted
+- **Context:** Auditing the codebase against the nine-part engineering specification (`docs/BASELINE_AUDIT.md`) identified brittle substring routing in `ReviewQueueManager`, unverified/synthetic leakage in metadata-based hybrid ranking, silent substring fallback and max-confidence defaults in `ResponseParser`, unmeasured RAG chunk duplication, and missing metadata-free vs. metadata-aware vs. RAG variants in `run_full_evaluation.py`.
+- **Decision:**
+  1. Store structured heuristic/LLM predictions, error flags, and review reason codes directly on `AnnotationProvenance`, retaining legacy `review_notes` parsing solely as a compatibility fallback for historical JSON files.
+  2. Enforce strict `ResponseParser` header/JSON parsing, route missing confidence scores to `0` (`requires_review`), forbid `calibrated_probability` on `Prediction`, and retain legacy `<= threshold -> No_dependency` rewriting only behind a deprecated default-`False` flag (`legacy_rewrite_low_confidence_to_no_dependency`).
+  3. Centralize verified/non-synthetic example filtering and symmetric `(A, B)`/`(B, A)` self-pair exclusion across `ExampleRetriever`, `BM25Retriever`, and `HybridRetriever`, with configurable `dense_weight`, `bm25_weight`, and `metadata_weight`.
+  4. Keep baseline fixed-window RAG as the default while exposing measurable `RAGRetrievalDiagnostics` (`retrieve_with_diagnostics`) and opt-in `requirement_boundary` chunking, duplicate/near-duplicate filtering, and cited-ID score boosting.
+  5. Evaluate six controlled configurations (`ZeroShot`, `Semantic_Only`, `BM25_Only`, `Existing_Hybrid`, `Metadata_Aware_Hybrid`, `Context_Enhanced_RAG`) with dev-only threshold tuning, prompt template hashing, seeded baselines, honest negative/zero delta reporting, and explicit separation of candidate recall from classifier accuracy.
+  6. Gate CI on `ruff check` and `compileall` prior to `pytest --cov`.
+- **Verification:** `ruff check leredd api ui scripts tests` (**0 errors**); `pytest tests/ --cov=leredd` (**495 passed, 1 skipped in 78.43s, 89% coverage**); zero tracked `data/` mutations.
