@@ -1,0 +1,39 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "missing_metadata_pairs",
+  "description": "Synthetic requirement pairs where requirements or provenance metadata are missing or incomplete.",
+  "pairs": [
+    {
+      "id": "SYNTH-NOMETADATA-001",
+      "req_a": {
+        "id": "REQ-SYNTH-NM-01",
+        "text": "The system shall log warning codes when sensor voltage drops below 9V.",
+        "system": ""
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-NM-02",
+        "text": "Diagnostic event records shall be transmitted over CAN-FD bus.",
+        "system": ""
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Details",
+      "heuristic_prediction": null,
+      "heuristic_evidence": "",
+      "llm_prediction": "Details",
+      "llm_confidence": 3,
+      "llm_rationale": "Diagnostic transmission details the logging behavior.",
+      "review_reasons": ["missing_metadata"],
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": null,
+        "confidence_score": 3,
+        "evidence": "Missing system identifier and source metadata.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}

@@ -63,9 +63,9 @@ class LEREDDConfig(BaseSettings):
     )
 
     # LLM Settings
-    llm_provider: Literal["openai", "ollama", "mock"] = Field(
+    llm_provider: Literal["openai", "ollama", "gemini", "mock"] = Field(
         default="mock",
-        description="LLM provider backend"
+        description="LLM provider backend (openai, ollama, gemini, or mock)"
     )
     llm_model: str = Field(
         default="gpt-4",
@@ -91,6 +91,10 @@ class LEREDDConfig(BaseSettings):
     openai_api_key: str | None = Field(
         default=None,
         description="OpenAI API key"
+    )
+    gemini_api_key: str | None = Field(
+        default=None,
+        description="Google Gemini API key"
     )
     ollama_base_url: str = Field(
         default="http://localhost:11434",

@@ -2,6 +2,7 @@
 
 import json
 import httpx
+import pytest
 from unittest.mock import patch
 from leredd.llm import (
     DiskCachedLLMClient,
@@ -190,3 +191,57 @@ def test_ollama_retry_400_no_retry():
         except RuntimeError as e:
             assert "Ollama LLM call failed" in str(e)
     assert inst.index == 1
+
+
+def test_gemini_llm_client_mocked():
+    from leredd.llm import GeminiLLMClient
+    gemini_resp = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [{"text": "**Dependency_Type: Requires**\n**Rationale: Necessary.**\n**Confidence Score: 5**"}]
+                }
+            }
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 15,
+            "candidatesTokenCount": 10
+        }
+    }
+    client = GeminiLLMClient(api_key="test_key", model="gemini-2.5-flash")
+    with patch("httpx.Client.post") as mock_post:
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = gemini_resp
+        mock_post.return_value.raise_for_status = lambda: None
+
+        text, usage = client.generate("test prompt")
+        assert "Dependency_Type: Requires" in text
+        assert usage["provider"] == "gemini"
+        assert usage["model"] == "gemini-2.5-flash"
+
+
+def test_gemini_missing_api_key_raises():
+    import pytest
+    from leredd.llm import GeminiLLMClient
+    client = GeminiLLMClient(api_key=None)
+    client.api_key = None
+    with pytest.raises(ValueError, match="Gemini API key not configured"):
+        client.generate("test prompt")
+
+
+def test_llm_factory_gemini():
+    cfg = LEREDDConfig(llm_provider="gemini", gemini_api_key="test-key")
+    client = LLMClientFactory.create(cfg)
+    assert client is not None
+
+
+def test_dependency_type_normalize_word_boundary():
+    from leredd.data_models import DependencyType
+    # Substring 'No' in 'Notification' or 'Notable' should NOT normalize to NO_DEPENDENCY
+    with pytest.raises(ValueError, match="Unsupported dependency type"):
+        DependencyType.normalize("Notification requirement")
+
+    # Explicit 'No dependency', 'No', or 'Independent' SHOULD normalize to NO_DEPENDENCY
+    assert DependencyType.normalize("No dependency") == DependencyType.NO_DEPENDENCY
+    assert DependencyType.normalize("Independent") == DependencyType.NO_DEPENDENCY
+    assert DependencyType.normalize("No") == DependencyType.NO_DEPENDENCY

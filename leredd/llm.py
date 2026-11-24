@@ -130,6 +130,71 @@ class OpenAILLMClient(LLMClient):
             raise e
 
 
+class GeminiLLMClient(LLMClient):
+    """Google Gemini API Client (gemini-1.5-flash, gemini-1.5-pro, gemini-2.5-flash)."""
+
+    def __init__(self, api_key: str | None = None, model: str = "gemini-2.5-flash"):
+        config = get_config()
+        self.api_key = api_key or config.gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        raw_model = model or config.llm_model or "gemini-2.5-flash"
+        if not raw_model or "gpt" in raw_model.lower():
+            raw_model = "gemini-2.5-flash"
+        self.model = raw_model.replace("models/", "")
+
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10)
+    )
+    def generate(self, prompt: str, temperature: float = 0.2) -> Tuple[str, Dict[str, Any]]:
+        if not self.api_key:
+            raise ValueError("Gemini API key not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY in .env file.")
+
+        import httpx
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [{"text": prompt}]
+                }
+            ],
+            "generationConfig": {
+                "temperature": temperature
+            }
+        }
+
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                resp = client.post(url, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
+
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    raise RuntimeError(f"Gemini API returned no candidates: {data}")
+
+                parts = candidates[0].get("content", {}).get("parts", [])
+                text = "".join([part.get("text", "") for part in parts])
+
+                usage_meta = data.get("usageMetadata", {})
+                prompt_tokens = usage_meta.get("promptTokenCount", len(prompt.split()))
+                completion_tokens = usage_meta.get("candidatesTokenCount", len(text.split()))
+
+                usage = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "cost_usd": 0.0,
+                    "provider": "gemini",
+                    "model": self.model
+                }
+                return text, usage
+        except Exception as e:
+            logger.error(f"Gemini API call failed: {e}")
+            raise RuntimeError(f"Gemini API call failed: {e}")
+
+
 def _is_retryable_ollama_exception(exc: BaseException) -> bool:
     try:
         import httpx
@@ -277,7 +342,9 @@ class LLMClientFactory:
         cfg = config or get_config()
         provider = cfg.llm_provider.lower()
 
-        if provider == "openai":
+        if provider == "gemini":
+            base_client = GeminiLLMClient(api_key=cfg.gemini_api_key, model=cfg.llm_model)
+        elif provider == "openai":
             base_client = OpenAILLMClient(api_key=cfg.openai_api_key, model=cfg.llm_model)
         elif provider == "ollama":
             base_client = OllamaLLMClient(base_url=cfg.ollama_base_url, model=cfg.llm_model)

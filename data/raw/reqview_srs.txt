@@ -1,0 +1,92 @@
+SOFTWARE REQUIREMENTS SPECIFICATION FOR REQVIEW REQUIREMENTS MANAGEMENT TOOL (DEMO)
+
+1. System Overview
+The ReqView requirements management application allows users to capture, manage, analyze, and trace software requirements specification documents based on ISO/IEC/IEEE 29148:2018 standard.
+
+2. Functional Requirements
+DEMO-SRS-053: The application shall allow users to create a new empty document.
+DEMO-SRS-054: If the current document contains unsaved changes then the application shall allow users to save the changes before closing the document.
+DEMO-SRS-056: The application shall allow users to open a document from a chosen file.
+DEMO-SRS-059: The application shall allow users to save the opened document into a file.
+DEMO-SRS-061: The application shall allow users to create a document template file from the opened document.
+DEMO-SRS-062: Document templates shall store structure of document sections and definition and values of requirement attributes.
+DEMO-SRS-063: The application shall allow users to create a new document from a chosen document template file preserving the structure of document sections and the definition and values of requirement attributes.
+DEMO-SRS-072: The application shall allow users to import a MS Word document preserving structure of document sections and paragraphs, rich text description of requirements and images.
+DEMO-SRS-073: The application shall allow users to import a MS Excel table of requirements preserving section headings, levels, unformatted text description of requirements and values of custom attributes.
+DEMO-SRS-076: The application shall allow users to export the displayed document view to HTML.
+DEMO-SRS-077: The application shall allow users to export requirements to CSV.
+DEMO-SRS-080: The application shall display the table of contents containing section headings organized according to their document tree hierarchy.
+DEMO-SRS-081: When user clicks on a document section in the table of contents then the application shall focus the section in the requirements table.
+DEMO-SRS-083: The application shall display the document in a requirements table containing the following columns: ID, Description, Discussion, Links and a column for each custom requirement attribute.
+DEMO-SRS-084: The ID column of the requirements table shall display unique requirement identifiers.
+DEMO-SRS-085: The Description column of the requirements table shall display the section numbers, headings, requirement text descriptions and attachments.
+DEMO-SRS-086: The Discussion column of the requirements table shall display requirement comments with information about comment author, date and text ordered by date and time.
+DEMO-SRS-087: The Links column of the requirements table shall display requirement traceability links grouped by link types.
+DEMO-SRS-088: The application shall allow users to change width of each requirements table column.
+DEMO-SRS-190: The application shall allow users to reorder requirements table columns.
+DEMO-SRS-089: The application shall allow users to show and hide requirements table columns except the ID column.
+DEMO-SRS-090: The application shall allow users to sort all requirements table columns except the Discussion and Links columns by ascending or descending order.
+DEMO-SRS-092: The application shall allow users to show and hide a pane displaying detailed information about custom attributes, discussion, traceability links or history of changes of the selected requirement.
+DEMO-SRS-093: While the custom attributes pane is shown, the application shall display values of all assigned custom attributes for the selected requirement.
+DEMO-SRS-094: While the discussion pane is shown, the application shall display all comments for the selected requirement ordered by date and time.
+DEMO-SRS-096: While the discussion pane is shown, the application shall allow users to expand or collapse a selected comment or all displayed comments.
+DEMO-SRS-097: While a displayed discussion comment is expanded, then the application shall display the date, time, author and description of the comment.
+DEMO-SRS-098: While a displayed discussion comment is collapsed, then the application shall display the date, time and author of the comment.
+DEMO-SRS-099: While the links pane is shown, the application shall display all traceability links starting in or leading to the selected requirement grouped by link types and ordered by ID of the linked object.
+DEMO-SRS-142: When user clicks on a traceability link then the application shall focus the linked requirement.
+DEMO-SRS-106: The application shall allow users to create a new requirement and place it in any document section.
+DEMO-SRS-107: When users creates a new requirement the application shall assign it a unique ID which cannot be changed.
+DEMO-SRS-108: The application shall allow users to copy selected requirements or document sections within the document.
+DEMO-SRS-109: The application shall allow users to move selected requirements or document sections within the document.
+DEMO-SRS-110: The application shall allow users to mark selected requirements or document sections as deleted.
+DEMO-SRS-111: The application shall allow users to undelete selected deleted requirements or document sections.
+DEMO-SRS-112: The application shall allow users to permanently remove selected deleted requirements or document sections from the document.
+DEMO-SRS-114: The application shall allow users to edit the heading of the selected section.
+DEMO-SRS-115: The application shall allow users to edit the text description of the selected requirement.
+DEMO-SRS-116: The application shall allow users to paste an HTML content copied from MS Word, Excel or other application into the text description of the selected requirement.
+DEMO-SRS-119: The application shall allow users to define custom requirement attributes and assign them a unique ID which cannot be changed.
+DEMO-SRS-121: The application shall allow users to set a type of each custom attribute as follows: boolean, integer number, real number, string, date, enum or XHTML.
+DEMO-SRS-191: The application shall allow users to set one or more values for custom attributes of enumeration type.
+DEMO-SRS-122: When a user changes the type of a custom attribute then the application shall automatically convert all values of the attribute to the new type.
+DEMO-SRS-157: If the automatic conversion fails for any attribute value, then the application shall prevent the change of custom attribute type.
+DEMO-SRS-120: The application shall allow users to set an optional name of each custom attribute.
+DEMO-SRS-192: The application shall allow users to remove custom attributes.
+DEMO-SRS-193: When a user removes a custom attribute then the application shall unset values of the attribute in all requirements.
+DEMO-SRS-165: The application shall allow users to edit custom attributes of the selected requirement.
+DEMO-SRS-124: The application shall allow users to attach one or more images or documents to the selected requirement.
+DEMO-SRS-126: When a new attachment is added to the document then the application shall generate its unique attachment ID as a combination of the requirement ID and the original attachment file name.
+DEMO-SRS-127: The application shall allow users to save attachment files to the local file system.
+DEMO-SRS-128: The application shall allow users to update content of requirement attachments from a selected file.
+DEMO-SRS-129: The application shall allow users to permanently remove attachments from the document.
+DEMO-SRS-132: The application shall allow users to comment the selected requirement.
+DEMO-SRS-133: When a user creates a new comment then the application shall record the current date and time and the author of the comment.
+DEMO-SRS-135: The application shall allow users to define link types and assign them a unique ID which cannot be changed.
+DEMO-SRS-156: The application shall allow users to set for each link type its name and role name of the source and target requirements.
+DEMO-SRS-138: The application shall allow users to remove link types.
+DEMO-SRS-161: When a user removes a link type then the application shall remove all traceability links of the link type from the document.
+DEMO-SRS-137: The application shall allow users to create directed traceability links of a chosen link type between selections of requirements or document sections.
+DEMO-SRS-139: The application shall allow users to change the link type of a selected link traceability.
+DEMO-SRS-140: The application shall allow users to revert direction of a selected traceability link.
+DEMO-SRS-141: The application shall allow users to permanently remove a selected traceability link from the document.
+DEMO-SRS-144: The application shall automatically persist all document changes and restore them when it is restarted.
+DEMO-SRS-160: When user closes the document the application shall clear all persisted document data.
+DEMO-SRS-147: The application shall allow users to filter requirements according to a condition in disjunctive normal form (DNF).
+DEMO-SRS-148: The application shall allow users to enter a filtering condition matching document sections by their number or heading.
+DEMO-SRS-149: The application shall allow users to enter a filtering condition matching requirements by their text description or a custom attribute.
+DEMO-SRS-150: The application shall allow users to filter requirements with missing traceability links of a given type.
+DEMO-SRS-152: The application shall allow users to search requirements matching one or more given keywords in an string or xhtml attribute.
+DEMO-SRS-153: While the search mode is active the application shall highlight the matched requirements and allow user to select the next or previous matched requirement in the document.
+DEMO-SRS-159: When a user changes a requirement the application shall record the current date and time and the author of the change.
+DEMO-SRS-101: The application shall display all changes of the selected requirement ordered by date and time.
+DEMO-SRS-102: Each displayed requirement change shall contain author, date & time and description of the change.
+DEMO-SRS-103: The application shall allow users to expand and collapse all changes in the History pane.
+DEMO-SRS-163: The application shall allow users to print the displayed requirements table.
+DEMO-SRS-164: The application shall allow users to create a PDF containing the displayed requirements table.
+DEMO-SRS-174: The application should display the opened document within 10 seconds after it is started.
+DEMO-SRS-171: The application should display updated values within 1 second after user triggers the edit operation.
+DEMO-SRS-173: While a user scrolls the requirements table, the application should not display scrolling jerks longer than 200 milliseconds.
+DEMO-SRS-170: The application shall allow users to open documents up to 10000 objects and 100 file attachments with total size up to 100MB.
+DEMO-SRS-194: The application shall encrypt the persistent application data.
+DEMO-SRS-195: The application shall run in the latest version of Chrome or Firefox browsers.
+DEMO-SRS-176: The application shall not send any project data to the Internet.
+DEMO-SRS-199: The application shall sanitize any data input or imported by users.

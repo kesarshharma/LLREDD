@@ -124,6 +124,8 @@ class ReviewItem(BaseModel):
     status: QueueStatus = Field(default=QueueStatus.PENDING, description="Current queue status")
     priority: int = Field(default=ReviewPriority.LOW, ge=1, le=5, description="Priority rank (1=Highest, 5=Lowest)")
     human_decision: Optional[HumanDecision] = Field(default=None, description="Recorded human decision if reviewed")
+    synthetic: bool = Field(default=False, description="Whether this item is synthetic test data")
+    source_identity: Optional[str] = Field(default=None, description="Identifier of the dataset or fixture source")
     created_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
 
@@ -175,8 +177,13 @@ class ReviewQueueManifest(BaseModel):
 class ReviewQueueManager:
     """Manages the creation, persistence, filtering, prioritization, and human decision recording for review queues."""
 
-    def __init__(self, config: Optional[ReviewQueueConfig] = None):
+    def __init__(
+        self,
+        config: Optional[ReviewQueueConfig] = None,
+        items: Optional[List[ReviewItem]] = None,
+    ):
         self.config = config or ReviewQueueConfig()
+        self.items = list(items or [])
 
     @staticmethod
     def generate_item_id(pair_id: str, req_a_id: str, req_b_id: str) -> str:
@@ -665,3 +672,36 @@ class ReviewQueueManager:
             data = json.load(f)
 
         return [ReviewItem.model_validate(item) for item in data]
+
+    def export_verified_pairs(
+        self,
+        allow_synthetic: bool = False,
+    ) -> List[RequirementPair]:
+        """Export human-verified RequirementPairs from items with ACCEPTED or CORRECTED decisions.
+
+        If allow_synthetic is False (default), synthetic test items are strictly excluded from
+        the exported verified dataset.
+        """
+        verified_pairs: List[RequirementPair] = []
+        excluded_synthetic_count = 0
+
+        for item in self.items:
+            if item.status in (QueueStatus.ACCEPTED, QueueStatus.CORRECTED) and item.human_decision and item.human_decision.final_label:
+                if item.synthetic and not allow_synthetic:
+                    excluded_synthetic_count += 1
+                    continue
+                _, pair = self.record_decision(
+                    item,
+                    item.status,
+                    final_label=item.human_decision.final_label,
+                    reviewer_id=item.human_decision.reviewer_id,
+                    reviewer_notes=item.human_decision.reviewer_notes
+                )
+                verified_pairs.append(pair)
+
+        if excluded_synthetic_count > 0:
+            logger.warning(
+                f"Excluded {excluded_synthetic_count} synthetic review items from verified export (allow_synthetic=False)."
+            )
+
+        return verified_pairs

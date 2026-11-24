@@ -1,0 +1,39 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "abstention_pairs",
+  "description": "Synthetic requirement pairs where both heuristic and LLM models abstain or produce no affirmative dependency.",
+  "pairs": [
+    {
+      "id": "SYNTH-ABS-001",
+      "req_a": {
+        "id": "REQ-SYNTH-ABS-01",
+        "text": "The instrument cluster backlight color shall be selectable between blue, white, and amber.",
+        "system": "SyntheticHMI"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-ABS-02",
+        "text": "Tire pressure monitoring sensors shall broadcast RF telemetry packets at 433 MHz.",
+        "system": "SyntheticChassis"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "No_dependency",
+      "heuristic_prediction": null,
+      "heuristic_evidence": "RULE-ABSTAIN: No lexical cues, ID citations, or term overlap detected.",
+      "llm_prediction": null,
+      "llm_confidence": 1,
+      "llm_rationale": "Completely unrelated vehicle subdomains; no direct functional dependency found.",
+      "review_reasons": ["both_abstained"],
+      "provenance": {
+        "source": "heuristic",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 1,
+        "evidence": "Both methods abstained from predicting a dependency.",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}

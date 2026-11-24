@@ -1,6 +1,7 @@
 """Data models for SRS Requirements, Pairs, LLM Predictions, and Evaluation Metrics."""
 
 from enum import Enum
+import re
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
@@ -56,6 +57,7 @@ class DependencyType(str, Enum):
             "detail": cls.DETAILS,
             "is similar": cls.IS_SIMILAR,
             "similar": cls.IS_SIMILAR,
+            "no": cls.NO_DEPENDENCY,
             "no dependency": cls.NO_DEPENDENCY,
             "independent": cls.NO_DEPENDENCY,
         }

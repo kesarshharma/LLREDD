@@ -1,14 +1,18 @@
 """Pytest fixtures for unit and integration testing."""
 
+import os
+# Prevent HuggingFace from attempting online connection timeouts in test sandbox
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
 import pytest
-from leredd.config import LEREDDConfig
-from leredd.config import reset_config
+from leredd.config import LEREDDConfig, reset_config
 from leredd.data_models import Requirement, RequirementPair, DependencyType
 
 
 @pytest.fixture(autouse=True)
-def reset_config_singleton_between_tests():
-    """Keep environment-derived singleton state local to one test."""
+def reset_global_config():
+    """Ensure global configuration singleton is reset before and after every test."""
     reset_config()
     yield
     reset_config()

@@ -1,0 +1,39 @@
+{
+  "synthetic": true,
+  "source_identity": "synthetic-review-tests",
+  "category": "low_confidence_pairs",
+  "description": "Synthetic requirement pairs with valid predictions but self-reported confidence below threshold.",
+  "pairs": [
+    {
+      "id": "SYNTH-LOWCONF-001",
+      "req_a": {
+        "id": "REQ-SYNTH-LC-01",
+        "text": "The navigation subsystem may supply speed limit estimates to the speed limiter module.",
+        "system": "SyntheticNav"
+      },
+      "req_b": {
+        "id": "REQ-SYNTH-LC-02",
+        "text": "The speed limiter shall restrict throttle output when configured road speed limit is exceeded.",
+        "system": "SyntheticPowertrain"
+      },
+      "synthetic": true,
+      "source_identity": "synthetic-review-tests",
+      "dependency_type": "Requires",
+      "heuristic_prediction": null,
+      "heuristic_evidence": "No rule triggered.",
+      "llm_prediction": "Requires",
+      "llm_confidence": 2,
+      "llm_rationale": "Navigation advisory speed is optional ('may supply'), so strict dependency is uncertain.",
+      "review_reasons": ["low_confidence"],
+      "provenance": {
+        "source": "llm",
+        "status": "provisional",
+        "model_id": "mock-llm",
+        "confidence_score": 2,
+        "evidence": "Low confidence score (2/5).",
+        "synthetic": true,
+        "source_identity": "synthetic-review-tests"
+      }
+    }
+  ]
+}
